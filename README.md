@@ -1,138 +1,121 @@
 # Task Management & Employee Monitoring System
 
-A centralized, internet-required employee task management and monitoring platform for office teams such as Web Development and Survey/Field Operations.
+A centralized, internet-required task management, attendance, survey operations, and transparent employee work-monitoring platform for development teams and survey/field teams.
 
-## Core Architecture
+## Status
 
-The system will use a client-server model:
+Development has started. The repository now contains the backend foundation: ASP.NET Core API structure, PostgreSQL/EF Core data model, JWT authentication with rotating refresh tokens, database-backed roles/permissions, security audit logging, API rate limiting, health/OpenAPI endpoints, automated tests, and CI.
 
-- **Employee Desktop App** installed on every employee PC
-- **Background Windows Agent/Service** for presence, work-session, and approved activity telemetry
-- **Central Backend API** hosted on a server/VPS
-- **Central Database** for employees, tasks, attendance, monitoring events, survey work, reports, and audit logs
-- **Admin/Manager Dashboard** for monitoring, task assignment, reports, and team management
+The employee desktop client, background Windows service, admin web dashboard, attendance, project/task, survey, reporting, and realtime modules are not yet implemented.
 
-> The employee desktop software requires an internet connection and will not operate as an offline-first application.
+## Architecture
 
-## Planned Modules
+```text
+Employee PC
+  -> Desktop Client
+  -> Background Monitoring Service
+  -> Internet / HTTPS
+  -> ASP.NET Core API
+  -> PostgreSQL
+  -> Admin / Manager Dashboard
+```
 
-### 1. Authentication & Access Control
-- Login/logout
-- Role-based permissions
-- Admin, HR, Manager, Team Lead, Developer, Survey Supervisor, Surveyor roles
-- Session/device tracking
+Normal employee functionality is intentionally internet/server dependent. The system is not designed as an offline-first application.
 
-### 2. Employee Management
-- Employee profiles
-- Departments and designations
-- Teams
-- Employment status
-- Role and permission assignment
+## Technology baseline
 
-### 3. Task & Project Management
-- Projects, tasks, and subtasks
-- Assignment, priority, deadline, status
-- Comments and attachments
-- Task timer and work logs
-- Review/approval workflow
+- Backend: ASP.NET Core / .NET 10
+- Database: PostgreSQL
+- ORM: Entity Framework Core
+- Authentication: JWT access tokens + rotating opaque refresh tokens
+- Authorization: database-backed roles and permissions
+- API documentation: OpenAPI
+- Tests: xUnit v3
+- CI: GitHub Actions
+- Planned desktop: C#/.NET Windows application
+- Planned background agent: .NET Windows Service
+- Planned admin dashboard: React + TypeScript
+- Planned realtime: SignalR
 
-### 4. Developer Team Workflow
-- Project/module/task tracking
-- Bug/issue tracking
-- Task progress and review status
-- Estimated vs actual work time
-- Delivery and quality-oriented performance metrics
+## Repository structure
 
-### 5. Survey Team Workflow
-- Survey campaigns/projects
-- Area/territory assignments
-- Target tracking
-- Survey submission progress
-- Supervisor verification/rejection
-- Field check-in/out and location features where appropriate and transparently disclosed
+```text
+src/
+  Backend/
+    TaskMonitoring.Api/
+tests/
+  Backend.Tests/
+docs/
+.github/workflows/
+```
 
-### 6. Attendance & Time Tracking
-- Check-in/check-out
-- Working hours
-- Late/absence/early-leave tracking
-- Daily work sessions
-- Active/idle status where appropriate
+Additional clients will be added as their phases begin; backend business rules should not be duplicated in clients.
 
-### 7. Desktop Monitoring Agent
-- Online/offline state
-- Periodic server heartbeat
-- Work-session state
-- Active/idle time
-- Approved application-usage telemetry where business-required
+## Local prerequisites
 
-Intrusive monitoring such as keystroke logging, continuous screenshots, camera access, or continuous location tracking should not be enabled by default. Any sensitive monitoring must be transparent, access-controlled, justified by a business need, and subject to an explicit workplace policy and applicable law.
+- .NET 10 SDK
+- Docker Desktop or a local PostgreSQL server
+- Git
 
-### 8. Admin Dashboard & Reports
-- Employee online/offline overview
-- Team-wise status
-- Project/task progress
-- Attendance summary
-- Survey progress
-- Developer progress
-- Overdue tasks
-- Productivity/performance reports
-- Audit logs
+## Configuration
 
-### 9. Notifications
-- Task assignment
-- Deadline reminders
-- Overdue alerts
-- Approval/rejection updates
-- Manager comments
-- Attendance events
+Copy `.env.example` to `.env` for Docker-oriented local configuration and replace every placeholder secret. Never commit `.env`.
 
-## Proposed Technology Stack
+Required API configuration:
 
-For a Windows-first deployment:
+- `ConnectionStrings__DefaultConnection`
+- `Jwt__SigningKey` — at least 32 bytes of random secret material
 
-- **Desktop App:** C# / .NET (WPF or WinUI)
-- **Background Agent:** .NET Windows Service
-- **Backend API:** ASP.NET Core
-- **Database:** PostgreSQL
-- **Admin Dashboard:** React + TypeScript
-- **Realtime Communication:** SignalR / WebSocket
-- **Deployment:** VPS/Cloud server with HTTPS
+Optional initial administrator configuration:
 
-The exact stack may evolve as implementation requirements become clearer.
+- `BootstrapAdmin__Email`
+- `BootstrapAdmin__Password` — at least 12 characters
 
-## High-Level Data Model
+After the bootstrap administrator is created, remove those bootstrap credentials from the environment.
 
-Planned entities include:
+## Start PostgreSQL
 
-- users
-- roles
-- permissions
-- employees
-- departments
-- teams
-- devices
-- sessions
-- projects
-- tasks
-- subtasks
-- task_updates
-- task_comments
-- work_logs
-- attendance
-- timesheets
-- survey_projects
-- survey_assignments
-- survey_submissions
-- location_events
-- activity_events
-- notifications
-- audit_logs
-- performance_metrics
+```bash
+cp .env.example .env
+# Edit .env first and replace placeholder passwords/keys.
+docker compose up -d postgres
+```
 
-## Development Workflow
+## Run the API
 
-All implementation work for this project will be committed to this repository with clear commit messages. Significant features should be developed in focused branches and merged after review/testing where practical.
+Export the required ASP.NET Core environment variables from your secret store or shell, then:
 
-## Repository
+```bash
+dotnet restore TaskMonitoring.slnx
+dotnet run --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj
+```
 
-`arnobai70-del/task-management-employee-monitoring-system-software`
+For local development only, set `Database__AutoMigrate=true` after migrations exist. Production should apply migrations deliberately during deployment.
+
+Health endpoint: `/health`
+
+OpenAPI document: `/openapi/v1.json`
+
+## Tests
+
+```bash
+dotnet test TaskMonitoring.slnx
+```
+
+CI runs restore, Release build, and backend tests on pull requests and on pushes to `main`.
+
+## Security principles
+
+- No plain-text passwords.
+- No secrets or production credentials in source control.
+- Server-side authentication, authorization, and validation are mandatory.
+- Refresh tokens are random opaque values and only their SHA-256 hashes are stored.
+- Important authentication events are audited.
+- Hidden spyware behavior, keylogging, password capture, covert camera/microphone activation, and unrelated private-file collection are explicitly out of scope.
+- Any future screenshot, app-usage, URL, or location telemetry must have a legitimate business need, clear disclosure, permissions, and retention controls.
+
+## Development workflow
+
+Large features use focused branches and meaningful commits. A feature is not complete until its backend/data/UI layers (where applicable), validation, permissions, error handling, tests, and documentation work together.
+
+See [`docs/architecture.md`](docs/architecture.md) for the current architecture direction.

@@ -1,0 +1,11 @@
+bin/
+obj/
+.env
+*.user
+*.suo
+.vs/
+.vscode/
+TestResults/
+coverage/
+artifacts/
+*.local.json
