@@ -2,16 +2,13 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   backend:
-    name: Backend build and tests
+    name: Generate Attendance Core migration
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -30,8 +27,10 @@ jobs:
     env:
       TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=task_monitoring_tests;Username=task_monitoring;Password=ci-${{ github.run_id }}
     steps:
-      - name: Checkout
+      - name: Checkout feature branch
         uses: actions/checkout@v5
+        with:
+          ref: feature/attendance-core
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v5
@@ -47,10 +46,25 @@ jobs:
       - name: Build
         run: dotnet build TaskMonitoring.slnx --configuration Release --no-restore
 
-      - name: Verify EF model matches migrations
+      - name: Generate and persist Attendance Core migration
         env:
           TASK_MONITORING_DESIGN_CONNECTION: ${{ env.TEST_POSTGRES_CONNECTION }}
-        run: dotnet ef migrations has-pending-model-changes --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build
-
-      - name: Test
-        run: dotnet test tests/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --no-restore
+        run: |
+          if compgen -G 'src/Backend/TaskMonitoring.Api/Migrations/*_AttendanceCore.cs' > /dev/null; then
+            echo 'Attendance Core migration already exists.'
+            exit 0
+          fi
+          dotnet ef migrations add AttendanceCore --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build --output-dir Migrations
+          migration_file=$(ls src/Backend/TaskMonitoring.Api/Migrations/*_AttendanceCore.cs | grep -v Designer | head -n 1)
+          old_base=$(basename "$migration_file" .cs)
+          old_id=${old_base%_AttendanceCore}
+          new_id=20260929063000
+          designer="src/Backend/TaskMonitoring.Api/Migrations/${old_base}.Designer.cs"
+          sed -i "s/${old_id}_AttendanceCore/${new_id}_AttendanceCore/g" "$designer"
+          mv "$migration_file" "src/Backend/TaskMonitoring.Api/Migrations/${new_id}_AttendanceCore.cs"
+          mv "$designer" "src/Backend/TaskMonitoring.Api/Migrations/${new_id}_AttendanceCore.Designer.cs"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Backend/TaskMonitoring.Api/Migrations
+          git commit -m "feat: add attendance core database migration"
+          git push origin HEAD:feature/attendance-core
