@@ -4,7 +4,7 @@ A centralized, internet-required task management, attendance, survey operations,
 
 ## Status
 
-Development is active. The repository now contains the secure backend foundation, Employee Core, Attendance / Shift / Work Session Core, and Project / Task Core.
+Development is active. The repository now contains the secure backend foundation, Employee Core, Attendance / Shift / Work Session Core, Project / Task Core, and Survey / Field Operations Core.
 
 Implemented backend capabilities include:
 
@@ -32,11 +32,20 @@ Implemented backend capabilities include:
 - Task assignees restricted to active project members.
 - Immutable task comments and append-only task activity history for creation, edits, status changes, and comments.
 - Dedicated `projects.*` and `tasks.*` permissions plus project/task audit events.
+- Project-scoped survey forms with `Draft`, `Published`, `Closed`, and `Archived` lifecycle states.
+- Typed survey questions covering text, long text, number, boolean, date, single-choice, and multiple-choice inputs.
+- Questionnaire locking after publication, unique question keys, choice-option validation, and required-answer enforcement on final submission.
+- Field survey assignment restricted to active employees and published surveys.
+- Employee-owned field workflow for viewing assignments, saving drafts, and submitting responses.
+- Server-side answer type and configured-choice validation.
+- Rejection/resubmission as immutable numbered revisions so prior responses remain preserved.
+- Separate supervisor review flow with approve/reject decisions and mandatory rejection comments.
+- Dedicated survey/form, assignment, submit, and review permissions plus survey audit events.
 - Health/OpenAPI endpoints, automated tests, EF model-drift checks, and PostgreSQL migration validation in CI.
 
-CI validates a warning-free Release build, Entity Framework model/migration consistency, authentication behavior, Employee Core, Attendance Core, and Project / Task Core business rules, and the complete migration chain against a fresh PostgreSQL service.
+CI validates a warning-free Release build, Entity Framework model/migration consistency, authentication behavior, Employee Core, Attendance Core, Project / Task Core, and Survey / Field Operations Core business rules, and the complete migration chain against a fresh PostgreSQL service.
 
-The employee desktop client, background Windows service, admin web dashboard, survey, reporting, notification, realtime-presence, installer, and update modules are not yet implemented.
+The employee desktop client, background Windows service, admin web dashboard, reporting, notification, realtime-presence, installer, and update modules are not yet implemented.
 
 ## Architecture
 
@@ -149,6 +158,38 @@ Task status transitions are explicit rather than arbitrary: `ToDo` may move to `
 
 Project/task records are not hard-deleted. Membership deactivation, task comments, task activity records, and global audit events preserve operational history for reporting and accountability.
 
+## Survey / Field Operations Core API surface
+
+Survey form administration uses `/api/surveys`:
+
+- `GET /api/surveys` — search/filter/page survey forms by project or status (`surveys.read`).
+- `GET /api/surveys/{id}` — retrieve form metadata and ordered questionnaire (`surveys.read`).
+- `POST /api/surveys` — create a draft project-scoped survey (`surveys.manage`).
+- `PUT /api/surveys/{id}` — edit draft survey metadata (`surveys.manage`).
+- `PUT /api/surveys/{id}/questions` — replace a draft questionnaire (`surveys.manage`).
+- `PUT /api/surveys/{id}/status` — publish, close, or archive using validated lifecycle transitions (`surveys.manage`).
+
+Field assignment administration uses `/api/survey-assignments`:
+
+- `GET /api/survey-assignments` — filter/page field assignments by survey, employee, or status (`survey.assignments.read`).
+- `POST /api/survey-assignments` — assign a published survey to an active employee (`survey.assignments.manage`).
+- `DELETE /api/survey-assignments/{id}` — cancel an assignment when its current state allows cancellation (`survey.assignments.manage`).
+
+Employee field work uses `/api/survey-assignments/me` and requires `survey.submit`:
+
+- `GET /api/survey-assignments/me` — list the authenticated employee's active field assignments.
+- `POST /api/survey-assignments/me/{assignmentId}/draft` — save a draft response.
+- `POST /api/survey-assignments/me/{assignmentId}/submit` — validate required/type/choice rules and submit the response.
+
+Supervisor review uses `/api/survey-submissions` and requires `survey.review`:
+
+- `GET /api/survey-submissions/pending` — page responses waiting for review.
+- `POST /api/survey-submissions/{submissionId}/review` — approve or reject a submitted revision; rejection requires a review comment.
+
+Survey questions become immutable after publication so submitted data always remains interpretable against the questionnaire used to collect it. Employees can mutate only assignments linked to their own active employee profile. A submitted revision cannot be edited; when a reviewer rejects it, the next employee submission is stored as a new revision number while the rejected revision is retained. Approved submissions remain immutable.
+
+Closing or archiving a survey is blocked while a response is waiting for review. Survey lifecycle, assignment, draft/submit, and review changes create audit records. The permission catalog defines separate read/manage/assignment/submit/review capabilities; administrators must explicitly assign appropriate permissions to operational roles according to organizational policy.
+
 ## Local prerequisites
 
 - .NET 10 SDK
@@ -234,7 +275,9 @@ The database migration test expects `TEST_POSTGRES_CONNECTION` to point to an is
 - Administrative shift and organization-wide attendance access use dedicated permissions.
 - Project/task read, management, and task-comment operations use dedicated permissions.
 - Task assignment requires active project membership and project/member/task lifecycle changes are audit logged.
-- Important authentication, administration, attendance, project, and task events are audited.
+- Survey form management, assignment administration, field submission, and supervisor review use separate permission boundaries.
+- Field workers can save or submit only their own assignments, and approved/submitted survey revisions cannot be silently overwritten.
+- Important authentication, administration, attendance, project, task, and survey events are audited.
 - Hidden spyware behavior, keylogging, password capture, covert camera/microphone activation, and unrelated private-file collection are explicitly out of scope.
 - Any future screenshot, app-usage, URL, or location telemetry must have a legitimate business need, clear disclosure, permissions, and retention controls.
 
