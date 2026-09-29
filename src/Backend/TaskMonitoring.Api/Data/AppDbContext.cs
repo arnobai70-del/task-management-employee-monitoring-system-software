@@ -18,6 +18,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<EmployeeShiftAssignment> EmployeeShiftAssignments => Set<EmployeeShiftAssignment>();
     public DbSet<WorkSession> WorkSessions => Set<WorkSession>();
     public DbSet<WorkBreak> WorkBreaks => Set<WorkBreak>();
+    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
+    public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
+    public DbSet<TaskComment> TaskComments => Set<TaskComment>();
+    public DbSet<TaskActivity> TaskActivities => Set<TaskActivity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -166,6 +171,71 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(x => new { x.WorkSessionId, x.StartedAtUtc });
             entity.HasIndex(x => x.WorkSessionId).HasFilter("\"EndedAtUtc\" IS NULL").IsUnique();
             entity.HasOne(x => x.WorkSession).WithMany(x => x.Breaks).HasForeignKey(x => x.WorkSessionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Project>(entity =>
+        {
+            entity.ToTable("projects");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.NormalizedCode).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.NormalizedName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => x.NormalizedCode).IsUnique();
+            entity.HasIndex(x => x.NormalizedName);
+            entity.HasIndex(x => x.Status);
+        });
+
+        modelBuilder.Entity<ProjectMember>(entity =>
+        {
+            entity.ToTable("project_members");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Role).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => new { x.ProjectId, x.EmployeeId }).IsUnique();
+            entity.HasIndex(x => new { x.ProjectId, x.IsActive });
+            entity.HasOne(x => x.Project).WithMany(x => x.Members).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ProjectTask>(entity =>
+        {
+            entity.ToTable("project_tasks");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.NormalizedTitle).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Priority).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => new { x.ProjectId, x.Status });
+            entity.HasIndex(x => new { x.AssigneeEmployeeId, x.Status });
+            entity.HasIndex(x => x.DueDate);
+            entity.HasIndex(x => x.NormalizedTitle);
+            entity.HasOne(x => x.Project).WithMany(x => x.Tasks).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AssigneeEmployee).WithMany().HasForeignKey(x => x.AssigneeEmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TaskComment>(entity =>
+        {
+            entity.ToTable("task_comments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Body).HasMaxLength(4000).IsRequired();
+            entity.HasIndex(x => new { x.ProjectTaskId, x.CreatedAtUtc });
+            entity.HasOne(x => x.ProjectTask).WithMany(x => x.Comments).HasForeignKey(x => x.ProjectTaskId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.AuthorUser).WithMany().HasForeignKey(x => x.AuthorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TaskActivity>(entity =>
+        {
+            entity.ToTable("task_activities");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Action).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.DetailsJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(x => new { x.ProjectTaskId, x.CreatedAtUtc });
+            entity.HasOne(x => x.ProjectTask).WithMany(x => x.Activities).HasForeignKey(x => x.ProjectTaskId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.ActorUser).WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
