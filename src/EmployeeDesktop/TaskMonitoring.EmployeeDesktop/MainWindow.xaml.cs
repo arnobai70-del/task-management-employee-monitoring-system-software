@@ -1,21 +1,30 @@
 using System.ComponentModel;
 using System.Text;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace TaskMonitoring.EmployeeDesktop;
 
 public partial class MainWindow : Window
 {
     private readonly EmployeeApiClient _api = new();
+    private readonly EmployeeRealtimeClient _realtime;
+    private readonly DispatcherTimer _presenceTimer;
     private bool _allowClose;
 
     public MainWindow()
     {
         InitializeComponent();
+        _realtime = new EmployeeRealtimeClient(_api);
+        _realtime.NotificationReceived += Realtime_NotificationReceived;
+        _realtime.ConnectionChanged += Realtime_ConnectionChanged;
+        _presenceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _presenceTimer.Tick += PresenceTimer_Tick;
     }
 
     protected override void OnClosed(EventArgs e)
     {
+        _presenceTimer.Stop();
         _api.Dispose();
         base.OnClosed(e);
     }
@@ -28,13 +37,14 @@ public partial class MainWindow : Window
         }
 
         e.Cancel = true;
+        _presenceTimer.Stop();
         try
         {
+            await _realtime.StopAsync();
             await _api.LogoutAsync();
         }
         catch
         {
-            // The in-memory tokens are discarded when the process closes even if the server is unreachable.
         }
         finally
         {
@@ -65,6 +75,9 @@ public partial class MainWindow : Window
             LogoutButton.IsEnabled = true;
             MessageText.Text = "Signed in successfully.";
             await RefreshWorkspaceAsync();
+            await SendPresenceHeartbeatAsync();
+            await _realtime.StartAsync();
+            _presenceTimer.Start();
         });
     }
 
@@ -72,11 +85,50 @@ public partial class MainWindow : Window
     {
         await RunAsync(async () =>
         {
+            _presenceTimer.Stop();
+            await _realtime.StopAsync();
             await _api.LogoutAsync();
             ClearWorkspace();
             ConnectionStatusText.Text = "Server: signed out";
             LogoutButton.IsEnabled = false;
             MessageText.Text = "Signed out and refresh token revoked.";
+        });
+    }
+
+    private async void PresenceTimer_Tick(object? sender, EventArgs e)
+    {
+        if (!_api.IsAuthenticated)
+        {
+            _presenceTimer.Stop();
+            return;
+        }
+
+        try
+        {
+            await SendPresenceHeartbeatAsync();
+            await RefreshNotificationsAsync();
+        }
+        catch (Exception ex)
+        {
+            ConnectionStatusText.Text = $"Server: presence sync delayed ({ex.Message})";
+        }
+    }
+
+    private void Realtime_NotificationReceived(object? sender, EmployeeNotificationResponse notification)
+    {
+        _ = Dispatcher.InvokeAsync(async () =>
+        {
+            MessageText.Text = $"New notification: {notification.Title}";
+            await RefreshNotificationsAsync();
+            await RefreshTasksAsync();
+        });
+    }
+
+    private void Realtime_ConnectionChanged(object? sender, bool connected)
+    {
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            RealtimeStatusText.Text = connected ? "Notifications: realtime connected" : "Notifications: reconnecting";
         });
     }
 
@@ -88,6 +140,25 @@ public partial class MainWindow : Window
 
     private async void RefreshAccessButton_Click(object sender, RoutedEventArgs e)
         => await RunAsync(RefreshAccessAsync);
+
+    private async void RefreshNotificationsButton_Click(object sender, RoutedEventArgs e)
+        => await RunAsync(RefreshNotificationsAsync);
+
+    private async void MarkNotificationReadButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (NotificationsGrid.SelectedItem is not EmployeeNotificationResponse notification)
+        {
+            MessageText.Text = "Select a notification first.";
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await _api.MarkNotificationReadAsync(notification.Id);
+            await RefreshNotificationsAsync();
+            MessageText.Text = "Notification marked as read.";
+        });
+    }
 
     private async void CheckInButton_Click(object sender, RoutedEventArgs e)
         => await RunAttendanceActionAsync("check-in");
@@ -107,6 +178,7 @@ public partial class MainWindow : Window
         {
             await _api.ExecuteAttendanceActionAsync(action);
             await RefreshAttendanceAsync();
+            await SendPresenceHeartbeatAsync();
             MessageText.Text = "Attendance updated.";
         });
     }
@@ -116,6 +188,13 @@ public partial class MainWindow : Window
         await RefreshAttendanceAsync();
         await RefreshTasksAsync();
         await RefreshAccessAsync();
+        await RefreshNotificationsAsync();
+    }
+
+    private async Task SendPresenceHeartbeatAsync()
+    {
+        var presence = await _api.RecordPresenceHeartbeatAsync();
+        ConnectionStatusText.Text = $"Server: connected · Presence: {presence.WorkState} · synced {DateTime.Now:t}";
     }
 
     private async Task RefreshAttendanceAsync()
@@ -152,6 +231,13 @@ public partial class MainWindow : Window
         WebsiteGrid.ItemsSource = result.WebsiteAssignments;
     }
 
+    private async Task RefreshNotificationsAsync()
+    {
+        var result = await _api.GetMyNotificationsAsync(UnreadNotificationsOnlyBox.IsChecked == true);
+        NotificationsGrid.ItemsSource = result.Items;
+        NotificationsCountText.Text = $"{result.TotalCount} notification(s)";
+    }
+
     private void ClearWorkspace()
     {
         AttendanceStatusText.Text = "Sign in to load your attendance status.";
@@ -159,6 +245,9 @@ public partial class MainWindow : Window
         RdpGrid.ItemsSource = null;
         IpGrid.ItemsSource = null;
         WebsiteGrid.ItemsSource = null;
+        NotificationsGrid.ItemsSource = null;
+        NotificationsCountText.Text = "0 notifications";
+        RealtimeStatusText.Text = "Notifications: disconnected";
     }
 
     private async Task RunAsync(Func<Task> operation)

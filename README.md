@@ -16,24 +16,29 @@ Development is active. Implemented milestones now include:
 - Survey / Field Operations backend core: forms, typed questions, field assignments, drafts/submission, immutable revisions and supervisor review.
 - Reporting / Dashboard API Core: workforce, attendance, projects, tasks, employee workload and survey progress.
 - RDP/IP/Website access assignment backend and Admin Web workflows with dedicated permissions and audit history.
-- Admin Web: authenticated responsive React console with permission-aware dashboard and employee/department/shift/project/task/access management workflows. Survey management write UI is intentionally not part of the current Admin Web roadmap.
-- Employee Windows desktop foundation: sign-in, attendance actions, assigned tasks, assigned RDP/IP/Website access, rotating refresh-token session handling and visible privacy disclosure.
+- Realtime Presence Core: authenticated desktop heartbeat, persistent last-seen state, online/offline timeout, attendance-derived Working/On Break/Idle state, permission-gated admin roster and SignalR updates.
+- Durable employee task notifications: assignment, reassignment, status and task-detail changes with self-scoped read/unread history and employee-specific SignalR delivery.
+- Admin Web: authenticated responsive React console with permission-aware dashboard, live workforce presence, and employee/department/shift/project/task/access management workflows. Survey management write UI is intentionally not part of the current Admin Web roadmap.
+- Employee Windows desktop: sign-in, attendance actions, assigned tasks, task notification inbox, realtime notification delivery, presence heartbeat, assigned RDP/IP/Website access, rotating refresh-token session handling and visible privacy disclosure.
 - Employee Windows service foundation: visible Windows Service-compatible server reachability/service-health heartbeat only.
 - Explicit PowerShell publish/install/uninstall scripts for the employee Windows service.
 - GitHub Actions quality gates for backend build/tests, EF migration drift, PostgreSQL integration, Admin Web builds, and Windows desktop/service build + publish validation.
 
-Still pending: realtime presence, notifications, additional approved transparent monitoring telemetry, production-grade installer packaging/updater, code signing, deployment automation, and final operational hardening.
+Still pending: additional approved transparent monitoring telemetry, production-grade installer packaging/updater, code signing, deployment automation, and final operational hardening.
 
 ## Architecture
 
 ```text
 Employee PC
   -> .NET 10 WPF Employee Desktop
+     -> authenticated REST self-workspace + presence heartbeat
+     -> SignalR employee notification channel
   -> Visible .NET Windows Service
+     -> server reachability/service-health heartbeat only
   -> Internet / HTTPS
-  -> ASP.NET Core API
+  -> ASP.NET Core API + SignalR
   -> PostgreSQL
-  -> React Admin Web
+  -> React Admin Web + live workforce SignalR view
 ```
 
 Normal employee functionality is intentionally server/internet dependent. The product is not designed as an offline-first application.
@@ -45,13 +50,13 @@ Normal employee functionality is intentionally server/internet dependent. The pr
 - ORM: Entity Framework Core
 - Authentication: JWT access tokens + rotating opaque refresh tokens
 - Authorization: database-backed roles and permissions
-- Admin Web: React 19 + TypeScript + Vite + React Router
-- Employee Desktop: .NET 10 WPF (`net10.0-windows`)
+- Realtime: ASP.NET Core SignalR
+- Admin Web: React 19 + TypeScript + Vite + React Router + SignalR JavaScript client
+- Employee Desktop: .NET 10 WPF (`net10.0-windows`) + SignalR .NET client
 - Employee Background Service: .NET 10 Worker + Windows Services integration
 - API documentation: OpenAPI
 - Backend tests: xUnit v3 on Microsoft Testing Platform
 - CI: GitHub Actions on Linux and Windows runners
-- Planned realtime: SignalR
 
 ## Repository structure
 
@@ -59,10 +64,12 @@ Normal employee functionality is intentionally server/internet dependent. The pr
 src/
   Backend/
     TaskMonitoring.Api/
+      Configuration/
       Contracts/
       Controllers/
       Data/
       Domain/
+      Hubs/
       Infrastructure/
       Migrations/
       Security/
@@ -99,21 +106,27 @@ Backend business rules are authoritative and must not be duplicated or weakened 
 - `/api/projects`, `/api/tasks` — project/task operations.
 - `/api/me/tasks` — authenticated employee's own assigned tasks; employee identity is resolved from the JWT subject server-side.
 - `/api/me/access` — authenticated employee's own RDP/IP/Website assignments; employee identity is resolved server-side.
+- `/api/me/presence/heartbeat` — authenticated employee desktop presence heartbeat; no employee ID is accepted from the client.
+- `/api/me/notifications` — authenticated employee's own durable task notification inbox and read state.
+- `/api/presence` — permission-gated organization presence roster with online/offline, last-seen and attendance-derived work state.
 - `/api/access-assignments/*` — admin RDP/IP/Website assignment workflows.
 - `/api/surveys`, `/api/survey-assignments`, `/api/survey-submissions` — field survey backend workflows.
 - `/api/reports/*` — read-only dashboard/reporting endpoints.
+- `/hubs/realtime` — authenticated SignalR hub for presence viewers and employee-specific notification groups.
 - `/health` — API health endpoint.
 - `/openapi/v1.json` — OpenAPI document.
 
-Permissions are enforced server-side. Organization-wide permission families include `employees.*`, `departments.*`, `roles.*`, `shifts.*`, `attendance.*`, `projects.*`, `tasks.*`, survey permissions, `access.assignments.*`, `reports.read`, and `audit.read`. The `/api/me/*` endpoints are self-scoped and do not grant organization-wide access.
+Permissions are enforced server-side. Organization-wide permission families include `employees.*`, `departments.*`, `roles.*`, `shifts.*`, `attendance.*`, `projects.*`, `tasks.*`, survey permissions, `access.assignments.*`, `reports.read`, `presence.read`, and `audit.read`. The `/api/me/*` endpoints are self-scoped and do not grant organization-wide access.
 
 ## Admin Web
 
 The browser console lives in `src/AdminWeb`.
 
-Current management areas include dashboard/reporting, employees, departments, attendance/shifts, projects, tasks, RDP assignments, IP assignments and website assignments. Navigation and write controls are generated from server-issued permission claims; backend authorization remains authoritative for every API request.
+Current management areas include dashboard/reporting, live workforce presence, employees, departments, attendance/shifts, projects, tasks, RDP assignments, IP assignments and website assignments. Navigation and write controls are generated from server-issued permission claims; backend authorization remains authoritative for every API request.
 
-The current auth contract returns refresh tokens in JSON. Admin Web stores the browser session in `sessionStorage` rather than persistent `localStorage`, rotates refresh tokens through `/api/auth/refresh`, retries one authorized request after refresh, and clears the session when refresh fails.
+The dashboard renders the live workforce panel only when the signed-in account has `presence.read`. It loads an authoritative REST snapshot, receives SignalR `presenceChanged` updates, and periodically refreshes the snapshot so heartbeat timeouts transition employees to Offline even if a desktop process or network connection disappears without a clean disconnect.
+
+The current auth contract returns refresh tokens in JSON. Admin Web stores the browser session in `sessionStorage` rather than persistent `localStorage`, rotates refresh tokens through `/api/auth/refresh`, retries one authorized request after refresh, and clears the session when refresh fails. SignalR reconnects use the same refresh-aware access-token provider.
 
 Run the Admin Web locally:
 
@@ -123,7 +136,7 @@ npm install
 npm run dev
 ```
 
-Vite listens on port `5173` and proxies `/api` to `http://localhost:5080` by default. Override the local target when needed:
+Vite listens on port `5173` and proxies both `/api` and `/hubs` (including WebSockets) to `http://localhost:5080` by default. Override the local target when needed:
 
 ```bash
 VITE_DEV_API_TARGET=https://localhost:7001 npm run dev
@@ -147,14 +160,20 @@ The WPF employee client lives at `src/EmployeeDesktop/TaskMonitoring.EmployeeDes
 - current attendance status;
 - check-in, break start/end and check-out;
 - self-scoped assigned task list;
+- durable self-scoped task notification inbox with read/unread state;
+- realtime employee-specific task notification delivery over SignalR;
+- authenticated presence heartbeat while signed in;
+- immediate presence sync after attendance-state changes;
 - self-scoped RDP/IP/Website assignment views;
 - automatic access-token refresh using rotating refresh tokens;
 - explicit logout/revocation;
 - visible monitoring/privacy disclosure.
 
-Desktop access and refresh tokens are kept only in process memory in the current implementation. They are not written to plaintext files or registry values. Restarting the desktop application requires sign-in again. A normal sign-out revokes the current refresh token; the window also attempts logout before closing.
+Desktop access and refresh tokens are kept only in process memory in the current implementation. They are not written to plaintext files or registry values. Restarting the desktop application requires sign-in again. A normal sign-out revokes the current refresh token; the window also attempts logout before closing. SignalR reconnects request a current access token through the same refresh-safe session logic.
 
-The Windows background worker lives at `src/EmployeeService/TaskMonitoring.EmployeeService`. Its current scope is deliberately narrow: configurable server reachability and service-health heartbeat logging. It does not capture keys, passwords, screenshots, audio/video or unrelated files.
+Presence is deliberately scoped to the signed-in desktop session. The client posts a heartbeat every 30 seconds; the server persists last-seen information and considers a heartbeat stale after the configured threshold (90 seconds by default). Current work state is derived server-side from attendance/work-session data rather than trusting a client-supplied Working or On Break flag.
+
+The Windows background worker lives at `src/EmployeeService/TaskMonitoring.EmployeeService`. Its current scope remains deliberately narrow: configurable server reachability and service-health heartbeat logging. It does not receive or persist employee JWT/refresh credentials, and it does not capture keys, passwords, screenshots, audio/video or unrelated files.
 
 Publish both Windows applications from an elevated or normal PowerShell session with .NET 10 installed:
 
@@ -193,6 +212,10 @@ Required API configuration:
 
 - `ConnectionStrings__DefaultConnection`
 - `Jwt__SigningKey` — at least 32 bytes of random secret material
+
+Optional presence configuration:
+
+- `Presence__OnlineThresholdSeconds` — 30 to 600 seconds; defaults to 90.
 
 Optional one-time bootstrap administrator configuration:
 
@@ -270,9 +293,12 @@ The PostgreSQL integration test expects `TEST_POSTGRES_CONNECTION` to point to a
 - Refresh tokens are random opaque values and only their SHA-256 hashes are persisted server-side.
 - Admin Web does not persist its current session in `localStorage`.
 - Employee Desktop currently keeps access/refresh tokens only in process memory and performs refresh-token rotation.
+- SignalR employee groups are resolved server-side from the authenticated JWT subject; clients do not choose another employee's group.
 - Deactivating an employee disables the linked account and revokes active refresh tokens.
-- Organization-wide attendance, project/task, survey, access-assignment, reporting, role and audit access require explicit permissions.
+- Organization-wide attendance, project/task, survey, access-assignment, reporting, presence, role and audit access require explicit permissions.
 - Employee self-workspace endpoints derive employee identity from the authenticated account rather than accepting an employee ID from the client.
+- Presence state is disclosed in the Desktop privacy view, heartbeat-based, and attendance-derived; the background service does not carry employee authentication credentials.
+- Durable task notifications contain business task metadata only and are self-scoped to the authenticated employee.
 - Important authentication and business mutations are audit logged.
 - Hidden spyware behavior, keylogging, password capture, covert screenshots, camera/microphone activation and unrelated private-file collection are explicitly out of scope.
 - Any future screenshot, app-usage, URL or location telemetry must have a legitimate business need, clear employee disclosure, explicit authorization boundaries, auditability and retention controls.
