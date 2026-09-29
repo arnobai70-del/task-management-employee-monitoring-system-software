@@ -65,7 +65,10 @@ public sealed class MonitoringController(IMonitoringTelemetryService monitoringS
         int page = 1,
         int pageSize = 50,
         CancellationToken cancellationToken = default)
-        => ToActionResult(await monitoringService.GetActivityAsync(employeeId, kind, fromUtc, toUtc, search, page, pageSize, cancellationToken));
+    {
+        var effectiveFrom = fromUtc ?? DateTime.UtcNow.AddDays(-7);
+        return ToActionResult(await monitoringService.GetActivityAsync(employeeId, kind, effectiveFrom, toUtc, search, page, pageSize, cancellationToken));
+    }
 
     private ActionResult<T> ToActionResult<T>(OperationResult<T> result)
     {
