@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -8,7 +9,13 @@ namespace TaskMonitoring.EmployeeDesktop;
 public sealed class EmployeeApiClient : IDisposable
 {
     private readonly HttpClient _http = new();
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private string? _accessToken;
+    private DateTime _accessTokenExpiresAtUtc;
+    private string? _refreshToken;
+    private DateTime _refreshTokenExpiresAtUtc;
+
+    public bool IsAuthenticated => !string.IsNullOrWhiteSpace(_refreshToken) && _refreshTokenExpiresAtUtc > DateTime.UtcNow;
 
     public void ConfigureServer(string serverUrl)
     {
@@ -19,41 +26,150 @@ public sealed class EmployeeApiClient : IDisposable
 
     public async Task LoginAsync(string email, string password, CancellationToken cancellationToken = default)
     {
-        var response = await _http.PostAsJsonAsync("api/auth/login", new { email, password }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync("api/auth/login", new { email, password }, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        var auth = await response.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken: cancellationToken)
-                   ?? throw new InvalidOperationException("The server returned an empty authentication response.");
-
-        _accessToken = auth.AccessToken;
-        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+        ApplyAuth(await ReadAuthAsync(response, cancellationToken));
     }
 
-    public async Task<AttendanceStateResponse> GetAttendanceStatusAsync(CancellationToken cancellationToken = default)
+    public async Task LogoutAsync(CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
-        var response = await _http.GetAsync("api/attendance/me/status", cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<AttendanceStateResponse>(cancellationToken: cancellationToken)
-               ?? throw new InvalidOperationException("The server returned an empty attendance response.");
+        var refreshToken = _refreshToken;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(refreshToken))
+            {
+                using var response = await _http.PostAsJsonAsync("api/auth/logout", new { refreshToken }, cancellationToken);
+                await EnsureSuccessAsync(response, cancellationToken);
+            }
+        }
+        finally
+        {
+            ClearSession();
+        }
     }
 
-    public Task ExecuteAttendanceActionAsync(string action, CancellationToken cancellationToken = default)
-        => PostAuthorizedAsync($"api/attendance/me/{action}", cancellationToken);
+    public Task<AttendanceStateResponse> GetAttendanceStatusAsync(CancellationToken cancellationToken = default)
+        => GetAuthorizedAsync<AttendanceStateResponse>("api/attendance/me/status", cancellationToken);
 
-    private async Task PostAuthorizedAsync(string path, CancellationToken cancellationToken)
+    public async Task ExecuteAttendanceActionAsync(string action, CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
-        using var response = await _http.PostAsync(path, content: null, cancellationToken);
+        using var response = await SendAuthorizedAsync(HttpMethod.Post, $"api/attendance/me/{action}", cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
-    private void EnsureAuthenticated()
+    public Task<PagedResponse<EmployeeTaskResponse>> GetMyTasksAsync(bool includeClosed = false, CancellationToken cancellationToken = default)
+        => GetAuthorizedAsync<PagedResponse<EmployeeTaskResponse>>(
+            $"api/me/tasks?includeClosed={includeClosed.ToString().ToLowerInvariant()}&page=1&pageSize=100",
+            cancellationToken);
+
+    public Task<EmployeeAccessWorkspaceResponse> GetMyAccessAsync(bool includeInactive = false, CancellationToken cancellationToken = default)
+        => GetAuthorizedAsync<EmployeeAccessWorkspaceResponse>(
+            $"api/me/access?includeInactive={includeInactive.ToString().ToLowerInvariant()}",
+            cancellationToken);
+
+    private async Task<T> GetAuthorizedAsync<T>(string path, CancellationToken cancellationToken)
+    {
+        using var response = await SendAuthorizedAsync(HttpMethod.Get, path, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken)
+               ?? throw new InvalidOperationException("The server returned an empty response.");
+    }
+
+    private async Task<HttpResponseMessage> SendAuthorizedAsync(HttpMethod method, string path, CancellationToken cancellationToken)
+    {
+        await EnsureFreshAccessTokenAsync(cancellationToken);
+        var response = await SendAuthorizedOnceAsync(method, path, cancellationToken);
+        if (response.StatusCode != HttpStatusCode.Unauthorized)
+        {
+            return response;
+        }
+
+        response.Dispose();
+        await RefreshSessionAsync(force: true, cancellationToken);
+        return await SendAuthorizedOnceAsync(method, path, cancellationToken);
+    }
+
+    private async Task<HttpResponseMessage> SendAuthorizedOnceAsync(HttpMethod method, string path, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_accessToken))
         {
-            throw new InvalidOperationException("Sign in before using attendance controls.");
+            throw new InvalidOperationException("Sign in before using employee workspace features.");
+        }
+
+        using var request = new HttpRequestMessage(method, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+        return await _http.SendAsync(request, cancellationToken);
+    }
+
+    private async Task EnsureFreshAccessTokenAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_refreshToken))
+        {
+            throw new InvalidOperationException("Sign in before using employee workspace features.");
+        }
+
+        if (_accessTokenExpiresAtUtc > DateTime.UtcNow.AddSeconds(30) && !string.IsNullOrWhiteSpace(_accessToken))
+        {
+            return;
+        }
+
+        await RefreshSessionAsync(force: false, cancellationToken);
+    }
+
+    private async Task RefreshSessionAsync(bool force, CancellationToken cancellationToken)
+    {
+        await _refreshLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (!force && _accessTokenExpiresAtUtc > DateTime.UtcNow.AddSeconds(30) && !string.IsNullOrWhiteSpace(_accessToken))
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_refreshToken) || _refreshTokenExpiresAtUtc <= DateTime.UtcNow)
+            {
+                ClearSession();
+                throw new InvalidOperationException("Your session has expired. Sign in again.");
+            }
+
+            var refreshToken = _refreshToken;
+            using var response = await _http.PostAsJsonAsync("api/auth/refresh", new { refreshToken }, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                ClearSession();
+                await EnsureSuccessAsync(response, cancellationToken);
+            }
+
+            ApplyAuth(await ReadAuthAsync(response, cancellationToken));
+        }
+        finally
+        {
+            _refreshLock.Release();
         }
     }
+
+    private static async Task<AuthResponse> ReadAuthAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+        => await response.Content.ReadFromJsonAsync<AuthResponse>(JsonOptions, cancellationToken)
+           ?? throw new InvalidOperationException("The server returned an empty authentication response.");
+
+    private void ApplyAuth(AuthResponse auth)
+    {
+        _accessToken = auth.AccessToken;
+        _accessTokenExpiresAtUtc = NormalizeUtc(auth.AccessTokenExpiresAtUtc);
+        _refreshToken = auth.RefreshToken;
+        _refreshTokenExpiresAtUtc = NormalizeUtc(auth.RefreshTokenExpiresAtUtc);
+    }
+
+    private void ClearSession()
+    {
+        _accessToken = null;
+        _accessTokenExpiresAtUtc = default;
+        _refreshToken = null;
+        _refreshTokenExpiresAtUtc = default;
+    }
+
+    private static DateTime NormalizeUtc(DateTime value)
+        => value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
@@ -81,22 +197,98 @@ public sealed class EmployeeApiClient : IDisposable
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        _refreshLock.Dispose();
+        _http.Dispose();
+    }
 
     private sealed record AuthResponse(string AccessToken, DateTime AccessTokenExpiresAtUtc, string RefreshToken, DateTime RefreshTokenExpiresAtUtc);
     private sealed record ApiError(string Code, string Message);
 }
 
-public sealed record AttendanceStateResponse(int State, WorkSessionResponse? Session)
+public sealed record PagedResponse<T>(IReadOnlyCollection<T> Items, int Page, int PageSize, int TotalCount);
+
+public sealed record EmployeeTaskResponse(
+    Guid Id,
+    Guid ProjectId,
+    string ProjectCode,
+    string ProjectName,
+    string Title,
+    string? Description,
+    string Status,
+    string Priority,
+    Guid? AssigneeEmployeeId,
+    string? AssigneeName,
+    DateOnly? DueDate,
+    DateTime? CompletedAtUtc,
+    int CommentCount,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc);
+
+public sealed record EmployeeAccessWorkspaceResponse(
+    IReadOnlyCollection<RdpAssignmentResponse> RdpAssignments,
+    IReadOnlyCollection<IpAssignmentResponse> IpAssignments,
+    IReadOnlyCollection<WebsiteAssignmentResponse> WebsiteAssignments);
+
+public sealed record RdpAssignmentResponse(
+    Guid Id,
+    Guid EmployeeId,
+    string EmployeeCode,
+    string EmployeeName,
+    string Name,
+    string Host,
+    int Port,
+    string? UsernameReference,
+    string? CredentialReference,
+    DateOnly? ValidFrom,
+    DateOnly? ExpiresOn,
+    bool IsActive,
+    string? Notes,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc);
+
+public sealed record IpAssignmentResponse(
+    Guid Id,
+    Guid EmployeeId,
+    string EmployeeCode,
+    string EmployeeName,
+    string IpAddress,
+    string DeviceName,
+    string? MacAddress,
+    string Status,
+    DateOnly? AssignedOn,
+    DateOnly? ReleasedOn,
+    string? Notes,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc);
+
+public sealed record WebsiteAssignmentResponse(
+    Guid Id,
+    Guid EmployeeId,
+    string EmployeeCode,
+    string EmployeeName,
+    string Name,
+    string Url,
+    string? UsernameReference,
+    string AccessLevel,
+    DateOnly? StartsOn,
+    DateOnly? ExpiresOn,
+    bool IsActive,
+    string? Notes,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc);
+
+public sealed record AttendanceStateResponse(string State, WorkSessionResponse? Session)
 {
     public string StateLabel => State switch
     {
-        1 => "No shift assigned",
-        2 => "Not checked in",
-        3 => "Working",
-        4 => "On break",
-        5 => "Checked out",
-        _ => $"Unknown ({State})"
+        "NoShift" => "No shift assigned",
+        "NotCheckedIn" => "Not checked in",
+        "Working" => "Working",
+        "OnBreak" => "On break",
+        "CheckedOut" => "Checked out",
+        _ => State
     };
 }
 
