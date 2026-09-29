@@ -6,6 +6,7 @@ using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
 using TaskMonitoring.Api.Infrastructure;
 using TaskMonitoring.Api.Security;
+using TaskMonitoring.Api.Services;
 
 namespace Backend.Tests;
 
@@ -254,5 +255,37 @@ public sealed class DatabaseMigrationTests
         Assert.Equal(1, await db.SurveyAssignments.CountAsync(cancellationToken));
         Assert.Equal(1, await db.SurveySubmissions.CountAsync(cancellationToken));
         Assert.Equal(1, await db.SurveyAnswers.CountAsync(cancellationToken));
+
+        var reportingService = new ReportingDashboardService(
+            db,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 29, 12, 0, 0, TimeSpan.Zero)));
+        var dashboard = await reportingService.GetDashboardAsync(
+            new DateOnly(2026, 9, 29),
+            new DateOnly(2026, 9, 29),
+            cancellationToken);
+        var attendanceReport = await reportingService.GetAttendanceDailyAsync(
+            new DateOnly(2026, 9, 29),
+            new DateOnly(2026, 9, 29),
+            department.Id,
+            cancellationToken);
+        var projectReport = await reportingService.GetProjectProgressAsync(project.Id, cancellationToken);
+        var workloadReport = await reportingService.GetEmployeeWorkloadAsync(department.Id, 20, cancellationToken);
+        var surveyReport = await reportingService.GetSurveyProgressAsync(project.Id, cancellationToken);
+
+        Assert.Equal(OperationStatus.Success, dashboard.Status);
+        Assert.Equal(1, dashboard.Value!.Attendance.Sessions);
+        Assert.Equal(OperationStatus.Success, attendanceReport.Status);
+        Assert.Single(attendanceReport.Value!);
+        Assert.Equal(OperationStatus.Success, projectReport.Status);
+        Assert.Single(projectReport.Value!);
+        Assert.Equal(OperationStatus.Success, workloadReport.Status);
+        Assert.Single(workloadReport.Value!);
+        Assert.Equal(OperationStatus.Success, surveyReport.Status);
+        Assert.Single(surveyReport.Value!);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }
