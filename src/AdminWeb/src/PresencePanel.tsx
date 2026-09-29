@@ -2,6 +2,7 @@ import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, apiUrl, getValidAccessToken } from './api';
 import { useAuth } from './auth';
+import MonitoringManagementPage from './MonitoringManagement';
 
 interface PresenceItem {
   employeeId: string;
@@ -36,7 +37,8 @@ function statusClass(value: string): string {
 
 export default function PresencePanel() {
   const { can } = useAuth();
-  const allowed = can('presence.read');
+  const presenceAllowed = can('presence.read');
+  const monitoringAllowed = can('monitoring.read');
   const [items, setItems] = useState<PresenceItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -47,7 +49,7 @@ export default function PresencePanel() {
   const breakCount = useMemo(() => items.filter(item => item.workState === 'OnBreak').length, [items]);
 
   useEffect(() => {
-    if (!allowed) return;
+    if (!presenceAllowed) return;
     let cancelled = false;
 
     const loadSnapshot = async (showLoading: boolean) => {
@@ -71,10 +73,10 @@ export default function PresencePanel() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [allowed]);
+  }, [presenceAllowed]);
 
   useEffect(() => {
-    if (!allowed) return;
+    if (!presenceAllowed) return;
     const connection = new HubConnectionBuilder()
       .withUrl(apiUrl('/hubs/realtime'), { accessTokenFactory: getValidAccessToken })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
@@ -98,36 +100,39 @@ export default function PresencePanel() {
       .catch(caught => setError(caught instanceof Error ? caught.message : 'Realtime connection failed.'));
 
     return () => { void connection.stop(); };
-  }, [allowed]);
+  }, [presenceAllowed]);
 
-  if (!allowed) return null;
+  if (!presenceAllowed && !monitoringAllowed) return null;
 
   return (
-    <article className="panel table-panel">
-      <div className="panel-heading">
-        <div><h2>Live workforce</h2><p>{live ? 'Realtime connected' : 'Snapshot / reconnecting'}</p></div>
-        <span>{onlineCount} online · {workingCount} working · {breakCount} on break</span>
-      </div>
-      {loading && !items.length ? <div className="loading-block">Loading presence…</div> : error && !items.length ? <div className="error-banner">{error}</div> : (
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>Employee</th><th>Department</th><th>Presence</th><th>Work state</th><th>Last seen</th><th>Client</th></tr></thead>
-            <tbody>
-              {items.map(item => (
-                <tr key={item.employeeId}>
-                  <td><strong>{item.fullName}</strong><small>{item.employeeCode}</small></td>
-                  <td>{item.departmentName || '—'}</td>
-                  <td><span className={`status-badge status-${item.isOnline ? 'active' : 'inactive'}`}>{item.isOnline ? 'Online' : 'Offline'}</span></td>
-                  <td><span className={`status-badge status-${statusClass(item.workState)}`}>{item.workState}</span></td>
-                  <td>{formatLastSeen(item.lastSeenAtUtc)}</td>
-                  <td>{item.clientKind ? `${item.clientKind}${item.clientVersion ? ` ${item.clientVersion}` : ''}` : '—'}</td>
-                </tr>
-              ))}
-              {!items.length && <tr><td colSpan={6} className="empty-cell">No active employees found.</td></tr>}
-            </tbody>
-          </table>
+    <>
+      {presenceAllowed && <article className="panel table-panel">
+        <div className="panel-heading">
+          <div><h2>Live workforce</h2><p>{live ? 'Realtime connected' : 'Snapshot / reconnecting'}</p></div>
+          <span>{onlineCount} online · {workingCount} working · {breakCount} on break</span>
         </div>
-      )}
-    </article>
+        {loading && !items.length ? <div className="loading-block">Loading presence…</div> : error && !items.length ? <div className="error-banner">{error}</div> : (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Employee</th><th>Department</th><th>Presence</th><th>Work state</th><th>Last seen</th><th>Client</th></tr></thead>
+              <tbody>
+                {items.map(item => (
+                  <tr key={item.employeeId}>
+                    <td><strong>{item.fullName}</strong><small>{item.employeeCode}</small></td>
+                    <td>{item.departmentName || '—'}</td>
+                    <td><span className={`status-badge status-${item.isOnline ? 'active' : 'inactive'}`}>{item.isOnline ? 'Online' : 'Offline'}</span></td>
+                    <td><span className={`status-badge status-${statusClass(item.workState)}`}>{item.workState}</span></td>
+                    <td>{formatLastSeen(item.lastSeenAtUtc)}</td>
+                    <td>{item.clientKind ? `${item.clientKind}${item.clientVersion ? ` ${item.clientVersion}` : ''}` : '—'}</td>
+                  </tr>
+                ))}
+                {!items.length && <tr><td colSpan={6} className="empty-cell">No active employees found.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </article>}
+      {monitoringAllowed && <MonitoringManagementPage />}
+    </>
   );
 }
