@@ -89,24 +89,56 @@ public sealed class AttendanceCoreServiceTests
     public async Task Open_break_blocks_checkout_until_break_is_ended()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var db = CreateDbContext();
-        var (user, employee) = await AddEmployeeAsync(db, cancellationToken);
-        var shift = AddShift(db, "DAY", "Day Shift", new TimeOnly(9, 0), new TimeOnly(17, 0));
-        AddAssignment(db, employee, shift, new DateOnly(2026, 9, 29));
-        await db.SaveChangesAsync(cancellationToken);
+        var options = CreateDbOptions();
+        Guid userId;
+
+        await using (var seedDb = new AppDbContext(options))
+        {
+            var (user, employee) = await AddEmployeeAsync(seedDb, cancellationToken);
+            userId = user.Id;
+            var shift = AddShift(seedDb, "DAY", "Day Shift", new TimeOnly(9, 0), new TimeOnly(17, 0));
+            AddAssignment(seedDb, employee, shift, new DateOnly(2026, 9, 29));
+            await seedDb.SaveChangesAsync(cancellationToken);
+        }
+
         var clock = new MutableTimeProvider(DateTimeOffset.Parse("2026-09-29T03:00:00Z"));
-        var service = new AttendanceCoreService(db, clock);
-        var actor = Actor(user.Id);
+        var actor = Actor(userId);
 
-        Assert.Equal(OperationStatus.Success, (await service.CheckInAsync(actor, cancellationToken)).Status);
+        await using (var checkInDb = new AppDbContext(options))
+        {
+            var service = new AttendanceCoreService(checkInDb, clock);
+            Assert.Equal(OperationStatus.Success, (await service.CheckInAsync(actor, cancellationToken)).Status);
+        }
+
         clock.SetUtcNow(DateTimeOffset.Parse("2026-09-29T05:00:00Z"));
-        Assert.Equal(OperationStatus.Success, (await service.StartBreakAsync(actor, cancellationToken)).Status);
-        clock.SetUtcNow(DateTimeOffset.Parse("2026-09-29T05:30:00Z"));
+        await using (var startBreakDb = new AppDbContext(options))
+        {
+            var service = new AttendanceCoreService(startBreakDb, clock);
+            Assert.Equal(OperationStatus.Success, (await service.StartBreakAsync(actor, cancellationToken)).Status);
+        }
 
-        var blockedCheckout = await service.CheckOutAsync(actor, cancellationToken);
-        var endedBreak = await service.EndBreakAsync(actor, cancellationToken);
+        clock.SetUtcNow(DateTimeOffset.Parse("2026-09-29T05:30:00Z"));
+        OperationResult<WorkSessionResponse> blockedCheckout;
+        await using (var blockedCheckoutDb = new AppDbContext(options))
+        {
+            var service = new AttendanceCoreService(blockedCheckoutDb, clock);
+            blockedCheckout = await service.CheckOutAsync(actor, cancellationToken);
+        }
+
+        OperationResult<WorkSessionResponse> endedBreak;
+        await using (var endBreakDb = new AppDbContext(options))
+        {
+            var service = new AttendanceCoreService(endBreakDb, clock);
+            endedBreak = await service.EndBreakAsync(actor, cancellationToken);
+        }
+
         clock.SetUtcNow(DateTimeOffset.Parse("2026-09-29T11:00:00Z"));
-        var checkout = await service.CheckOutAsync(actor, cancellationToken);
+        OperationResult<WorkSessionResponse> checkout;
+        await using (var checkoutDb = new AppDbContext(options))
+        {
+            var service = new AttendanceCoreService(checkoutDb, clock);
+            checkout = await service.CheckOutAsync(actor, cancellationToken);
+        }
 
         Assert.Equal(OperationStatus.Conflict, blockedCheckout.Status);
         Assert.Equal("break_open", blockedCheckout.ErrorCode);
@@ -140,13 +172,12 @@ public sealed class AttendanceCoreServiceTests
         Assert.Equal(DateTime.Parse("2026-09-30T00:00:00Z").ToUniversalTime(), result.Value.ScheduledEndUtc);
     }
 
-    private static AppDbContext CreateDbContext()
-    {
-        var options = new DbContextOptionsBuilder<AppDbContext>()
+    private static DbContextOptions<AppDbContext> CreateDbOptions() =>
+        new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new AppDbContext(options);
-    }
+
+    private static AppDbContext CreateDbContext() => new(CreateDbOptions());
 
     private static async Task<(User User, Employee Employee)> AddEmployeeAsync(AppDbContext db, CancellationToken cancellationToken)
     {
