@@ -113,7 +113,7 @@ internal static partial class Program
         }
 
         var manifestUri = new Uri(settings.ManifestUrl, UriKind.Absolute);
-        var packageUri = ResolvePackageUri(manifestUri, manifest.Package);
+        var packageUri = ResolvePackageUri(manifestUri, manifest.Package, settings.AllowInsecureHttp);
         var tempRoot = Path.Combine(Path.GetTempPath(), $"TaskMonitoring-update-{Guid.NewGuid():N}");
         var packagePath = Path.Combine(tempRoot, manifest.Package.File);
         var stageRoot = Path.Combine(tempRoot, "stage");
@@ -130,6 +130,11 @@ internal static partial class Program
                 await source.CopyToAsync(destination);
             }
 
+            if (new FileInfo(packagePath).Length != manifest.Package.SizeBytes)
+            {
+                throw new InvalidOperationException("Downloaded package size does not match the release manifest.");
+            }
+
             VerifySha256(packagePath, manifest.Package.Sha256);
             Directory.CreateDirectory(stageRoot);
             ZipFile.ExtractToDirectory(packagePath, stageRoot, overwriteFiles: false);
@@ -140,6 +145,8 @@ internal static partial class Program
             var serviceExe = Path.Combine(stagedService, "TaskMonitoring.EmployeeService.exe");
             EnsureFile(desktopExe);
             EnsureFile(serviceExe);
+            VerifyFileVersion(desktopExe, availableVersion);
+            VerifyFileVersion(serviceExe, availableVersion);
 
             if (settings.RequireSignedPackages)
             {
@@ -314,21 +321,28 @@ internal static partial class Program
         {
             throw new InvalidOperationException("Release package metadata is incomplete.");
         }
+        if (!string.Equals(Path.GetFileName(manifest.Package.File), manifest.Package.File, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Release package.file must be a simple file name without directory segments.");
+        }
+        if (manifest.Package.SizeBytes <= 0)
+        {
+            throw new InvalidOperationException("Release package size must be greater than zero.");
+        }
     }
 
-    private static Uri ResolvePackageUri(Uri manifestUri, ReleasePackage package)
+    private static Uri ResolvePackageUri(Uri manifestUri, ReleasePackage package, bool allowInsecureHttp)
     {
-        if (!string.IsNullOrWhiteSpace(package.Url))
+        var uri = string.IsNullOrWhiteSpace(package.Url)
+            ? new Uri(manifestUri, package.File)
+            : new Uri(package.Url, UriKind.Absolute);
+
+        if (uri.Scheme != Uri.UriSchemeHttps && !(allowInsecureHttp && uri.Scheme == Uri.UriSchemeHttp))
         {
-            var uri = new Uri(package.Url, UriKind.Absolute);
-            if (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
-            {
-                throw new InvalidOperationException("Package URL must use HTTP or HTTPS.");
-            }
-            return uri;
+            throw new InvalidOperationException("Package URL must use HTTPS unless AllowInsecureHttp is explicitly enabled for development.");
         }
 
-        return new Uri(manifestUri, package.File);
+        return uri;
     }
 
     private static async Task<InstallState> ReadInstallStateAsync(string path)
@@ -354,6 +368,21 @@ internal static partial class Program
 
     private static Version NormalizeAssemblyVersion(Version? value)
         => value is null ? new Version(0, 0, 0) : new Version(value.Major, value.Minor, Math.Max(0, value.Build));
+
+    private static void VerifyFileVersion(string path, Version expectedVersion)
+    {
+        var fileVersionText = FileVersionInfo.GetVersionInfo(path).FileVersion;
+        if (string.IsNullOrWhiteSpace(fileVersionText) || !Version.TryParse(fileVersionText, out var fileVersion))
+        {
+            throw new InvalidOperationException($"Executable version metadata is missing or invalid for '{path}'.");
+        }
+
+        var actualVersion = new Version(fileVersion.Major, fileVersion.Minor, Math.Max(0, fileVersion.Build));
+        if (actualVersion != expectedVersion)
+        {
+            throw new InvalidOperationException($"Executable version mismatch for '{path}'. Expected {expectedVersion}; actual {actualVersion}.");
+        }
+    }
 
     private static void VerifySha256(string path, string expectedHash)
     {
