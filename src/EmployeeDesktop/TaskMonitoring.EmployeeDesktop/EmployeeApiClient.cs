@@ -53,7 +53,7 @@ public sealed class EmployeeApiClient : IDisposable
 
     public async Task ExecuteAttendanceActionAsync(string action, CancellationToken cancellationToken = default)
     {
-        using var response = await SendAuthorizedAsync(HttpMethod.Post, $"api/attendance/me/{action}", cancellationToken);
+        using var response = await SendAuthorizedAsync(HttpMethod.Post, $"api/attendance/me/{action}", null, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
@@ -67,18 +67,41 @@ public sealed class EmployeeApiClient : IDisposable
             $"api/me/access?includeInactive={includeInactive.ToString().ToLowerInvariant()}",
             cancellationToken);
 
+    public async Task<EmployeePresenceResponse> RecordPresenceHeartbeatAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            "api/me/presence/heartbeat",
+            JsonContent.Create(new { clientKind = "desktop", clientVersion = typeof(EmployeeApiClient).Assembly.GetName().Version?.ToString() }),
+            cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<EmployeePresenceResponse>(JsonOptions, cancellationToken)
+               ?? throw new InvalidOperationException("The server returned an empty presence response.");
+    }
+
+    public Task<PagedResponse<EmployeeNotificationResponse>> GetMyNotificationsAsync(bool unreadOnly = false, CancellationToken cancellationToken = default)
+        => GetAuthorizedAsync<PagedResponse<EmployeeNotificationResponse>>(
+            $"api/me/notifications?unreadOnly={unreadOnly.ToString().ToLowerInvariant()}&page=1&pageSize=100",
+            cancellationToken);
+
+    public async Task MarkNotificationReadAsync(Guid notificationId, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAuthorizedAsync(HttpMethod.Post, $"api/me/notifications/{notificationId}/read", null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
     private async Task<T> GetAuthorizedAsync<T>(string path, CancellationToken cancellationToken)
     {
-        using var response = await SendAuthorizedAsync(HttpMethod.Get, path, cancellationToken);
+        using var response = await SendAuthorizedAsync(HttpMethod.Get, path, null, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken)
                ?? throw new InvalidOperationException("The server returned an empty response.");
     }
 
-    private async Task<HttpResponseMessage> SendAuthorizedAsync(HttpMethod method, string path, CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendAuthorizedAsync(HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
     {
         await EnsureFreshAccessTokenAsync(cancellationToken);
-        var response = await SendAuthorizedOnceAsync(method, path, cancellationToken);
+        var response = await SendAuthorizedOnceAsync(method, path, content, cancellationToken);
         if (response.StatusCode != HttpStatusCode.Unauthorized)
         {
             return response;
@@ -86,10 +109,10 @@ public sealed class EmployeeApiClient : IDisposable
 
         response.Dispose();
         await RefreshSessionAsync(force: true, cancellationToken);
-        return await SendAuthorizedOnceAsync(method, path, cancellationToken);
+        return await SendAuthorizedOnceAsync(method, path, content, cancellationToken);
     }
 
-    private async Task<HttpResponseMessage> SendAuthorizedOnceAsync(HttpMethod method, string path, CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendAuthorizedOnceAsync(HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_accessToken))
         {
@@ -98,7 +121,22 @@ public sealed class EmployeeApiClient : IDisposable
 
         using var request = new HttpRequestMessage(method, path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+        if (content is not null)
+        {
+            request.Content = CloneContent(content);
+        }
         return await _http.SendAsync(request, cancellationToken);
+    }
+
+    private static HttpContent CloneContent(HttpContent content)
+    {
+        var bytes = content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+        var clone = new ByteArrayContent(bytes);
+        foreach (var header in content.Headers)
+        {
+            clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+        return clone;
     }
 
     private async Task EnsureFreshAccessTokenAsync(CancellationToken cancellationToken)
@@ -189,7 +227,6 @@ public sealed class EmployeeApiClient : IDisposable
         }
         catch (JsonException)
         {
-            // Fall back to a status-based error below.
         }
 
         throw new InvalidOperationException($"Server request failed ({(int)response.StatusCode} {response.ReasonPhrase}).");
@@ -208,76 +245,17 @@ public sealed class EmployeeApiClient : IDisposable
 }
 
 public sealed record PagedResponse<T>(IReadOnlyCollection<T> Items, int Page, int PageSize, int TotalCount);
+public sealed record EmployeePresenceResponse(Guid EmployeeId, string EmployeeCode, string FullName, string? DepartmentName, bool IsOnline, string WorkState, DateTime? LastSeenAtUtc, string? ClientKind, string? ClientVersion, DateTime? WorkSessionStartedAtUtc);
+public sealed record EmployeeNotificationResponse(Guid Id, string Kind, string Title, string Message, string EntityType, Guid? EntityId, DateTime CreatedAtUtc, DateTime? ReadAtUtc)
+{
+    public string ReadState => ReadAtUtc.HasValue ? "Read" : "Unread";
+}
 
-public sealed record EmployeeTaskResponse(
-    Guid Id,
-    Guid ProjectId,
-    string ProjectCode,
-    string ProjectName,
-    string Title,
-    string? Description,
-    string Status,
-    string Priority,
-    Guid? AssigneeEmployeeId,
-    string? AssigneeName,
-    DateOnly? DueDate,
-    DateTime? CompletedAtUtc,
-    int CommentCount,
-    DateTime CreatedAtUtc,
-    DateTime UpdatedAtUtc);
-
-public sealed record EmployeeAccessWorkspaceResponse(
-    IReadOnlyCollection<RdpAssignmentResponse> RdpAssignments,
-    IReadOnlyCollection<IpAssignmentResponse> IpAssignments,
-    IReadOnlyCollection<WebsiteAssignmentResponse> WebsiteAssignments);
-
-public sealed record RdpAssignmentResponse(
-    Guid Id,
-    Guid EmployeeId,
-    string EmployeeCode,
-    string EmployeeName,
-    string Name,
-    string Host,
-    int Port,
-    string? UsernameReference,
-    string? CredentialReference,
-    DateOnly? ValidFrom,
-    DateOnly? ExpiresOn,
-    bool IsActive,
-    string? Notes,
-    DateTime CreatedAtUtc,
-    DateTime UpdatedAtUtc);
-
-public sealed record IpAssignmentResponse(
-    Guid Id,
-    Guid EmployeeId,
-    string EmployeeCode,
-    string EmployeeName,
-    string IpAddress,
-    string DeviceName,
-    string? MacAddress,
-    string Status,
-    DateOnly? AssignedOn,
-    DateOnly? ReleasedOn,
-    string? Notes,
-    DateTime CreatedAtUtc,
-    DateTime UpdatedAtUtc);
-
-public sealed record WebsiteAssignmentResponse(
-    Guid Id,
-    Guid EmployeeId,
-    string EmployeeCode,
-    string EmployeeName,
-    string Name,
-    string Url,
-    string? UsernameReference,
-    string AccessLevel,
-    DateOnly? StartsOn,
-    DateOnly? ExpiresOn,
-    bool IsActive,
-    string? Notes,
-    DateTime CreatedAtUtc,
-    DateTime UpdatedAtUtc);
+public sealed record EmployeeTaskResponse(Guid Id, Guid ProjectId, string ProjectCode, string ProjectName, string Title, string? Description, string Status, string Priority, Guid? AssigneeEmployeeId, string? AssigneeName, DateOnly? DueDate, DateTime? CompletedAtUtc, int CommentCount, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+public sealed record EmployeeAccessWorkspaceResponse(IReadOnlyCollection<RdpAssignmentResponse> RdpAssignments, IReadOnlyCollection<IpAssignmentResponse> IpAssignments, IReadOnlyCollection<WebsiteAssignmentResponse> WebsiteAssignments);
+public sealed record RdpAssignmentResponse(Guid Id, Guid EmployeeId, string EmployeeCode, string EmployeeName, string Name, string Host, int Port, string? UsernameReference, string? CredentialReference, DateOnly? ValidFrom, DateOnly? ExpiresOn, bool IsActive, string? Notes, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+public sealed record IpAssignmentResponse(Guid Id, Guid EmployeeId, string EmployeeCode, string EmployeeName, string IpAddress, string DeviceName, string? MacAddress, string Status, DateOnly? AssignedOn, DateOnly? ReleasedOn, string? Notes, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+public sealed record WebsiteAssignmentResponse(Guid Id, Guid EmployeeId, string EmployeeCode, string EmployeeName, string Name, string Url, string? UsernameReference, string AccessLevel, DateOnly? StartsOn, DateOnly? ExpiresOn, bool IsActive, string? Notes, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 
 public sealed record AttendanceStateResponse(string State, WorkSessionResponse? Session)
 {
@@ -292,20 +270,5 @@ public sealed record AttendanceStateResponse(string State, WorkSessionResponse? 
     };
 }
 
-public sealed record WorkSessionResponse(
-    Guid Id,
-    Guid EmployeeId,
-    string EmployeeName,
-    Guid ShiftId,
-    string ShiftName,
-    DateOnly WorkDate,
-    DateTime ScheduledStartUtc,
-    DateTime ScheduledEndUtc,
-    DateTime StartedAtUtc,
-    DateTime? EndedAtUtc,
-    int LateMinutes,
-    int? EarlyLeaveMinutes,
-    int TotalBreakMinutes,
-    IReadOnlyCollection<WorkBreakResponse> Breaks);
-
+public sealed record WorkSessionResponse(Guid Id, Guid EmployeeId, string EmployeeName, Guid ShiftId, string ShiftName, DateOnly WorkDate, DateTime ScheduledStartUtc, DateTime ScheduledEndUtc, DateTime StartedAtUtc, DateTime? EndedAtUtc, int LateMinutes, int? EarlyLeaveMinutes, int TotalBreakMinutes, IReadOnlyCollection<WorkBreakResponse> Breaks);
 public sealed record WorkBreakResponse(Guid Id, DateTime StartedAtUtc, DateTime? EndedAtUtc, int? DurationMinutes);
