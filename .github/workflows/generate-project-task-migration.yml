@@ -49,6 +49,9 @@ jobs:
           mv "$generated_file" "$migrations/${desired_prefix}_ProjectTaskCore.cs"
           mv "$designer" "$migrations/${desired_prefix}_ProjectTaskCore.Designer.cs"
 
+      - name: Rebuild with generated snapshot
+        run: dotnet build TaskMonitoring.slnx --configuration Release --no-restore
+
       - name: Verify migration consistency
         env:
           TASK_MONITORING_DESIGN_CONNECTION: Host=localhost;Port=5432;Database=task_monitoring_design;Username=task_monitoring;Password=design-only
