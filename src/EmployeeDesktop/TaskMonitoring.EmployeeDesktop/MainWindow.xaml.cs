@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text;
 using System.Windows;
 
@@ -6,6 +7,7 @@ namespace TaskMonitoring.EmployeeDesktop;
 public partial class MainWindow : Window
 {
     private readonly EmployeeApiClient _api = new();
+    private bool _allowClose;
 
     public MainWindow()
     {
@@ -16,6 +18,29 @@ public partial class MainWindow : Window
     {
         _api.Dispose();
         base.OnClosed(e);
+    }
+
+    private async void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_allowClose || !_api.IsAuthenticated)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        try
+        {
+            await _api.LogoutAsync();
+        }
+        catch
+        {
+            // The in-memory tokens are discarded when the process closes even if the server is unreachable.
+        }
+        finally
+        {
+            _allowClose = true;
+            Close();
+        }
     }
 
     private async void LoginButton_Click(object sender, RoutedEventArgs e)
@@ -37,13 +62,32 @@ public partial class MainWindow : Window
             await _api.LoginAsync(EmailBox.Text.Trim(), PasswordBox.Password);
             PasswordBox.Clear();
             ConnectionStatusText.Text = $"Server: connected to {serverUri.Host}";
+            LogoutButton.IsEnabled = true;
             MessageText.Text = "Signed in successfully.";
-            await RefreshAttendanceAsync();
+            await RefreshWorkspaceAsync();
         });
     }
 
-    private async void RefreshButton_Click(object sender, RoutedEventArgs e)
+    private async void LogoutButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsync(async () =>
+        {
+            await _api.LogoutAsync();
+            ClearWorkspace();
+            ConnectionStatusText.Text = "Server: signed out";
+            LogoutButton.IsEnabled = false;
+            MessageText.Text = "Signed out and refresh token revoked.";
+        });
+    }
+
+    private async void RefreshAttendanceButton_Click(object sender, RoutedEventArgs e)
         => await RunAsync(RefreshAttendanceAsync);
+
+    private async void RefreshTasksButton_Click(object sender, RoutedEventArgs e)
+        => await RunAsync(RefreshTasksAsync);
+
+    private async void RefreshAccessButton_Click(object sender, RoutedEventArgs e)
+        => await RunAsync(RefreshAccessAsync);
 
     private async void CheckInButton_Click(object sender, RoutedEventArgs e)
         => await RunAttendanceActionAsync("check-in");
@@ -67,6 +111,13 @@ public partial class MainWindow : Window
         });
     }
 
+    private async Task RefreshWorkspaceAsync()
+    {
+        await RefreshAttendanceAsync();
+        await RefreshTasksAsync();
+        await RefreshAccessAsync();
+    }
+
     private async Task RefreshAttendanceAsync()
     {
         var state = await _api.GetAttendanceStatusAsync();
@@ -85,6 +136,29 @@ public partial class MainWindow : Window
         }
 
         AttendanceStatusText.Text = text.ToString();
+    }
+
+    private async Task RefreshTasksAsync()
+    {
+        var result = await _api.GetMyTasksAsync(IncludeClosedTasksBox.IsChecked == true);
+        TasksGrid.ItemsSource = result.Items;
+    }
+
+    private async Task RefreshAccessAsync()
+    {
+        var result = await _api.GetMyAccessAsync(IncludeInactiveAccessBox.IsChecked == true);
+        RdpGrid.ItemsSource = result.RdpAssignments;
+        IpGrid.ItemsSource = result.IpAssignments;
+        WebsiteGrid.ItemsSource = result.WebsiteAssignments;
+    }
+
+    private void ClearWorkspace()
+    {
+        AttendanceStatusText.Text = "Sign in to load your attendance status.";
+        TasksGrid.ItemsSource = null;
+        RdpGrid.ItemsSource = null;
+        IpGrid.ItemsSource = null;
+        WebsiteGrid.ItemsSource = null;
     }
 
     private async Task RunAsync(Func<Task> operation)
