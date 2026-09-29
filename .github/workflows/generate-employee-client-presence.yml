@@ -1,0 +1,43 @@
+name: Generate employee client presence migration
+
+on:
+  push:
+    branches:
+      - feature/employee-desktop-self-service
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/employee-desktop-self-service
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore tools and backend
+        run: |
+          dotnet tool restore
+          dotnet restore TaskMonitoring.slnx
+
+      - name: Build backend
+        run: dotnet build TaskMonitoring.slnx --configuration Release --no-restore
+
+      - name: Generate canonical EF migration
+        env:
+          TASK_MONITORING_DESIGN_CONNECTION: Host=localhost;Port=5432;Database=design_only;Username=design;Password=design
+        run: dotnet ef migrations add EmployeeClientPresence --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build
+
+      - name: Commit generated migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Backend/TaskMonitoring.Api/Migrations
+          git commit -m "chore: generate employee client presence migration [skip ci]"
+          git push origin HEAD:feature/employee-desktop-self-service
