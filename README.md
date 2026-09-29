@@ -4,7 +4,7 @@ A centralized, internet-required task management, attendance, survey operations,
 
 ## Status
 
-Development is active. The repository now contains the secure backend foundation, Employee Core, and Attendance / Shift / Work Session Core.
+Development is active. The repository now contains the secure backend foundation, Employee Core, Attendance / Shift / Work Session Core, and Project / Task Core.
 
 Implemented backend capabilities include:
 
@@ -26,11 +26,17 @@ Implemented backend capabilities include:
 - Overnight-shift work-date handling and open-session safeguards.
 - Organization-wide attendance/work-session listing with date, employee, and pagination filters.
 - Dedicated shift/attendance permissions and audit events for shift and attendance lifecycle changes.
+- Project creation/update, lifecycle status, date boundaries, search/filter/paging, and non-destructive archive behavior.
+- Active/inactive project membership with member/manager roles and open-task removal safeguards.
+- Project tasks with assignment, priority, due date, guarded status transitions, completion timestamps, search/filter/paging, and project-bound due-date validation.
+- Task assignees restricted to active project members.
+- Immutable task comments and append-only task activity history for creation, edits, status changes, and comments.
+- Dedicated `projects.*` and `tasks.*` permissions plus project/task audit events.
 - Health/OpenAPI endpoints, automated tests, EF model-drift checks, and PostgreSQL migration validation in CI.
 
-CI validates a warning-free Release build, Entity Framework model/migration consistency, authentication behavior, Employee Core and Attendance Core business rules, and the complete migration chain against a fresh PostgreSQL service.
+CI validates a warning-free Release build, Entity Framework model/migration consistency, authentication behavior, Employee Core, Attendance Core, and Project / Task Core business rules, and the complete migration chain against a fresh PostgreSQL service.
 
-The employee desktop client, background Windows service, admin web dashboard, project/task, survey, reporting, notification, realtime-presence, installer, and update modules are not yet implemented.
+The employee desktop client, background Windows service, admin web dashboard, survey, reporting, notification, realtime-presence, installer, and update modules are not yet implemented.
 
 ## Architecture
 
@@ -113,6 +119,35 @@ Attendance uses `/api/attendance`:
 All persisted timestamps are UTC. Shift schedule interpretation uses the shift's configured IANA timezone ID, so local working hours remain stable when the API host or employee device uses a different timezone. Overnight shifts map after-midnight activity to the shift's starting work date.
 
 Only one work session may remain open for an employee through the normal service flow. A new check-in is blocked until an older open session is checked out. Checkout is also blocked while a break remains open, preserving explicit and auditable break durations.
+
+## Project / Task Core API surface
+
+Project administration uses `/api/projects`:
+
+- `GET /api/projects` — search/filter/page projects (`projects.read`).
+- `GET /api/projects/{id}` — retrieve a project summary with active-member and open-task counts (`projects.read`).
+- `POST /api/projects` — create a project (`projects.manage`).
+- `PUT /api/projects/{id}` — update metadata, dates, or lifecycle status (`projects.manage`).
+- `GET /api/projects/{projectId}/members` — list project membership (`projects.read`).
+- `PUT /api/projects/{projectId}/members` — add, reactivate, or update a member role (`projects.manage`).
+- `DELETE /api/projects/{projectId}/members/{employeeId}` — deactivate membership after open assignments are cleared (`projects.manage`).
+
+Task operations use `/api/tasks`:
+
+- `GET /api/tasks` — search/filter/page tasks by project, status, priority, or assignee (`tasks.read`).
+- `GET /api/tasks/{id}` — retrieve task details (`tasks.read`).
+- `POST /api/tasks` — create a task (`tasks.manage`).
+- `PUT /api/tasks/{id}` — edit title, description, priority, due date, or assignee (`tasks.manage`).
+- `PUT /api/tasks/{id}/status` — perform a validated workflow transition (`tasks.manage`).
+- `GET /api/tasks/{taskId}/comments` — list task comments (`tasks.read`).
+- `POST /api/tasks/{taskId}/comments` — append a comment (`tasks.read` + `tasks.comment`).
+- `GET /api/tasks/{taskId}/activities` — list append-only task activity history (`tasks.read`).
+
+Tasks may only be assigned to active employees who are active members of the project. Removing a project member is blocked while that employee owns an open task. Completing or archiving a project is blocked until every task is `Done` or `Cancelled`, and archived projects are immutable through the Project / Task Core service paths.
+
+Task status transitions are explicit rather than arbitrary: `ToDo` may move to `InProgress`, `Blocked`, or `Cancelled`; `InProgress` may move to `Blocked`, `Done`, or `Cancelled`; `Blocked` may return to `InProgress` or be cancelled; completed tasks may be reopened to `InProgress`; cancelled tasks may be restored to `ToDo`.
+
+Project/task records are not hard-deleted. Membership deactivation, task comments, task activity records, and global audit events preserve operational history for reporting and accountability.
 
 ## Local prerequisites
 
@@ -197,7 +232,9 @@ The database migration test expects `TEST_POSTGRES_CONNECTION` to point to an is
 - Deactivating an employee revokes active refresh tokens and disables the linked account.
 - Attendance self-service operations require an authenticated, active employee profile.
 - Administrative shift and organization-wide attendance access use dedicated permissions.
-- Important authentication, administration, shift, and attendance events are audited.
+- Project/task read, management, and task-comment operations use dedicated permissions.
+- Task assignment requires active project membership and project/member/task lifecycle changes are audit logged.
+- Important authentication, administration, attendance, project, and task events are audited.
 - Hidden spyware behavior, keylogging, password capture, covert camera/microphone activation, and unrelated private-file collection are explicitly out of scope.
 - Any future screenshot, app-usage, URL, or location telemetry must have a legitimate business need, clear disclosure, permissions, and retention controls.
 
