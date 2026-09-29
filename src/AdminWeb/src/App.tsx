@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
+import AccessAssignmentsPage from './AccessAssignments';
 import type {
   AttendanceDailyMetric,
   DashboardOverview,
@@ -27,7 +28,10 @@ const navItems: NavItem[] = [
   { path: '/attendance', label: 'Attendance', short: 'AT', permission: 'attendance.read' },
   { path: '/projects', label: 'Projects', short: 'PR', permission: 'projects.read' },
   { path: '/tasks', label: 'Tasks', short: 'TK', permission: 'tasks.read' },
-  { path: '/surveys', label: 'Surveys', short: 'SV', permission: 'surveys.read' }
+  { path: '/surveys', label: 'Surveys', short: 'SV', permission: 'surveys.read' },
+  { path: '/access/rdp', label: 'RDP Assign', short: 'RD', permission: 'access.assignments.read' },
+  { path: '/access/ip', label: 'IP Assign', short: 'IP', permission: 'access.assignments.read' },
+  { path: '/access/websites', label: 'Website Assign', short: 'WB', permission: 'access.assignments.read' }
 ];
 
 function firstAllowedPath(can: (permission: string) => boolean): string {
@@ -336,6 +340,9 @@ export default function App() {
       <Route path="/projects" element={<ProtectedPage permission="projects.read"><ProjectsPage /></ProtectedPage>} />
       <Route path="/tasks" element={<ProtectedPage permission="tasks.read"><TasksPage /></ProtectedPage>} />
       <Route path="/surveys" element={<ProtectedPage permission="surveys.read"><SurveysPage /></ProtectedPage>} />
+      <Route path="/access/rdp" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="rdp" /></ProtectedPage>} />
+      <Route path="/access/ip" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="ip" /></ProtectedPage>} />
+      <Route path="/access/websites" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="websites" /></ProtectedPage>} />
       <Route path="/forbidden" element={<ForbiddenPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
