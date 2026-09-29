@@ -11,24 +11,13 @@ public sealed class Worker(IConfiguration configuration, ILogger<Worker> logger)
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var serverUrl = configuration["EmployeeService:ServerUrl"]?.Trim().TrimEnd('/');
-        var intervalSeconds = Math.Clamp(configuration.GetValue("EmployeeService:HeartbeatSeconds", 60), 15, 3600);
-
-        Uri? serverUri = null;
-        if (string.IsNullOrWhiteSpace(serverUrl) || !Uri.TryCreate(serverUrl, UriKind.Absolute, out serverUri) ||
-            (serverUri.Scheme != Uri.UriSchemeHttps && serverUri.Scheme != Uri.UriSchemeHttp))
-        {
-            logger.LogWarning("Employee service is running, but EmployeeService:ServerUrl is not configured with a valid HTTP/HTTPS URL.");
-            serverUri = null;
-        }
+        var serverUrl = configuration["EmployeeService:ServerUrl"]!.Trim().TrimEnd('/');
+        var intervalSeconds = configuration.GetValue("EmployeeService:HeartbeatSeconds", 60);
+        var healthUri = new Uri(serverUrl + "/health/live", UriKind.Absolute);
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (serverUri is not null)
-            {
-                await CheckServerAsync(serverUri, stoppingToken);
-            }
-
+            await CheckServerAsync(healthUri, stoppingToken);
             await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), stoppingToken);
         }
     }
@@ -39,16 +28,17 @@ public sealed class Worker(IConfiguration configuration, ILogger<Worker> logger)
         base.Dispose();
     }
 
-    private async Task CheckServerAsync(Uri serverUri, CancellationToken cancellationToken)
+    private async Task CheckServerAsync(Uri healthUri, CancellationToken cancellationToken)
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, serverUri);
+            using var request = new HttpRequestMessage(HttpMethod.Get, healthUri);
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             logger.LogInformation(
-                "Employee service heartbeat. Machine={MachineName}; Server={Server}; Reachable=true; HttpStatus={StatusCode}",
+                "Employee service heartbeat. Machine={MachineName}; Server={Server}; Reachable={Reachable}; HttpStatus={StatusCode}",
                 Environment.MachineName,
-                serverUri.Host,
+                healthUri.Host,
+                response.IsSuccessStatusCode,
                 (int)response.StatusCode);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -61,7 +51,7 @@ public sealed class Worker(IConfiguration configuration, ILogger<Worker> logger)
                 ex,
                 "Employee service heartbeat failed. Machine={MachineName}; Server={Server}; Reachable=false",
                 Environment.MachineName,
-                serverUri.Host);
+                healthUri.Host);
         }
     }
 }
