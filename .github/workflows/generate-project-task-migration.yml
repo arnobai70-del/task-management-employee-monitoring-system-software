@@ -1,0 +1,140 @@
+name: Generate Project Task Migration
+
+on:
+  push:
+    branches:
+      - feature/project-task-core
+    paths:
+      - .github/workflows/generate-project-task-migration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v5
+        with:
+          ref: feature/project-task-core
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Patch project projections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/Backend/TaskMonitoring.Api/Services/ProjectTaskCoreService.cs')
+          text = path.read_text()
+          old_list = '''        var items = await query
+            .OrderBy(x => x.NormalizedName)
+            .ThenBy(x => x.NormalizedCode)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => ToProjectResponseProjection(x))
+            .ToListAsync(cancellationToken);
+
+        return new PagedResponse<ProjectResponse>(items, page, pageSize, totalCount);'''
+          new_list = '''        var items = await query
+            .OrderBy(x => x.NormalizedName)
+            .ThenBy(x => x.NormalizedCode)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => new ProjectResponse(
+                x.Id,
+                x.Code,
+                x.Name,
+                x.Description,
+                x.Status,
+                x.StartDate,
+                x.DueDate,
+                x.Members.Count(member => member.IsActive),
+                x.Tasks.Count(task => task.Status != ProjectTaskStatus.Done && task.Status != ProjectTaskStatus.Cancelled),
+                x.CreatedAtUtc,
+                x.UpdatedAtUtc))
+            .ToListAsync(cancellationToken);
+
+        return new PagedResponse<ProjectResponse>(items, page, pageSize, totalCount);'''
+          old_get = '''        var project = await dbContext.Projects
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => ToProjectResponseProjection(x))
+            .SingleOrDefaultAsync(cancellationToken);'''
+          new_get = '''        var project = await dbContext.Projects
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new ProjectResponse(
+                x.Id,
+                x.Code,
+                x.Name,
+                x.Description,
+                x.Status,
+                x.StartDate,
+                x.DueDate,
+                x.Members.Count(member => member.IsActive),
+                x.Tasks.Count(task => task.Status != ProjectTaskStatus.Done && task.Status != ProjectTaskStatus.Cancelled),
+                x.CreatedAtUtc,
+                x.UpdatedAtUtc))
+            .SingleOrDefaultAsync(cancellationToken);'''
+          if old_list not in text or old_get not in text:
+              raise SystemExit('Expected project projection anchors not found')
+          text = text.replace(old_list, new_list, 1).replace(old_get, new_get, 1)
+          path.write_text(text)
+          PY
+
+      - name: Restore tools and packages
+        run: |
+          dotnet tool restore
+          dotnet restore TaskMonitoring.slnx
+
+      - name: Build patched source
+        run: dotnet build TaskMonitoring.slnx --configuration Release --no-restore
+
+      - name: Generate canonical migration
+        env:
+          TASK_MONITORING_DESIGN_CONNECTION: Host=localhost;Port=5432;Database=task_monitoring_design;Username=task_monitoring;Password=design-only
+        shell: bash
+        run: |
+          dotnet ef migrations add ProjectTaskCore \
+            --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj \
+            --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj \
+            --output-dir Migrations \
+            --configuration Release \
+            --no-build
+          python3 - <<'PY'
+          from pathlib import Path
+          migrations = Path('src/Backend/TaskMonitoring.Api/Migrations')
+          candidates = sorted(p for p in migrations.glob('*_ProjectTaskCore.cs') if not p.name.endswith('.Designer.cs'))
+          if len(candidates) != 1:
+              raise SystemExit(f'Expected one ProjectTaskCore migration, found {len(candidates)}')
+          migration = candidates[0]
+          generated_prefix = migration.name.split('_ProjectTaskCore.cs')[0]
+          desired_prefix = '20260929070000'
+          designer = migrations / f'{generated_prefix}_ProjectTaskCore.Designer.cs'
+          if not designer.exists():
+              raise SystemExit('Generated designer file not found')
+          designer_text = designer.read_text().replace(
+              f'[Migration("{generated_prefix}_ProjectTaskCore")]',
+              f'[Migration("{desired_prefix}_ProjectTaskCore")]')
+          designer.write_text(designer_text)
+          migration.rename(migrations / f'{desired_prefix}_ProjectTaskCore.cs')
+          designer.rename(migrations / f'{desired_prefix}_ProjectTaskCore.Designer.cs')
+          PY
+
+      - name: Verify migration consistency
+        env:
+          TASK_MONITORING_DESIGN_CONNECTION: Host=localhost;Port=5432;Database=task_monitoring_design;Username=task_monitoring;Password=design-only
+        run: dotnet ef migrations has-pending-model-changes --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build
+
+      - name: Commit generated source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Backend/TaskMonitoring.Api/Services/ProjectTaskCoreService.cs src/Backend/TaskMonitoring.Api/Migrations
+          git commit -m "feat: add project-task core migration"
+          git push origin HEAD:feature/project-task-core
