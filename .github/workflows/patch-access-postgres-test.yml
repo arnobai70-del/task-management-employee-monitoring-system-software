@@ -1,0 +1,91 @@
+name: Patch access Postgres test
+
+on:
+  push:
+    branches:
+      - feature/admin-management-access-assignments
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'cover access tables in postgres') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/admin-management-access-assignments
+      - name: Patch migration test
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tests/Backend.Tests/DatabaseMigrationTests.cs')
+          s = p.read_text()
+          anchor = '''        var surveyAnswer = new SurveyAnswer
+        {
+            SurveySubmissionId = surveySubmission.Id,
+            SurveySubmission = surveySubmission,
+            SurveyQuestionId = surveyQuestion.Id,
+            SurveyQuestion = surveyQuestion,
+            ValueJson = "4"
+        };
+'''
+          insert = anchor + '''        var rdpAssignment = new RdpAssignment
+        {
+            EmployeeId = employee.Id,
+            Employee = employee,
+            Name = "Migration RDP",
+            Host = "10.20.30.40",
+            Port = 3389,
+            UsernameReference = "DOMAIN\\\\migration",
+            CredentialReference = "vault://migration/rdp",
+            IsActive = true,
+            AssignedByUserId = user.Id,
+            AssignedByUser = user
+        };
+        var ipAssignment = new IpAssignment
+        {
+            EmployeeId = employee.Id,
+            Employee = employee,
+            IpAddress = "192.168.77.10",
+            DeviceName = "MIG-PC",
+            MacAddress = "AA:BB:CC:DD:EE:10",
+            Status = IpAssignmentStatus.Active,
+            AssignedOn = new DateOnly(2026, 9, 29),
+            AssignedByUserId = user.Id,
+            AssignedByUser = user
+        };
+        var websiteAssignment = new WebsiteAssignment
+        {
+            EmployeeId = employee.Id,
+            Employee = employee,
+            Name = "Migration Portal",
+            Url = "https://portal.example.com/",
+            UsernameReference = "migration-user",
+            AccessLevel = WebsiteAccessLevel.Work,
+            IsActive = true,
+            AssignedByUserId = user.Id,
+            AssignedByUser = user
+        };
+'''
+          if 'var rdpAssignment = new RdpAssignment' not in s:
+              s = s.replace(anchor, insert)
+          add_anchor = '        db.SurveyAnswers.Add(surveyAnswer);\n'
+          add_insert = add_anchor + '        db.Set<RdpAssignment>().Add(rdpAssignment);\n        db.Set<IpAssignment>().Add(ipAssignment);\n        db.Set<WebsiteAssignment>().Add(websiteAssignment);\n'
+          if 'db.Set<RdpAssignment>().Add' not in s:
+              s = s.replace(add_anchor, add_insert)
+          assert_anchor = '        Assert.Equal(1, await db.SurveyAnswers.CountAsync(cancellationToken));\n'
+          assert_insert = assert_anchor + '        Assert.Equal(1, await db.Set<RdpAssignment>().CountAsync(cancellationToken));\n        Assert.Equal(1, await db.Set<IpAssignment>().CountAsync(cancellationToken));\n        Assert.Equal(1, await db.Set<WebsiteAssignment>().CountAsync(cancellationToken));\n'
+          if 'db.Set<RdpAssignment>().CountAsync' not in s:
+              s = s.replace(assert_anchor, assert_insert)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/Backend.Tests/DatabaseMigrationTests.cs
+          git commit -m "test: cover access tables in postgres"
+          git push origin HEAD:feature/admin-management-access-assignments
