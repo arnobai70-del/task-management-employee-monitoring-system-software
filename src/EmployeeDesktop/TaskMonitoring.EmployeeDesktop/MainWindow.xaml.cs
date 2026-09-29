@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
@@ -9,7 +10,12 @@ public partial class MainWindow : Window
 {
     private readonly EmployeeApiClient _api = new();
     private readonly EmployeeRealtimeClient _realtime;
+    private readonly ForegroundActivityCollector _activityCollector = new();
     private readonly DispatcherTimer _presenceTimer;
+    private readonly DispatcherTimer _monitoringTimer;
+    private EmployeeMonitoringPolicyResponse? _monitoringPolicy;
+    private DateTime _monitoringPolicyRefreshAtUtc;
+    private bool _monitoringTickRunning;
     private bool _allowClose;
 
     public MainWindow()
@@ -20,11 +26,14 @@ public partial class MainWindow : Window
         _realtime.ConnectionChanged += Realtime_ConnectionChanged;
         _presenceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _presenceTimer.Tick += PresenceTimer_Tick;
+        _monitoringTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+        _monitoringTimer.Tick += MonitoringTimer_Tick;
     }
 
     protected override void OnClosed(EventArgs e)
     {
         _presenceTimer.Stop();
+        _monitoringTimer.Stop();
         _api.Dispose();
         base.OnClosed(e);
     }
@@ -38,6 +47,7 @@ public partial class MainWindow : Window
 
         e.Cancel = true;
         _presenceTimer.Stop();
+        _monitoringTimer.Stop();
         try
         {
             await _realtime.StopAsync();
@@ -75,9 +85,11 @@ public partial class MainWindow : Window
             LogoutButton.IsEnabled = true;
             MessageText.Text = "Signed in successfully.";
             await RefreshWorkspaceAsync();
+            await RefreshMonitoringPolicyAsync();
             await SendPresenceHeartbeatAsync();
             await _realtime.StartAsync();
             _presenceTimer.Start();
+            _monitoringTimer.Start();
         });
     }
 
@@ -86,6 +98,7 @@ public partial class MainWindow : Window
         await RunAsync(async () =>
         {
             _presenceTimer.Stop();
+            _monitoringTimer.Stop();
             await _realtime.StopAsync();
             await _api.LogoutAsync();
             ClearWorkspace();
@@ -111,6 +124,48 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             ConnectionStatusText.Text = $"Server: presence sync delayed ({ex.Message})";
+        }
+    }
+
+    private async void MonitoringTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_monitoringTickRunning)
+        {
+            return;
+        }
+        if (!_api.IsAuthenticated)
+        {
+            _monitoringTimer.Stop();
+            return;
+        }
+
+        _monitoringTickRunning = true;
+        try
+        {
+            if (_monitoringPolicy is null || DateTime.UtcNow >= _monitoringPolicyRefreshAtUtc)
+            {
+                await RefreshMonitoringPolicyAsync();
+            }
+
+            var policy = _monitoringPolicy;
+            if (policy is null || !policy.IsEnabled)
+            {
+                return;
+            }
+
+            var activity = _activityCollector.TryCapture(policy);
+            if (activity is not null)
+            {
+                await _api.RecordApplicationActivityAsync(activity.ProcessName, activity.WindowTitle);
+            }
+        }
+        catch (Exception ex)
+        {
+            MonitoringStatusText.Text = $"Approved activity sync delayed: {ex.Message}";
+        }
+        finally
+        {
+            _monitoringTickRunning = false;
         }
     }
 
@@ -144,6 +199,9 @@ public partial class MainWindow : Window
     private async void RefreshNotificationsButton_Click(object sender, RoutedEventArgs e)
         => await RunAsync(RefreshNotificationsAsync);
 
+    private async void RefreshMonitoringPolicyButton_Click(object sender, RoutedEventArgs e)
+        => await RunAsync(RefreshMonitoringPolicyAsync);
+
     private async void MarkNotificationReadButton_Click(object sender, RoutedEventArgs e)
     {
         if (NotificationsGrid.SelectedItem is not EmployeeNotificationResponse notification)
@@ -157,6 +215,34 @@ public partial class MainWindow : Window
             await _api.MarkNotificationReadAsync(notification.Id);
             await RefreshNotificationsAsync();
             MessageText.Text = "Notification marked as read.";
+        });
+    }
+
+    private async void OpenWebsiteButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (WebsiteGrid.SelectedItem is not WebsiteAssignmentResponse website)
+        {
+            MessageText.Text = "Select a company website assignment first.";
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            if (!website.IsActive)
+            {
+                throw new InvalidOperationException("The selected website assignment is inactive.");
+            }
+            if (!Uri.TryCreate(website.Url, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new InvalidOperationException("The selected website URL is invalid.");
+            }
+
+            var result = await _api.RecordBusinessDomainActivityAsync(uri.IdnHost.ToLowerInvariant());
+            Process.Start(new ProcessStartInfo { FileName = website.Url, UseShellExecute = true });
+            MessageText.Text = result.Accepted
+                ? $"Opened {website.Name}; approved business hostname activity recorded."
+                : $"Opened {website.Name}; monitoring record not stored ({result.Reason ?? "not accepted"}).";
         });
     }
 
@@ -189,6 +275,18 @@ public partial class MainWindow : Window
         await RefreshTasksAsync();
         await RefreshAccessAsync();
         await RefreshNotificationsAsync();
+    }
+
+    private async Task RefreshMonitoringPolicyAsync()
+    {
+        var policy = await _api.GetMonitoringPolicyAsync();
+        _monitoringPolicy = policy;
+        _monitoringPolicyRefreshAtUtc = DateTime.UtcNow.AddMinutes(5);
+        _monitoringTimer.Interval = TimeSpan.FromSeconds(policy.IsEnabled ? Math.Clamp(policy.SampleIntervalSeconds, 15, 300) : 60);
+        MonitoringStatusText.Text = policy.IsEnabled
+            ? $"Approved activity monitoring: ON · {policy.Applications.Count} app rule(s) · {policy.BusinessDomains.Count} business domain(s) · retention {policy.RetentionDays} day(s)"
+            : "Approved activity monitoring: OFF";
+        MonitoringDisclosureText.Text = policy.DisclosureText;
     }
 
     private async Task SendPresenceHeartbeatAsync()
@@ -248,6 +346,10 @@ public partial class MainWindow : Window
         NotificationsGrid.ItemsSource = null;
         NotificationsCountText.Text = "0 notifications";
         RealtimeStatusText.Text = "Notifications: disconnected";
+        MonitoringStatusText.Text = "Approved activity monitoring: sign in to load policy";
+        MonitoringDisclosureText.Text = "Monitoring disclosure is loaded from the company server after sign-in.";
+        _monitoringPolicy = null;
+        _monitoringPolicyRefreshAtUtc = default;
     }
 
     private async Task RunAsync(Func<Task> operation)
