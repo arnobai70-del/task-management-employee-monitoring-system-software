@@ -59,7 +59,7 @@
       </Border>
       <Border Grid.Column="1" Padding="18" BorderBrush="#22000000" BorderThickness="1" CornerRadius="8" Margin="10,0,0,0">
         <StackPanel>
-          <TextBlock Text="Transparency & privacy" FontSize="20" FontWeight="SemiBold" />
+          <TextBlock Text="Transparency &amp; privacy" FontSize="20" FontWeight="SemiBold" />
           <TextBlock Margin="0,14,0,0" TextWrapping="Wrap">This client reports only approved business status to the company server. It does not record keystrokes, passwords, microphone audio, camera video, or unrelated personal files.</TextBlock>
           <TextBlock x:Name="ConnectionStatusText" Margin="0,18,0,0" Text="Server: not connected" FontWeight="SemiBold" />
           <TextBlock Margin="0,18,0,0" TextWrapping="Wrap" Opacity="0.75">Authentication tokens are kept in memory for this foundation build and are not written to plaintext files.</TextBlock>
