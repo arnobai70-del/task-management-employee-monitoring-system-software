@@ -78,7 +78,7 @@ jobs:
         run: npm run build
 
   employee-windows:
-    name: Employee Windows client and service build
+    name: Employee Windows client, service, updater and release bundle
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -101,18 +101,37 @@ jobs:
       - name: Build Windows service
         run: dotnet build src/EmployeeService/TaskMonitoring.EmployeeService/TaskMonitoring.EmployeeService.csproj --configuration Release --no-restore
 
-      - name: Validate PowerShell installer scripts
+      - name: Restore employee updater
+        run: dotnet restore src/EmployeeUpdater/TaskMonitoring.EmployeeUpdater/TaskMonitoring.EmployeeUpdater.csproj
+
+      - name: Build employee updater
+        run: dotnet build src/EmployeeUpdater/TaskMonitoring.EmployeeUpdater/TaskMonitoring.EmployeeUpdater.csproj --configuration Release --no-restore
+
+      - name: Validate PowerShell deployment scripts
         shell: pwsh
         run: |
           $scripts = @(
             'scripts/windows/publish-employee-windows.ps1',
             'scripts/windows/install-employee-service.ps1',
-            'scripts/windows/uninstall-employee-service.ps1'
+            'scripts/windows/uninstall-employee-service.ps1',
+            'scripts/windows/deployment-common.ps1',
+            'scripts/windows/build-employee-release.ps1',
+            'scripts/windows/install-employee-windows.ps1',
+            'scripts/windows/uninstall-employee-windows.ps1',
+            'scripts/windows/test-employee-release.ps1'
           )
           foreach ($script in $scripts) {
             [void][scriptblock]::Create((Get-Content $script -Raw))
           }
 
-      - name: Publish employee Windows packages
+      - name: Publish legacy employee Windows outputs
         shell: pwsh
         run: ./scripts/windows/publish-employee-windows.ps1 -OutputRoot "${{ runner.temp }}\employee-windows"
+
+      - name: Build unsigned CI release bundle
+        shell: pwsh
+        run: ./scripts/windows/build-employee-release.ps1 -Version "0.0.0" -OutputRoot "${{ runner.temp }}\employee-release" -AllowUnsignedDevelopmentBuild
+
+      - name: Validate CI release bundle
+        shell: pwsh
+        run: ./scripts/windows/test-employee-release.ps1 -ReleaseDirectory "${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-0.0.0-win-x64" -AllowUnsignedDevelopmentBuild

@@ -1,0 +1,93 @@
+name: Production Windows Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Numeric semantic version (MAJOR.MINOR.PATCH)
+        required: true
+        type: string
+      channel:
+        description: Update channel
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - beta
+      package_base_url:
+        description: Optional HTTPS base URL where release.json and runtime ZIP will be hosted
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  signed-release:
+    name: Build and validate signed employee release
+    runs-on: windows-latest
+    env:
+      WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+      WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Require production code-signing certificate
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_PFX_BASE64)) {
+            throw 'WINDOWS_SIGNING_PFX_BASE64 repository secret is required.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_PFX_PASSWORD)) {
+            throw 'WINDOWS_SIGNING_PFX_PASSWORD repository secret is required.'
+          }
+
+      - name: Materialize signing certificate
+        id: signing
+        shell: pwsh
+        run: |
+          $pfx = Join-Path '${{ runner.temp }}' 'taskmonitoring-code-signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64))
+          "pfx=$pfx" >> $env:GITHUB_OUTPUT
+
+      - name: Build signed release bundle
+        shell: pwsh
+        run: |
+          $args = @(
+            '-Version', '${{ inputs.version }}',
+            '-Channel', '${{ inputs.channel }}',
+            '-OutputRoot', '${{ runner.temp }}\employee-release',
+            '-PfxPath', '${{ steps.signing.outputs.pfx }}',
+            '-PfxPassword', $env:WINDOWS_SIGNING_PFX_PASSWORD
+          )
+          if (-not [string]::IsNullOrWhiteSpace('${{ inputs.package_base_url }}')) {
+            $args += @('-PackageBaseUrl', '${{ inputs.package_base_url }}')
+          }
+          & ./scripts/windows/build-employee-release.ps1 @args
+
+      - name: Validate signed release bundle
+        shell: pwsh
+        run: |
+          $release = '${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-${{ inputs.version }}-win-x64'
+          $fingerprint = (Get-Content (Join-Path $release 'publisher-certificate-sha256.txt') -Raw).Trim()
+          ./scripts/windows/test-employee-release.ps1 -ReleaseDirectory $release -PublisherCertificateSha256 $fingerprint
+
+      - name: Remove signing certificate
+        if: always()
+        shell: pwsh
+        run: Remove-Item -Force '${{ steps.signing.outputs.pfx }}' -ErrorAction SilentlyContinue
+
+      - name: Upload signed release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskMonitoring.EmployeeRelease-${{ inputs.version }}-${{ inputs.channel }}
+          path: ${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-${{ inputs.version }}-win-x64
+          if-no-files-found: error
+          retention-days: 30
