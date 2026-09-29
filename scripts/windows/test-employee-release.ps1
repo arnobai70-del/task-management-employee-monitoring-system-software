@@ -35,6 +35,9 @@ try {
         }
     }
 
+    Assert-TaskMonitoringFileVersion -Path $desktopExe -ExpectedVersion ([string]$manifest.version)
+    Assert-TaskMonitoringFileVersion -Path $serviceExe -ExpectedVersion ([string]$manifest.version)
+
     if (Test-Path (Join-Path $tempRoot 'service\appsettings.json')) {
         throw 'Runtime archive must not ship an environment-specific service appsettings.json.'
     }
@@ -46,9 +49,20 @@ try {
         if ([string]::IsNullOrWhiteSpace($PublisherCertificateSha256)) {
             throw 'PublisherCertificateSha256 is required for signed bundle validation.'
         }
-        Assert-TaskMonitoringAuthenticodeSignature -Path $desktopExe -ExpectedPublisherCertificateSha256 $PublisherCertificateSha256
-        Assert-TaskMonitoringAuthenticodeSignature -Path $serviceExe -ExpectedPublisherCertificateSha256 $PublisherCertificateSha256
-        Assert-TaskMonitoringAuthenticodeSignature -Path $updaterExe -ExpectedPublisherCertificateSha256 $PublisherCertificateSha256
+
+        foreach ($signedFile in @(
+            $desktopExe,
+            $serviceExe,
+            $updaterExe,
+            (Join-Path $releaseRoot 'install-employee-windows.ps1'),
+            (Join-Path $releaseRoot 'uninstall-employee-windows.ps1'),
+            (Join-Path $releaseRoot 'deployment-common.ps1')
+        )) {
+            if (-not (Test-Path $signedFile -PathType Leaf)) {
+                throw "Required signed release file is missing: $signedFile"
+            }
+            Assert-TaskMonitoringAuthenticodeSignature -Path $signedFile -ExpectedPublisherCertificateSha256 $PublisherCertificateSha256
+        }
     }
 
     Write-Host "Release bundle validation passed for version $($manifest.version), channel $($manifest.channel)."
