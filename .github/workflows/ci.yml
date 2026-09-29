@@ -100,3 +100,19 @@ jobs:
 
       - name: Build Windows service
         run: dotnet build src/EmployeeService/TaskMonitoring.EmployeeService/TaskMonitoring.EmployeeService.csproj --configuration Release --no-restore
+
+      - name: Validate PowerShell installer scripts
+        shell: pwsh
+        run: |
+          $scripts = @(
+            'scripts/windows/publish-employee-windows.ps1',
+            'scripts/windows/install-employee-service.ps1',
+            'scripts/windows/uninstall-employee-service.ps1'
+          )
+          foreach ($script in $scripts) {
+            [void][scriptblock]::Create((Get-Content $script -Raw))
+          }
+
+      - name: Publish employee Windows packages
+        shell: pwsh
+        run: ./scripts/windows/publish-employee-windows.ps1 -OutputRoot "${{ runner.temp }}\employee-windows"
