@@ -17,7 +17,7 @@ public static class ServerEndpointPolicy
         }
 
         var builder = new UriBuilder(uri);
-        if (!builder.Path.EndsWith('/', StringComparison.Ordinal))
+        if (!builder.Path.EndsWith("/", StringComparison.Ordinal))
         {
             builder.Path += "/";
         }
