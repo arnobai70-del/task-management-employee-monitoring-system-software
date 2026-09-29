@@ -68,6 +68,17 @@ function Publish-SingleFileApplication {
     }
 }
 
+function Get-CertificateSha256 {
+    param([Parameter(Mandatory = $true)][Security.Cryptography.X509Certificates.X509Certificate2]$Certificate)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return (($sha.ComputeHash($Certificate.RawData) | ForEach-Object { $_.ToString('X2') }) -join '')
+    }
+    finally {
+        $sha.Dispose()
+    }
+}
+
 Publish-SingleFileApplication -Project $desktopProject -Destination $desktopPublish -ApplicationVersion $Version
 Publish-SingleFileApplication -Project $serviceProject -Destination $servicePublish -ApplicationVersion $Version
 Publish-SingleFileApplication -Project $updaterProject -Destination $updaterPublish -ApplicationVersion $UpdaterVersion
@@ -86,6 +97,8 @@ foreach ($exe in $primaryExecutables) {
     }
 }
 
+$signingCertificate = $null
+$publisherFingerprint = $null
 if ([string]::IsNullOrWhiteSpace($PfxPath)) {
     if (-not $AllowUnsignedDevelopmentBuild) {
         throw 'Production release packaging requires -PfxPath. Use -AllowUnsignedDevelopmentBuild only for CI/development validation.'
@@ -100,6 +113,15 @@ else {
     if ($null -eq $signTool) {
         throw 'signtool.exe was not found. Install the Windows SDK signing tools.'
     }
+
+    $signingCertificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+        $resolvedPfx,
+        $PfxPassword,
+        [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+    if (-not $signingCertificate.HasPrivateKey) {
+        throw 'The supplied PFX does not contain a private key.'
+    }
+    $publisherFingerprint = Get-CertificateSha256 -Certificate $signingCertificate
 
     foreach ($exe in $primaryExecutables) {
         & $signTool.FullName sign /fd SHA256 /td SHA256 /tr $TimestampUrl /f $resolvedPfx /p $PfxPassword $exe
@@ -154,6 +176,27 @@ foreach ($file in $bundleFiles) {
     Copy-Item -Path (Join-Path $PSScriptRoot $file) -Destination (Join-Path $releaseRoot $file) -Force
 }
 
+if ($null -ne $signingCertificate) {
+    foreach ($file in $bundleFiles) {
+        $signedPath = Join-Path $releaseRoot $file
+        $signature = Set-AuthenticodeSignature -FilePath $signedPath -Certificate $signingCertificate -HashAlgorithm SHA256 -TimestampServer $TimestampUrl
+        if ($signature.Status -ne [Management.Automation.SignatureStatus]::Valid) {
+            throw "PowerShell Authenticode signing failed for $signedPath. Status=$($signature.Status)"
+        }
+    }
+
+    [IO.File]::WriteAllText(
+        (Join-Path $releaseRoot 'publisher-certificate-sha256.txt'),
+        $publisherFingerprint,
+        [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllBytes(
+        (Join-Path $releaseRoot 'publisher-certificate.cer'),
+        $signingCertificate.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+}
+
 Write-Host "Release bundle: $releaseRoot"
 Write-Host "Runtime package: $packagePath"
 Write-Host "Manifest SHA-256: $((Get-FileHash -Algorithm SHA256 -Path $manifestPath).Hash)"
+if ($publisherFingerprint) {
+    Write-Host "Publisher certificate SHA-256: $publisherFingerprint"
+}
