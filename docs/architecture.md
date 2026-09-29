@@ -17,14 +17,14 @@ The product is a client-server system. Employee desktop software requires a vali
 The backend starts as a modular monolith so deployment, authorization, and transactions stay simple while the domain is evolving. The current foundation includes:
 
 - PostgreSQL + Entity Framework Core.
-- Source-controlled identity/authorization, Employee Core, Attendance Core, and Project / Task Core migrations.
+- Source-controlled identity/authorization, Employee Core, Attendance Core, Project / Task Core, and Survey / Field Operations Core migrations.
 - JWT access tokens with short lifetime.
 - Opaque rotating refresh tokens; only SHA-256 token hashes are persisted.
 - Role and permission entities stored in the database.
 - Idempotent startup seeding for built-in roles/permissions after the schema exists.
 - Permission claims and authorization policies.
 - Login lockout and API rate limiting.
-- Security, administration, attendance, project, and task audit records.
+- Security, administration, attendance, project, task, and survey audit records.
 - Central exception handling with safe user-facing errors.
 - Health and OpenAPI endpoints.
 - CI checks for Release build warnings/errors, EF model drift, business rules, and the complete migration chain against PostgreSQL.
@@ -118,6 +118,52 @@ Project / Task Core establishes the collaborative work model used by future admi
 
 Project/member/task mutations also write global audit events with actor, target, request context, and relevant metadata.
 
+## Survey / Field Operations Core
+
+Survey / Field Operations Core adds a project-scoped questionnaire and supervised field-data workflow without allowing published questionnaires or reviewed history to be silently rewritten.
+
+### Form and question model
+
+- `SurveyForm` belongs to a project and stores unique code, name, description, lifecycle status, and timestamps.
+- Lifecycle states are `Draft`, `Published`, `Closed`, and `Archived`.
+- Forms can be edited only while `Draft`.
+- Publishing requires at least one question; once published, questionnaire structure is locked.
+- `SurveyQuestion` stores a stable per-form key, prompt, type, required flag, choice options as JSON, and explicit sort order.
+- Supported question types are `Text`, `LongText`, `Number`, `Boolean`, `Date`, `SingleChoice`, and `MultipleChoice`.
+- Choice questions require unique configured options; non-choice questions cannot carry choice options.
+
+Question keys and sort positions are unique within a form. Locking the questionnaire after publication ensures stored answers retain a stable interpretation throughout later review and reporting.
+
+### Assignment and submission model
+
+- `SurveyAssignment` binds a published form to one active employee with an optional due date and workflow status.
+- `(SurveyFormId, EmployeeId)` is unique, preventing duplicate concurrent/historical assignment rows for the same employee and survey.
+- The employee self-service path resolves the authenticated user to an active employee profile and rejects attempts to mutate another employee's assignment.
+- `SurveySubmission` belongs to an assignment and stores a monotonically increasing revision number, draft/submitted/approved/rejected status, submission timestamp, review metadata, and timestamps.
+- `(SurveyAssignmentId, RevisionNumber)` is unique.
+- `SurveyAnswer` stores one JSON value per question per revision; `(SurveySubmissionId, SurveyQuestionId)` is unique.
+
+Draft saves validate referenced questions and answer data types but do not require every required question yet. Final submit enforces required answers, scalar/array type semantics, date format, and configured choices. Submitted revisions are locked from employee editing. If a reviewer rejects a revision, resubmission creates a new revision and leaves the rejected response intact. Approved revisions remain immutable.
+
+### Review workflow
+
+- Reviewers can list pending submissions separately from field-assignment administration.
+- A reviewer may `Approve` or `Reject` only a currently submitted revision.
+- Rejection requires a review comment; approval may have an optional comment.
+- Review updates both submission and assignment status atomically through the service flow.
+- A survey cannot move to `Closed` or `Archived` while a submission is still waiting for review.
+
+### Authorization boundaries
+
+- `surveys.read` permits form/questionnaire lookup.
+- `surveys.manage` permits form creation, draft edits, questionnaire replacement, publishing, closing, and archiving.
+- `survey.assignments.read` permits organization-wide field-assignment lookup.
+- `survey.assignments.manage` permits assignment and eligible cancellation.
+- `survey.submit` permits employee-owned assignment lookup, draft save, and submission.
+- `survey.review` permits pending-response lookup and approve/reject decisions.
+
+These capabilities are independent permission boundaries. The built-in permission catalog and SuperAdmin seeding include them, but operational roles such as surveyor/supervisor should receive only the specific survey permissions intentionally assigned by administrators. Survey lifecycle, assignment, draft/submit, and review mutations also write global audit events.
+
 ## Database startup policy
 
 Production should keep `Database:AutoMigrate=false` and apply committed migrations deliberately during deployment. After the schema is ready, API startup seeds missing built-in identity metadata and optionally creates the one-time bootstrap administrator when bootstrap credentials are supplied. Seeding is idempotent and does not replace existing role or permission assignments.
@@ -132,8 +178,10 @@ Attendance self-service is server validated; the future desktop client will not 
 
 Project and task lifecycle rules are also server validated. Clients cannot bypass active project membership for task assignment, arbitrary task status transitions, open-task project completion guards, or open-assignment member-removal guards.
 
+Survey form, assignment, submission, and review rules are server validated. Field workers cannot submit against another employee's assignment, cannot submit to non-published forms, and cannot overwrite submitted/approved revisions. Reviewer authority is a separate permission from assignment administration and employee submission authority.
+
 Sensitive monitoring features are intentionally outside the current foundation. If later approved, monitoring must remain transparent, business-scoped, permission-controlled, auditable, and subject to explicit retention rules. Hidden spyware behavior, keylogging, credential capture, covert camera/microphone use, and unrelated private-file collection remain out of scope.
 
 ## Database changes
 
-Schema changes must be added as Entity Framework Core migrations and committed with the code that depends on them. Migration IDs must preserve dependency order. The current dependency order is identity foundation, Employee Core, Attendance Core, then Project / Task Core (`20260929070000_ProjectTaskCore`). The pinned `dotnet-ef` tool and CI `has-pending-model-changes` check prevent entity/model changes from silently drifting away from committed migrations, while the PostgreSQL migration test validates that the full chain applies correctly to a fresh database and accepts representative identity, employee, attendance, project, membership, task, comment, and activity records.
+Schema changes must be added as Entity Framework Core migrations and committed with the code that depends on them. Migration IDs must preserve dependency order. The current dependency order is identity foundation, Employee Core, Attendance Core, Project / Task Core (`20260929070000_ProjectTaskCore`), then Survey / Field Operations Core (`20260929080000_SurveyFieldOperationsCore`). The pinned `dotnet-ef` tool and CI `has-pending-model-changes` check prevent entity/model changes from silently drifting away from committed migrations, while the PostgreSQL migration test validates that the full chain applies correctly to a fresh database and accepts representative identity, employee, attendance, project/task, and survey form/question/assignment/submission/answer records.
