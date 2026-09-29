@@ -155,7 +155,7 @@ public sealed class EmployeeCoreService(
         int pageSize,
         CancellationToken cancellationToken)
     {
-        page = Math.Max(page, 1);
+        page = Math.Clamp(page, 1, 1_000_000);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var query = EmployeeQuery().AsNoTracking();
@@ -350,9 +350,11 @@ public sealed class EmployeeCoreService(
             employee.User.LockoutEndUtc = null;
         }
 
-        dbContext.UserRoles.RemoveRange(employee.User.UserRoles);
-        employee.User.UserRoles.Clear();
-        foreach (var role in references.Roles)
+        var userRolesToRemove = employee.User.UserRoles
+            .Where(x => !requestedRoleIds.Contains(x.RoleId))
+            .ToArray();
+        dbContext.UserRoles.RemoveRange(userRolesToRemove);
+        foreach (var role in references.Roles.Where(x => !currentRoleIds.Contains(x.Id)))
         {
             employee.User.UserRoles.Add(new UserRole { UserId = employee.UserId, RoleId = role.Id });
         }

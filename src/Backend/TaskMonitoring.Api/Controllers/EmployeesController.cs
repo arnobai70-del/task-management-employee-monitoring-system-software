@@ -30,6 +30,7 @@ public sealed class EmployeesController(IEmployeeCoreService employeeCoreService
 
     [HttpPost]
     [Authorize(Policy = PermissionCatalog.EmployeesManage)]
+    [Authorize(Policy = PermissionCatalog.RolesManage)]
     public async Task<ActionResult<EmployeeResponse>> Create(CreateEmployeeRequest request, CancellationToken cancellationToken)
     {
         var result = await employeeCoreService.CreateEmployeeAsync(request, Actor(), cancellationToken);
@@ -40,6 +41,7 @@ public sealed class EmployeesController(IEmployeeCoreService employeeCoreService
 
     [HttpPut("{id:guid}")]
     [Authorize(Policy = PermissionCatalog.EmployeesManage)]
+    [Authorize(Policy = PermissionCatalog.RolesManage)]
     public async Task<ActionResult<EmployeeResponse>> Update(Guid id, UpdateEmployeeRequest request, CancellationToken cancellationToken)
         => ToActionResult(await employeeCoreService.UpdateEmployeeAsync(id, request, Actor(), cancellationToken));
 
