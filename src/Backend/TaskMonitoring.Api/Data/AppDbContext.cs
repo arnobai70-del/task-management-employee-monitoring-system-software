@@ -23,6 +23,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<TaskActivity> TaskActivities => Set<TaskActivity>();
+    public DbSet<EmployeePresence> EmployeePresences => Set<EmployeePresence>();
+    public DbSet<EmployeeNotification> EmployeeNotifications => Set<EmployeeNotification>();
     public DbSet<SurveyForm> SurveyForms => Set<SurveyForm>();
     public DbSet<SurveyQuestion> SurveyQuestions => Set<SurveyQuestion>();
     public DbSet<SurveyAssignment> SurveyAssignments => Set<SurveyAssignment>();
@@ -241,6 +243,30 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(x => new { x.ProjectTaskId, x.CreatedAtUtc });
             entity.HasOne(x => x.ProjectTask).WithMany(x => x.Activities).HasForeignKey(x => x.ProjectTaskId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.ActorUser).WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EmployeePresence>(entity =>
+        {
+            entity.ToTable("employee_presences");
+            entity.HasKey(x => x.EmployeeId);
+            entity.Property(x => x.ClientKind).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ClientVersion).HasMaxLength(50);
+            entity.HasIndex(x => x.LastSeenAtUtc);
+            entity.HasOne(x => x.Employee).WithOne().HasForeignKey<EmployeePresence>(x => x.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EmployeeNotification>(entity =>
+        {
+            entity.ToTable("employee_notifications");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Kind).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Message).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.EntityType).HasMaxLength(50).IsRequired();
+            entity.HasIndex(x => new { x.EmployeeId, x.CreatedAtUtc });
+            entity.HasIndex(x => new { x.EmployeeId, x.ReadAtUtc });
+            entity.HasIndex(x => x.EntityId);
+            entity.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SurveyForm>(entity =>
