@@ -19,48 +19,21 @@ jobs:
         with:
           ref: feature/survey-field-operations-core
 
-      - name: Make new survey entities explicit EF additions
+      - name: Mark new survey submissions as Added
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           path = Path('src/Backend/TaskMonitoring.Api/Services/SurveyCoreService.cs')
           text = path.read_text()
-          text = text.replace(
-              '            assignment.Submissions.Add(submission);\n        }\n        else if (latest.Status == SurveySubmissionStatus.Draft)',
-              '            assignment.Submissions.Add(submission);\n            dbContext.SurveySubmissions.Add(submission);\n        }\n        else if (latest.Status == SurveySubmissionStatus.Draft)',
-              1)
-          text = text.replace(
-              '            assignment.Submissions.Add(submission);\n        }\n        else\n        {\n            return OperationResult<SurveySubmissionResponse>.Conflict("survey_submission_locked"',
-              '            assignment.Submissions.Add(submission);\n            dbContext.SurveySubmissions.Add(submission);\n        }\n        else\n        {\n            return OperationResult<SurveySubmissionResponse>.Conflict("survey_submission_locked"',
-              1)
-          old = '''            submission.Answers.Add(new SurveyAnswer
-            {
-                SurveySubmissionId = submission.Id,
-                SurveySubmission = submission,
-                SurveyQuestionId = question.Id,
-                SurveyQuestion = question,
-                ValueJson = answer.Value.GetRawText()
-            });'''
-          new = '''            var surveyAnswer = new SurveyAnswer
-            {
-                SurveySubmissionId = submission.Id,
-                SurveySubmission = submission,
-                SurveyQuestionId = question.Id,
-                SurveyQuestion = question,
-                ValueJson = answer.Value.GetRawText()
-            };
-            submission.Answers.Add(surveyAnswer);
-            dbContext.SurveyAnswers.Add(surveyAnswer);'''
-          if old not in text:
-              raise SystemExit('Survey answer anchor not found')
-          text = text.replace(old, new, 1)
-          if text.count('dbContext.SurveySubmissions.Add(submission);') != 2:
-              raise SystemExit('Expected two explicit submission additions')
-          path.write_text(text)
+          old = '            assignment.Submissions.Add(submission);'
+          if text.count(old) != 2:
+              raise SystemExit(f'Expected exactly two submission creation anchors, found {text.count(old)}')
+          new = old + '\n            dbContext.SurveySubmissions.Add(submission);'
+          path.write_text(text.replace(old, new))
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/Backend/TaskMonitoring.Api/Services/SurveyCoreService.cs
-          git commit -m "fix: explicitly add survey submission entities"
+          git commit -m "fix: explicitly add survey submissions"
           git push origin HEAD:feature/survey-field-operations-core
