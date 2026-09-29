@@ -340,7 +340,9 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
         }
 
         var session = sessionResult.Session!;
-        if (session.Breaks.Any(x => !x.EndedAtUtc.HasValue))
+        if (await dbContext.WorkBreaks.AnyAsync(
+    x => x.WorkSessionId == session.Id && !x.EndedAtUtc.HasValue,
+    cancellationToken))
         {
             return OperationResult<WorkSessionResponse>.Conflict("break_already_open", "A break is already in progress.");
         }
@@ -353,7 +355,7 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
             StartedAtUtc = now,
             CreatedAtUtc = now
         };
-        session.Breaks.Add(workBreak);
+        dbContext.WorkBreaks.Add(workBreak);
         session.UpdatedAtUtc = now;
         AddAudit(actor, "attendance.break_started", "WorkBreak", workBreak.Id, new { session.Id, workBreak.StartedAtUtc });
 
