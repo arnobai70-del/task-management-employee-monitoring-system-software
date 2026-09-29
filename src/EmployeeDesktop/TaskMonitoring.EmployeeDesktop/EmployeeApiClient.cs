@@ -97,6 +97,38 @@ public sealed class EmployeeApiClient : IDisposable
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
+    public Task<EmployeeMonitoringPolicyResponse> GetMonitoringPolicyAsync(CancellationToken cancellationToken = default)
+        => GetAuthorizedAsync<EmployeeMonitoringPolicyResponse>("api/me/monitoring/policy", cancellationToken);
+
+    public async Task<MonitoringIngestResponse> RecordApplicationActivityAsync(
+        string processName,
+        string? windowTitle,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            "api/me/monitoring/application-activity",
+            JsonContent.Create(new { processName, windowTitle }),
+            cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<MonitoringIngestResponse>(JsonOptions, cancellationToken)
+               ?? throw new InvalidOperationException("The server returned an empty monitoring response.");
+    }
+
+    public async Task<MonitoringIngestResponse> RecordBusinessDomainActivityAsync(
+        string domain,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            "api/me/monitoring/business-domain-activity",
+            JsonContent.Create(new { domain }),
+            cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<MonitoringIngestResponse>(JsonOptions, cancellationToken)
+               ?? throw new InvalidOperationException("The server returned an empty monitoring response.");
+    }
+
     private async Task<T> GetAuthorizedAsync<T>(string path, CancellationToken cancellationToken)
     {
         using var response = await SendAuthorizedAsync(HttpMethod.Get, path, null, cancellationToken);
@@ -257,6 +289,17 @@ public sealed record EmployeeNotificationResponse(Guid Id, string Kind, string T
 {
     public string ReadState => ReadAtUtc.HasValue ? "Read" : "Unread";
 }
+
+public sealed record EmployeeMonitoringPolicyResponse(
+    bool IsEnabled,
+    int SampleIntervalSeconds,
+    int RetentionDays,
+    string DisclosureText,
+    IReadOnlyCollection<ApprovedApplicationResponse> Applications,
+    IReadOnlyCollection<ApprovedBusinessDomainResponse> BusinessDomains);
+public sealed record ApprovedApplicationResponse(Guid Id, string ProcessName, string DisplayName, bool CaptureWindowTitle, bool IsActive, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+public sealed record ApprovedBusinessDomainResponse(Guid Id, string Domain, string DisplayName, bool IncludeSubdomains, bool IsActive, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+public sealed record MonitoringIngestResponse(bool Accepted, string? Reason);
 
 public sealed record EmployeeTaskResponse(Guid Id, Guid ProjectId, string ProjectCode, string ProjectName, string Title, string? Description, string Status, string Priority, Guid? AssigneeEmployeeId, string? AssigneeName, DateOnly? DueDate, DateTime? CompletedAtUtc, int CommentCount, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 public sealed record EmployeeAccessWorkspaceResponse(IReadOnlyCollection<RdpAssignmentResponse> RdpAssignments, IReadOnlyCollection<IpAssignmentResponse> IpAssignments, IReadOnlyCollection<WebsiteAssignmentResponse> WebsiteAssignments);

@@ -25,6 +25,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<TaskActivity> TaskActivities => Set<TaskActivity>();
     public DbSet<EmployeePresence> EmployeePresences => Set<EmployeePresence>();
     public DbSet<EmployeeNotification> EmployeeNotifications => Set<EmployeeNotification>();
+    public DbSet<MonitoringPolicy> MonitoringPolicies => Set<MonitoringPolicy>();
+    public DbSet<ApprovedApplication> ApprovedApplications => Set<ApprovedApplication>();
+    public DbSet<ApprovedBusinessDomain> ApprovedBusinessDomains => Set<ApprovedBusinessDomain>();
+    public DbSet<MonitoringActivitySegment> MonitoringActivitySegments => Set<MonitoringActivitySegment>();
     public DbSet<SurveyForm> SurveyForms => Set<SurveyForm>();
     public DbSet<SurveyQuestion> SurveyQuestions => Set<SurveyQuestion>();
     public DbSet<SurveyAssignment> SurveyAssignments => Set<SurveyAssignment>();
@@ -267,6 +271,52 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(x => new { x.EmployeeId, x.ReadAtUtc });
             entity.HasIndex(x => x.EntityId);
             entity.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MonitoringPolicy>(entity =>
+        {
+            entity.ToTable("monitoring_policies");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DisclosureText).HasMaxLength(2000).IsRequired();
+            entity.HasIndex(x => x.CreatedAtUtc);
+        });
+
+        modelBuilder.Entity<ApprovedApplication>(entity =>
+        {
+            entity.ToTable("approved_monitoring_applications");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ProcessName).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.NormalizedProcessName).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.DisplayName).HasMaxLength(160).IsRequired();
+            entity.HasIndex(x => x.NormalizedProcessName).IsUnique();
+            entity.HasIndex(x => new { x.IsActive, x.DisplayName });
+        });
+
+        modelBuilder.Entity<ApprovedBusinessDomain>(entity =>
+        {
+            entity.ToTable("approved_monitoring_domains");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Domain).HasMaxLength(253).IsRequired();
+            entity.Property(x => x.NormalizedDomain).HasMaxLength(253).IsRequired();
+            entity.Property(x => x.DisplayName).HasMaxLength(160).IsRequired();
+            entity.HasIndex(x => x.NormalizedDomain).IsUnique();
+            entity.HasIndex(x => new { x.IsActive, x.Domain });
+        });
+
+        modelBuilder.Entity<MonitoringActivitySegment>(entity =>
+        {
+            entity.ToTable("monitoring_activity_segments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Kind).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ProcessName).HasMaxLength(120);
+            entity.Property(x => x.ApplicationName).HasMaxLength(160);
+            entity.Property(x => x.WindowTitle).HasMaxLength(300);
+            entity.Property(x => x.Domain).HasMaxLength(253);
+            entity.HasIndex(x => new { x.EmployeeId, x.LastObservedAtUtc });
+            entity.HasIndex(x => new { x.Kind, x.LastObservedAtUtc });
+            entity.HasIndex(x => x.ProcessName);
+            entity.HasIndex(x => x.Domain);
+            entity.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<SurveyForm>(entity =>

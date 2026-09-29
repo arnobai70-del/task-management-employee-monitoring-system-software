@@ -56,7 +56,9 @@ builder.Services.AddScoped<IReportingDashboardService, ReportingDashboardService
 builder.Services.AddScoped<IAccessAssignmentService, AccessAssignmentService>();
 builder.Services.AddScoped<IEmployeeWorkspaceService, EmployeeWorkspaceService>();
 builder.Services.AddScoped<IRealtimeWorkspaceService, RealtimeWorkspaceService>();
+builder.Services.AddScoped<IMonitoringTelemetryService, MonitoringTelemetryService>();
 builder.Services.AddSingleton<IRealtimeEventPublisher, SignalRRealtimeEventPublisher>();
+builder.Services.AddHostedService<MonitoringRetentionHostedService>();
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

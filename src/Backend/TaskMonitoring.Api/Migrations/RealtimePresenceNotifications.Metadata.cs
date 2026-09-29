@@ -8,9 +8,9 @@ using TaskMonitoring.Api.Data;
 
 namespace TaskMonitoring.Api.Migrations;
 
-// Keep the previously generated snapshot as the full baseline and layer only this
-// migration's generated model delta on top. Making the baseline abstract ensures
-// EF selects the constructible snapshot below for design-time drift comparison.
+// Keep the previously generated snapshot as the full baseline and layer later
+// generated model deltas on top. Making the baseline abstract ensures EF selects
+// the constructible snapshot below for design-time drift comparison.
 abstract partial class AppDbContextModelSnapshot
 {
 }
@@ -22,9 +22,14 @@ sealed class RealtimePresenceNotificationsModelSnapshot : AppDbContextModelSnaps
     {
         base.BuildModel(modelBuilder);
         RealtimePresenceNotificationsModelMetadata.Configure(modelBuilder);
+        TransparentMonitoringTelemetryModelMetadata.Configure(modelBuilder);
     }
 
-    internal void BuildInto(ModelBuilder modelBuilder) => BuildModel(modelBuilder);
+    internal void BuildRealtimeInto(ModelBuilder modelBuilder)
+    {
+        base.BuildModel(modelBuilder);
+        RealtimePresenceNotificationsModelMetadata.Configure(modelBuilder);
+    }
 }
 
 [DbContext(typeof(AppDbContext))]
@@ -32,7 +37,7 @@ sealed class RealtimePresenceNotificationsModelSnapshot : AppDbContextModelSnaps
 partial class RealtimePresenceNotifications
 {
     protected override void BuildTargetModel(ModelBuilder modelBuilder)
-        => new RealtimePresenceNotificationsModelSnapshot().BuildInto(modelBuilder);
+        => new RealtimePresenceNotificationsModelSnapshot().BuildRealtimeInto(modelBuilder);
 }
 
 internal static class RealtimePresenceNotificationsModelMetadata

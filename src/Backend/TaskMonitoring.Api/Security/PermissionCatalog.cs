@@ -26,6 +26,8 @@ public static class PermissionCatalog
     public const string SurveyReview = "survey.review";
     public const string ReportsRead = "reports.read";
     public const string PresenceRead = "presence.read";
+    public const string MonitoringRead = "monitoring.read";
+    public const string MonitoringManage = "monitoring.manage";
     public const string AccessAssignmentsRead = "access.assignments.read";
     public const string AccessAssignmentsManage = "access.assignments.manage";
     public const string AuditRead = "audit.read";
@@ -56,6 +58,8 @@ public static class PermissionCatalog
         [SurveyReview] = "Review, approve, and reject submitted field surveys.",
         [ReportsRead] = "View organization-wide dashboard metrics and operational reports.",
         [PresenceRead] = "View current employee online/offline, working, break, and last-seen presence state.",
+        [MonitoringRead] = "View approved employee application/business-domain activity and the active monitoring policy.",
+        [MonitoringManage] = "Manage transparent monitoring policy, retention, approved applications, and approved business domains.",
         [AccessAssignmentsRead] = "View employee RDP, IP, and website access assignments.",
         [AccessAssignmentsManage] = "Create, update, deactivate, release, and reserve employee RDP, IP, and website access assignments.",
         [AuditRead] = "View security and administrative audit logs."
