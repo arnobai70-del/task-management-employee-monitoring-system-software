@@ -14,6 +14,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<Shift> Shifts => Set<Shift>();
+    public DbSet<EmployeeShiftAssignment> EmployeeShiftAssignments => Set<EmployeeShiftAssignment>();
+    public DbSet<WorkSession> WorkSessions => Set<WorkSession>();
+    public DbSet<WorkBreak> WorkBreaks => Set<WorkBreak>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -117,6 +121,51 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasOne(x => x.User).WithOne(x => x.Employee).HasForeignKey<Employee>(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Department).WithMany(x => x.Employees).HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Supervisor).WithMany(x => x.DirectReports).HasForeignKey(x => x.SupervisorEmployeeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Shift>(entity =>
+        {
+            entity.ToTable("shifts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.NormalizedCode).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.NormalizedName).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.TimeZoneId).HasMaxLength(100).IsRequired();
+            entity.HasIndex(x => x.NormalizedCode).IsUnique();
+            entity.HasIndex(x => x.NormalizedName).IsUnique();
+        });
+
+        modelBuilder.Entity<EmployeeShiftAssignment>(entity =>
+        {
+            entity.ToTable("employee_shift_assignments");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.EmployeeId, x.EffectiveFrom });
+            entity.HasIndex(x => x.ShiftId);
+            entity.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Shift).WithMany(x => x.Assignments).HasForeignKey(x => x.ShiftId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<WorkSession>(entity =>
+        {
+            entity.ToTable("work_sessions");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.EmployeeId, x.WorkDate }).IsUnique();
+            entity.HasIndex(x => new { x.WorkDate, x.StartedAtUtc });
+            entity.HasIndex(x => x.ShiftId);
+            entity.HasIndex(x => x.ShiftAssignmentId);
+            entity.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Shift).WithMany(x => x.WorkSessions).HasForeignKey(x => x.ShiftId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ShiftAssignment).WithMany(x => x.WorkSessions).HasForeignKey(x => x.ShiftAssignmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<WorkBreak>(entity =>
+        {
+            entity.ToTable("work_breaks");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.WorkSessionId, x.StartedAtUtc });
+            entity.HasIndex(x => x.WorkSessionId).HasFilter("\"EndedAtUtc\" IS NULL").IsUnique();
+            entity.HasOne(x => x.WorkSession).WithMany(x => x.Breaks).HasForeignKey(x => x.WorkSessionId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
