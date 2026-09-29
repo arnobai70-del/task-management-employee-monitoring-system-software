@@ -49,13 +49,28 @@ export default function PresencePanel() {
   useEffect(() => {
     if (!allowed) return;
     let cancelled = false;
-    setLoading(true);
-    setError('');
-    void apiFetch<PagedResponse<PresenceItem>>('/api/presence?page=1&pageSize=100')
-      .then(result => { if (!cancelled) setItems(result.items); })
-      .catch(caught => { if (!cancelled) setError(caught instanceof Error ? caught.message : 'Unable to load workforce presence.'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+
+    const loadSnapshot = async (showLoading: boolean) => {
+      if (showLoading) setLoading(true);
+      try {
+        const result = await apiFetch<PagedResponse<PresenceItem>>('/api/presence?page=1&pageSize=100');
+        if (!cancelled) {
+          setItems(result.items);
+          setError('');
+        }
+      } catch (caught) {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : 'Unable to load workforce presence.');
+      } finally {
+        if (!cancelled && showLoading) setLoading(false);
+      }
+    };
+
+    void loadSnapshot(true);
+    const timer = window.setInterval(() => void loadSnapshot(false), 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [allowed]);
 
   useEffect(() => {
