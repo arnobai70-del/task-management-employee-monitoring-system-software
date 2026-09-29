@@ -9,6 +9,7 @@ using Microsoft.IdentityModel.Tokens;
 using TaskMonitoring.Api.Configuration;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Hubs;
 using TaskMonitoring.Api.Infrastructure;
 using TaskMonitoring.Api.Security;
 using TaskMonitoring.Api.Services;
@@ -32,8 +33,17 @@ if (jwtOptions.AccessTokenMinutes is < 1 or > 1440 || jwtOptions.RefreshTokenDay
     throw new InvalidOperationException("JWT token lifetimes are outside the allowed range.");
 }
 
+var presenceOptions = builder.Configuration.GetSection(PresenceOptions.SectionName).Get<PresenceOptions>() ?? new PresenceOptions();
+if (presenceOptions.OnlineThresholdSeconds is < 30 or > 600)
+{
+    throw new InvalidOperationException("Presence:OnlineThresholdSeconds must be between 30 and 600 seconds.");
+}
+
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
-builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.Configure<PresenceOptions>(builder.Configuration.GetSection(PresenceOptions.SectionName));
+builder.Services.AddScoped<TaskNotificationInterceptor>();
+builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
+    options.UseNpgsql(connectionString).AddInterceptors(serviceProvider.GetRequiredService<TaskNotificationInterceptor>()));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ITokenService, TokenService>();
@@ -45,6 +55,8 @@ builder.Services.AddScoped<ISurveyCoreService, SurveyCoreService>();
 builder.Services.AddScoped<IReportingDashboardService, ReportingDashboardService>();
 builder.Services.AddScoped<IAccessAssignmentService, AccessAssignmentService>();
 builder.Services.AddScoped<IEmployeeWorkspaceService, EmployeeWorkspaceService>();
+builder.Services.AddScoped<IRealtimeWorkspaceService, RealtimeWorkspaceService>();
+builder.Services.AddSingleton<IRealtimeEventPublisher, SignalRRealtimeEventPublisher>();
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
@@ -64,6 +76,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.FromSeconds(30),
             RoleClaimType = System.Security.Claims.ClaimTypes.Role,
             NameClaimType = System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Email
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrWhiteSpace(accessToken) && context.HttpContext.Request.Path.StartsWithSegments("/hubs/realtime"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -94,6 +118,8 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
+builder.Services.AddSignalR().AddJsonProtocol(options =>
+    options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
 
@@ -106,6 +132,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<RealtimeHub>("/hubs/realtime");
 app.MapHealthChecks("/health");
 app.MapOpenApi();
 
