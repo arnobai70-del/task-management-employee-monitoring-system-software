@@ -106,7 +106,12 @@ app.MapOpenApi();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var initializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
-    await initializer.InitializeAsync(app.Configuration.GetValue<bool>("Database:AutoMigrate"));
+    if (app.Configuration.GetValue<bool>("Database:AutoMigrate"))
+    {
+        await initializer.MigrateAsync();
+    }
+
+    await initializer.SeedFoundationAsync();
 }
 
 app.Run();
