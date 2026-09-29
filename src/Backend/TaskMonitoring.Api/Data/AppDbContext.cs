@@ -23,6 +23,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<TaskActivity> TaskActivities => Set<TaskActivity>();
+    public DbSet<SurveyForm> SurveyForms => Set<SurveyForm>();
+    public DbSet<SurveyQuestion> SurveyQuestions => Set<SurveyQuestion>();
+    public DbSet<SurveyAssignment> SurveyAssignments => Set<SurveyAssignment>();
+    public DbSet<SurveySubmission> SurveySubmissions => Set<SurveySubmission>();
+    public DbSet<SurveyAnswer> SurveyAnswers => Set<SurveyAnswer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -236,6 +241,72 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(x => new { x.ProjectTaskId, x.CreatedAtUtc });
             entity.HasOne(x => x.ProjectTask).WithMany(x => x.Activities).HasForeignKey(x => x.ProjectTaskId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.ActorUser).WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SurveyForm>(entity =>
+        {
+            entity.ToTable("survey_forms");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.NormalizedCode).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.NormalizedName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => x.NormalizedCode).IsUnique();
+            entity.HasIndex(x => new { x.ProjectId, x.Status });
+            entity.HasIndex(x => x.NormalizedName);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SurveyQuestion>(entity =>
+        {
+            entity.ToTable("survey_questions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Key).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.NormalizedKey).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Prompt).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.OptionsJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(x => new { x.SurveyFormId, x.NormalizedKey }).IsUnique();
+            entity.HasIndex(x => new { x.SurveyFormId, x.SortOrder }).IsUnique();
+            entity.HasOne(x => x.SurveyForm).WithMany(x => x.Questions).HasForeignKey(x => x.SurveyFormId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SurveyAssignment>(entity =>
+        {
+            entity.ToTable("survey_assignments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => new { x.SurveyFormId, x.EmployeeId }).IsUnique();
+            entity.HasIndex(x => new { x.EmployeeId, x.Status });
+            entity.HasIndex(x => new { x.SurveyFormId, x.Status });
+            entity.HasIndex(x => x.DueDate);
+            entity.HasOne(x => x.SurveyForm).WithMany(x => x.Assignments).HasForeignKey(x => x.SurveyFormId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AssignedByUser).WithMany().HasForeignKey(x => x.AssignedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SurveySubmission>(entity =>
+        {
+            entity.ToTable("survey_submissions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ReviewComment).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.SurveyAssignmentId, x.RevisionNumber }).IsUnique();
+            entity.HasIndex(x => new { x.Status, x.SubmittedAtUtc });
+            entity.HasOne(x => x.SurveyAssignment).WithMany(x => x.Submissions).HasForeignKey(x => x.SurveyAssignmentId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.ReviewedByUser).WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SurveyAnswer>(entity =>
+        {
+            entity.ToTable("survey_answers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ValueJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(x => new { x.SurveySubmissionId, x.SurveyQuestionId }).IsUnique();
+            entity.HasOne(x => x.SurveySubmission).WithMany(x => x.Answers).HasForeignKey(x => x.SurveySubmissionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.SurveyQuestion).WithMany().HasForeignKey(x => x.SurveyQuestionId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

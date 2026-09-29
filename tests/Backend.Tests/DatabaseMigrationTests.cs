@@ -164,6 +164,59 @@ public sealed class DatabaseMigrationTests
             Action = "task.created",
             DetailsJson = "{}"
         };
+        var surveyForm = new SurveyForm
+        {
+            ProjectId = project.Id,
+            Project = project,
+            Code = "MIG-SURVEY",
+            NormalizedCode = "MIG-SURVEY",
+            Name = "Migration Survey",
+            NormalizedName = "MIGRATION SURVEY",
+            Status = SurveyFormStatus.Published
+        };
+        var surveyQuestion = new SurveyQuestion
+        {
+            SurveyFormId = surveyForm.Id,
+            SurveyForm = surveyForm,
+            Key = "household_size",
+            NormalizedKey = "HOUSEHOLD_SIZE",
+            Prompt = "Household size",
+            Type = SurveyQuestionType.Number,
+            IsRequired = true,
+            OptionsJson = "[]",
+            SortOrder = 1
+        };
+        var surveyAssignment = new SurveyAssignment
+        {
+            SurveyFormId = surveyForm.Id,
+            SurveyForm = surveyForm,
+            EmployeeId = employee.Id,
+            Employee = employee,
+            AssignedByUserId = user.Id,
+            AssignedByUser = user,
+            Status = SurveyAssignmentStatus.Approved,
+            DueDate = new DateOnly(2026, 10, 20)
+        };
+        var surveySubmission = new SurveySubmission
+        {
+            SurveyAssignmentId = surveyAssignment.Id,
+            SurveyAssignment = surveyAssignment,
+            RevisionNumber = 1,
+            Status = SurveySubmissionStatus.Approved,
+            SubmittedAtUtc = DateTime.Parse("2026-09-29T08:00:00Z").ToUniversalTime(),
+            ReviewedAtUtc = DateTime.Parse("2026-09-29T08:05:00Z").ToUniversalTime(),
+            ReviewedByUserId = user.Id,
+            ReviewedByUser = user,
+            ReviewComment = "Approved"
+        };
+        var surveyAnswer = new SurveyAnswer
+        {
+            SurveySubmissionId = surveySubmission.Id,
+            SurveySubmission = surveySubmission,
+            SurveyQuestionId = surveyQuestion.Id,
+            SurveyQuestion = surveyQuestion,
+            ValueJson = "4"
+        };
 
         db.Users.Add(user);
         db.Departments.Add(department);
@@ -177,6 +230,11 @@ public sealed class DatabaseMigrationTests
         db.ProjectTasks.Add(projectTask);
         db.TaskComments.Add(taskComment);
         db.TaskActivities.Add(taskActivity);
+        db.SurveyForms.Add(surveyForm);
+        db.SurveyQuestions.Add(surveyQuestion);
+        db.SurveyAssignments.Add(surveyAssignment);
+        db.SurveySubmissions.Add(surveySubmission);
+        db.SurveyAnswers.Add(surveyAnswer);
         await db.SaveChangesAsync(cancellationToken);
 
         Assert.Equal(1, await db.Users.CountAsync(cancellationToken));
@@ -191,5 +249,10 @@ public sealed class DatabaseMigrationTests
         Assert.Equal(1, await db.ProjectTasks.CountAsync(cancellationToken));
         Assert.Equal(1, await db.TaskComments.CountAsync(cancellationToken));
         Assert.Equal(1, await db.TaskActivities.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.SurveyForms.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.SurveyQuestions.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.SurveyAssignments.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.SurveySubmissions.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.SurveyAnswers.CountAsync(cancellationToken));
     }
 }

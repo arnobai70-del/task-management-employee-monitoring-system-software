@@ -18,6 +18,12 @@ public static class PermissionCatalog
     public const string TasksRead = "tasks.read";
     public const string TasksManage = "tasks.manage";
     public const string TasksComment = "tasks.comment";
+    public const string SurveysRead = "surveys.read";
+    public const string SurveysManage = "surveys.manage";
+    public const string SurveyAssignmentsRead = "survey.assignments.read";
+    public const string SurveyAssignmentsManage = "survey.assignments.manage";
+    public const string SurveySubmit = "survey.submit";
+    public const string SurveyReview = "survey.review";
     public const string AuditRead = "audit.read";
 
     public static readonly IReadOnlyDictionary<string, string> Definitions = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -38,6 +44,12 @@ public static class PermissionCatalog
         [TasksRead] = "View project tasks, comments, and activity history.",
         [TasksManage] = "Create, edit, assign, and transition project tasks.",
         [TasksComment] = "Add comments to project tasks.",
+        [SurveysRead] = "View survey forms and questionnaires.",
+        [SurveysManage] = "Create, edit, publish, close, and archive survey forms.",
+        [SurveyAssignmentsRead] = "View field survey assignments and submission status.",
+        [SurveyAssignmentsManage] = "Assign or cancel survey fieldwork for employees.",
+        [SurveySubmit] = "Complete and submit assigned field surveys.",
+        [SurveyReview] = "Review, approve, and reject submitted field surveys.",
         [AuditRead] = "View security and administrative audit logs."
     };
 
