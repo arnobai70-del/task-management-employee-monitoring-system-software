@@ -370,6 +370,7 @@ public sealed class SurveyCoreService(AppDbContext dbContext, TimeProvider timeP
         {
             submission = NewSubmission(assignment, 1, now);
             assignment.Submissions.Add(submission);
+            dbContext.SurveySubmissions.Add(submission);
         }
         else if (latest.Status == SurveySubmissionStatus.Draft)
         {
@@ -379,6 +380,7 @@ public sealed class SurveyCoreService(AppDbContext dbContext, TimeProvider timeP
         {
             submission = NewSubmission(assignment, latest.RevisionNumber + 1, now);
             assignment.Submissions.Add(submission);
+            dbContext.SurveySubmissions.Add(submission);
         }
         else
         {
