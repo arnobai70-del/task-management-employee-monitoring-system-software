@@ -50,7 +50,18 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
             .ThenBy(x => x.NormalizedCode)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(x => ToProjectResponseProjection(x))
+            .Select(x => new ProjectResponse(
+                x.Id,
+                x.Code,
+                x.Name,
+                x.Description,
+                x.Status,
+                x.StartDate,
+                x.DueDate,
+                x.Members.Count(member => member.IsActive),
+                x.Tasks.Count(task => task.Status != ProjectTaskStatus.Done && task.Status != ProjectTaskStatus.Cancelled),
+                x.CreatedAtUtc,
+                x.UpdatedAtUtc))
             .ToListAsync(cancellationToken);
 
         return new PagedResponse<ProjectResponse>(items, page, pageSize, totalCount);
@@ -61,7 +72,18 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
         var project = await dbContext.Projects
             .AsNoTracking()
             .Where(x => x.Id == id)
-            .Select(x => ToProjectResponseProjection(x))
+            .Select(x => new ProjectResponse(
+                x.Id,
+                x.Code,
+                x.Name,
+                x.Description,
+                x.Status,
+                x.StartDate,
+                x.DueDate,
+                x.Members.Count(member => member.IsActive),
+                x.Tasks.Count(task => task.Status != ProjectTaskStatus.Done && task.Status != ProjectTaskStatus.Cancelled),
+                x.CreatedAtUtc,
+                x.UpdatedAtUtc))
             .SingleOrDefaultAsync(cancellationToken);
 
         return project is null
