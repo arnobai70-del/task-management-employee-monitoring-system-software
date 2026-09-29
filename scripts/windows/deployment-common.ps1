@@ -140,8 +140,14 @@ function Read-TaskMonitoringReleaseManifest {
     if ([string]::IsNullOrWhiteSpace([string]$manifest.package.file)) {
         throw "Release manifest package.file is required."
     }
+    if ([IO.Path]::GetFileName([string]$manifest.package.file) -ne [string]$manifest.package.file) {
+        throw "Release manifest package.file must be a simple file name without directory segments."
+    }
     if ([string]::IsNullOrWhiteSpace([string]$manifest.package.sha256)) {
         throw "Release manifest package.sha256 is required."
+    }
+    if ([long]$manifest.package.sizeBytes -le 0) {
+        throw "Release manifest package.sizeBytes must be greater than zero."
     }
 
     return $manifest
