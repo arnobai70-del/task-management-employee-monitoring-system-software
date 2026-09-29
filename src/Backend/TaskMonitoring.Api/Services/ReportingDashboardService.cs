@@ -30,14 +30,14 @@ public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvid
         }
 
         var today = Today();
-        var startUtc = ToUtc(range.From!.Value, TimeOnly.MinValue);
-        var endUtc = ToUtc(range.To!.Value, TimeOnly.MaxValue);
+        var startUtc = ToUtc(range.From, TimeOnly.MinValue);
+        var endUtc = ToUtc(range.To, TimeOnly.MaxValue);
 
         var activeEmployees = await dbContext.Employees.AsNoTracking().CountAsync(x => x.IsActive, cancellationToken);
         var activeDepartments = await dbContext.Departments.AsNoTracking().CountAsync(x => x.IsActive, cancellationToken);
 
         var attendanceQuery = dbContext.WorkSessions.AsNoTracking()
-            .Where(x => x.WorkDate >= range.From.Value && x.WorkDate <= range.To.Value);
+            .Where(x => x.WorkDate >= range.From && x.WorkDate <= range.To);
         var attendanceSessions = await attendanceQuery.CountAsync(cancellationToken);
         var attendanceEmployees = await attendanceQuery.Select(x => x.EmployeeId).Distinct().CountAsync(cancellationToken);
         var completedSessions = await attendanceQuery.CountAsync(x => x.EndedAtUtc != null, cancellationToken);
@@ -93,8 +93,8 @@ public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvid
 
         return OperationResult<DashboardOverviewResponse>.Success(new DashboardOverviewResponse(
             UtcNow(),
-            range.From.Value,
-            range.To.Value,
+            range.From,
+            range.To,
             new WorkforceDashboardMetrics(activeEmployees, activeDepartments),
             new AttendanceDashboardMetrics(
                 attendanceSessions,
@@ -150,7 +150,7 @@ public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvid
         }
 
         var query = dbContext.WorkSessions.AsNoTracking()
-            .Where(x => x.WorkDate >= range.From!.Value && x.WorkDate <= range.To!.Value);
+            .Where(x => x.WorkDate >= range.From && x.WorkDate <= range.To);
         if (departmentId.HasValue)
         {
             query = query.Where(x => x.Employee.DepartmentId == departmentId.Value);
@@ -170,7 +170,7 @@ public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvid
 
         var groups = rows.GroupBy(x => x.WorkDate).ToDictionary(x => x.Key);
         var result = new List<AttendanceDailyMetricResponse>();
-        for (var date = range.From.Value; date <= range.To.Value; date = date.AddDays(1))
+        for (var date = range.From; date <= range.To; date = date.AddDays(1))
         {
             if (!groups.TryGetValue(date, out var dayRows))
             {
@@ -421,18 +421,18 @@ public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvid
         return OperationResult<IReadOnlyCollection<SurveyProgressResponse>>.Success(result);
     }
 
-    private (DateOnly? From, DateOnly? To, ApiOperationError? Error) ResolveRange(DateOnly? from, DateOnly? to)
+    private (DateOnly From, DateOnly To, ApiOperationError? Error) ResolveRange(DateOnly? from, DateOnly? to)
     {
         var resolvedTo = to ?? Today();
         var resolvedFrom = from ?? resolvedTo.AddDays(-29);
         if (resolvedFrom > resolvedTo)
         {
-            return (null, null, new ApiOperationError("report_date_range_invalid", "Report start date cannot be after the end date."));
+            return (default, default, new ApiOperationError("report_date_range_invalid", "Report start date cannot be after the end date."));
         }
 
         if (resolvedTo.DayNumber - resolvedFrom.DayNumber >= MaximumReportDays)
         {
-            return (null, null, new ApiOperationError("report_date_range_too_large", $"Report date range cannot exceed {MaximumReportDays} days."));
+            return (default, default, new ApiOperationError("report_date_range_too_large", $"Report date range cannot exceed {MaximumReportDays} days."));
         }
 
         return (resolvedFrom, resolvedTo, null);
