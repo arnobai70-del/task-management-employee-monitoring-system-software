@@ -13,7 +13,7 @@
 
     <StackPanel>
       <TextBlock Text="Employee Workspace" FontSize="28" FontWeight="SemiBold" />
-      <TextBlock Text="Attendance, assigned work and company-provided access" Margin="0,6,0,0" Opacity="0.7" />
+      <TextBlock Text="Attendance, assigned work, notifications and company-provided access" Margin="0,6,0,0" Opacity="0.7" />
     </StackPanel>
 
     <Border Grid.Row="1" Margin="0,20,0,16" Padding="16" BorderBrush="#22000000" BorderThickness="1" CornerRadius="8">
@@ -91,6 +91,27 @@
         </DockPanel>
       </TabItem>
 
+      <TabItem Header="Notifications">
+        <DockPanel Margin="14">
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
+            <Button Content="Refresh" Width="90" Margin="0,0,10,0" Click="RefreshNotificationsButton_Click" />
+            <Button Content="Mark selected read" Width="140" Margin="0,0,12,0" Click="MarkNotificationReadButton_Click" />
+            <CheckBox x:Name="UnreadNotificationsOnlyBox" Content="Unread only" VerticalAlignment="Center" Margin="0,0,16,0" />
+            <TextBlock x:Name="NotificationsCountText" Text="0 notifications" VerticalAlignment="Center" Opacity="0.7" />
+          </StackPanel>
+          <DataGrid x:Name="NotificationsGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="State" Binding="{Binding ReadState}" Width="80" />
+              <DataGridTextColumn Header="Type" Binding="{Binding Kind}" Width="130" />
+              <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="1.2*" />
+              <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="2.5*" />
+              <DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="170" />
+              <DataGridTextColumn Header="Read" Binding="{Binding ReadAtUtc}" Width="170" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </DockPanel>
+      </TabItem>
+
       <TabItem Header="My Access">
         <DockPanel Margin="14">
           <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
@@ -143,7 +164,8 @@
         <Border Margin="14" Padding="20" BorderBrush="#22000000" BorderThickness="1" CornerRadius="8">
           <StackPanel>
             <TextBlock Text="Transparency &amp; privacy" FontSize="22" FontWeight="SemiBold" />
-            <TextBlock Margin="0,14,0,0" TextWrapping="Wrap">This client shows company-assigned work and access information and reports approved attendance/service health state to the company server.</TextBlock>
+            <TextBlock Margin="0,14,0,0" TextWrapping="Wrap">While you are signed in, this client sends a periodic presence heartbeat so authorized administrators can see online/offline, last-seen and current attendance-derived Working/On Break state.</TextBlock>
+            <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">This client shows company-assigned work, task notifications and company-provided access information and reports approved attendance state to the company server.</TextBlock>
             <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">It does not record keystrokes or passwords, capture screenshots, microphone audio or camera video, or collect unrelated personal files.</TextBlock>
             <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">RDP and website passwords are not stored or displayed by this application. Credential references may point to an approved external credential manager.</TextBlock>
           </StackPanel>
