@@ -4,7 +4,9 @@ A centralized, internet-required task management, attendance, survey operations,
 
 ## Status
 
-Development has started. The repository now contains the backend foundation: ASP.NET Core API structure, PostgreSQL/EF Core data model, JWT authentication with rotating refresh tokens, database-backed roles/permissions, security audit logging, API rate limiting, health/OpenAPI endpoints, automated tests, and CI.
+Development has started. The repository now contains the backend foundation: ASP.NET Core API structure, PostgreSQL/EF Core data model and committed migration, JWT authentication with rotating refresh tokens, database-backed roles/permissions, security audit logging, API rate limiting, health/OpenAPI endpoints, automated tests, and CI.
+
+CI validates a warning-free Release build, Entity Framework model/migration consistency, authentication behavior, and the initial migration against a real PostgreSQL service.
 
 The employee desktop client, background Windows service, admin web dashboard, attendance, project/task, survey, reporting, and realtime modules are not yet implemented.
 
@@ -30,7 +32,7 @@ Normal employee functionality is intentionally internet/server dependent. The sy
 - Authentication: JWT access tokens + rotating opaque refresh tokens
 - Authorization: database-backed roles and permissions
 - API documentation: OpenAPI
-- Tests: xUnit v3
+- Tests: xUnit v3 on Microsoft Testing Platform
 - CI: GitHub Actions
 - Planned desktop: C#/.NET Windows application
 - Planned background agent: .NET Windows Service
@@ -43,6 +45,7 @@ Normal employee functionality is intentionally internet/server dependent. The sy
 src/
   Backend/
     TaskMonitoring.Api/
+      Migrations/
 tests/
   Backend.Tests/
 docs/
@@ -71,7 +74,7 @@ Optional initial administrator configuration:
 - `BootstrapAdmin__Email`
 - `BootstrapAdmin__Password` — at least 12 characters
 
-After the bootstrap administrator is created, remove those bootstrap credentials from the environment.
+After the bootstrap administrator is created, remove those bootstrap credentials from the environment. Built-in roles and permissions are seeded idempotently at API startup after the database schema is available.
 
 ## Start PostgreSQL
 
@@ -81,16 +84,29 @@ cp .env.example .env
 docker compose up -d postgres
 ```
 
+## Database migrations
+
+Restore the pinned EF tool, then apply committed migrations:
+
+```bash
+dotnet tool restore
+dotnet ef database update \
+  --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj \
+  --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj
+```
+
+Production should apply migrations deliberately during deployment and keep `Database__AutoMigrate=false`. Local development may set `Database__AutoMigrate=true` when automatic migration on API startup is useful.
+
+After changing EF entities or mappings, add and commit a migration. CI also rejects model changes that do not have a matching migration.
+
 ## Run the API
 
-Export the required ASP.NET Core environment variables from your secret store or shell, then:
+Export the required ASP.NET Core environment variables from your secret store or shell, ensure the database migration has been applied, then:
 
 ```bash
 dotnet restore TaskMonitoring.slnx
 dotnet run --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj
 ```
-
-For local development only, set `Database__AutoMigrate=true` after migrations exist. Production should apply migrations deliberately during deployment.
 
 Health endpoint: `/health`
 
@@ -99,10 +115,17 @@ OpenAPI document: `/openapi/v1.json`
 ## Tests
 
 ```bash
-dotnet test TaskMonitoring.slnx
+dotnet tool restore
+dotnet restore TaskMonitoring.slnx
+dotnet build TaskMonitoring.slnx --configuration Release --no-restore
+dotnet ef migrations has-pending-model-changes \
+  --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj \
+  --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj \
+  --configuration Release --no-build
+dotnet test tests/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --no-restore
 ```
 
-CI runs restore, Release build, and backend tests on pull requests and on pushes to `main`.
+The database migration test expects `TEST_POSTGRES_CONNECTION` to point to an isolated test PostgreSQL database. GitHub Actions supplies one automatically.
 
 ## Security principles
 

@@ -100,10 +100,15 @@ app.MapControllers();
 app.MapHealthChecks("/health");
 app.MapOpenApi();
 
-if (app.Configuration.GetValue<bool>("Database:AutoMigrate"))
+await using (var scope = app.Services.CreateAsyncScope())
 {
-    await using var scope = app.Services.CreateAsyncScope();
-    await scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().InitializeAsync();
+    var initializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
+    if (app.Configuration.GetValue<bool>("Database:AutoMigrate"))
+    {
+        await initializer.MigrateAsync();
+    }
+
+    await initializer.SeedFoundationAsync();
 }
 
 app.Run();

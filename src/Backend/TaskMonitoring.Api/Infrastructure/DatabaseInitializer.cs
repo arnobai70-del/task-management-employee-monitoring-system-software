@@ -26,9 +26,11 @@ public sealed class DatabaseInitializer(
         "Employee"
     ];
 
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public Task MigrateAsync(CancellationToken cancellationToken = default) =>
+        dbContext.Database.MigrateAsync(cancellationToken);
+
+    public async Task SeedFoundationAsync(CancellationToken cancellationToken = default)
     {
-        await dbContext.Database.MigrateAsync(cancellationToken);
         await SeedPermissionsAndRolesAsync(cancellationToken);
         await SeedBootstrapAdminAsync(cancellationToken);
     }
