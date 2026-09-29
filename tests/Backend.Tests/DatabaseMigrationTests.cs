@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
 using TaskMonitoring.Api.Infrastructure;
@@ -218,6 +219,58 @@ public sealed class DatabaseMigrationTests
             SurveyQuestion = surveyQuestion,
             ValueJson = "4"
         };
+        var monitoringPolicy = new MonitoringPolicy
+        {
+            IsEnabled = true,
+            SampleIntervalSeconds = 30,
+            RetentionDays = 30,
+            DisclosureText = MonitoringDefaults.DisclosureText,
+            CreatedAtUtc = DateTime.Parse("2026-09-29T10:00:00Z").ToUniversalTime(),
+            UpdatedAtUtc = DateTime.Parse("2026-09-29T10:00:00Z").ToUniversalTime()
+        };
+        var approvedApplication = new ApprovedApplication
+        {
+            ProcessName = "code",
+            NormalizedProcessName = "code",
+            DisplayName = "Visual Studio Code",
+            CaptureWindowTitle = false,
+            IsActive = true
+        };
+        var approvedDomain = new ApprovedBusinessDomain
+        {
+            Domain = "company.example",
+            NormalizedDomain = "company.example",
+            DisplayName = "Company Web",
+            IncludeSubdomains = true,
+            IsActive = true
+        };
+        var expiredMonitoringSegment = new MonitoringActivitySegment
+        {
+            EmployeeId = employee.Id,
+            Employee = employee,
+            Kind = MonitoringActivityKind.Application,
+            ProcessName = "code",
+            ApplicationName = "Visual Studio Code",
+            StartedAtUtc = DateTime.Parse("2026-09-01T08:00:00Z").ToUniversalTime(),
+            LastObservedAtUtc = DateTime.Parse("2026-09-01T08:05:00Z").ToUniversalTime(),
+            SampleIntervalSeconds = 30,
+            SampleCount = 10,
+            CreatedAtUtc = DateTime.Parse("2026-09-01T08:00:00Z").ToUniversalTime(),
+            UpdatedAtUtc = DateTime.Parse("2026-09-01T08:05:00Z").ToUniversalTime()
+        };
+        var currentMonitoringSegment = new MonitoringActivitySegment
+        {
+            EmployeeId = employee.Id,
+            Employee = employee,
+            Kind = MonitoringActivityKind.BusinessDomain,
+            Domain = "jira.company.example",
+            StartedAtUtc = DateTime.Parse("2026-09-29T09:00:00Z").ToUniversalTime(),
+            LastObservedAtUtc = DateTime.Parse("2026-09-29T09:05:00Z").ToUniversalTime(),
+            SampleIntervalSeconds = 30,
+            SampleCount = 10,
+            CreatedAtUtc = DateTime.Parse("2026-09-29T09:00:00Z").ToUniversalTime(),
+            UpdatedAtUtc = DateTime.Parse("2026-09-29T09:05:00Z").ToUniversalTime()
+        };
 
         db.Users.Add(user);
         db.Departments.Add(department);
@@ -236,6 +289,10 @@ public sealed class DatabaseMigrationTests
         db.SurveyAssignments.Add(surveyAssignment);
         db.SurveySubmissions.Add(surveySubmission);
         db.SurveyAnswers.Add(surveyAnswer);
+        db.MonitoringPolicies.Add(monitoringPolicy);
+        db.ApprovedApplications.Add(approvedApplication);
+        db.ApprovedBusinessDomains.Add(approvedDomain);
+        db.MonitoringActivitySegments.AddRange(expiredMonitoringSegment, currentMonitoringSegment);
         await db.SaveChangesAsync(cancellationToken);
 
         Assert.Equal(1, await db.Users.CountAsync(cancellationToken));
@@ -255,6 +312,10 @@ public sealed class DatabaseMigrationTests
         Assert.Equal(1, await db.SurveyAssignments.CountAsync(cancellationToken));
         Assert.Equal(1, await db.SurveySubmissions.CountAsync(cancellationToken));
         Assert.Equal(1, await db.SurveyAnswers.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.MonitoringPolicies.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.ApprovedApplications.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.ApprovedBusinessDomains.CountAsync(cancellationToken));
+        Assert.Equal(2, await db.MonitoringActivitySegments.CountAsync(cancellationToken));
 
         var reportingService = new ReportingDashboardService(
             db,
@@ -282,6 +343,26 @@ public sealed class DatabaseMigrationTests
         Assert.Single(workloadReport.Value!);
         Assert.Equal(OperationStatus.Success, surveyReport.Status);
         Assert.Single(surveyReport.Value!);
+
+        var monitoringService = new MonitoringTelemetryService(
+            db,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 29, 12, 0, 0, TimeSpan.Zero)));
+        var policyUpdate = await monitoringService.UpdatePolicyAsync(
+            new UpdateMonitoringPolicyRequest(
+                true,
+                45,
+                7,
+                "Approved work applications and business hostnames may be recorded while signed in; unrelated content is not collected."),
+            new RequestActor(user.Id, "127.0.0.1", "database-migration-test"),
+            cancellationToken);
+
+        Assert.Equal(OperationStatus.Success, policyUpdate.Status);
+        Assert.Equal(7, policyUpdate.Value!.RetentionDays);
+        Assert.Single(await db.MonitoringActivitySegments.AsNoTracking().ToListAsync(cancellationToken));
+        Assert.Equal(currentMonitoringSegment.Id, (await db.MonitoringActivitySegments.AsNoTracking().SingleAsync(cancellationToken)).Id);
+        var monitoringAudit = await db.AuditLogs.AsNoTracking().SingleAsync(x => x.Action == "monitoring.policy.updated", cancellationToken);
+        Assert.Contains("\"RetentionDays\":7", monitoringAudit.MetadataJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("Approved work applications", monitoringAudit.MetadataJson, StringComparison.Ordinal);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
