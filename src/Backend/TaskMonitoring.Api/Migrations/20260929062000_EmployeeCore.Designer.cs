@@ -12,7 +12,7 @@ using TaskMonitoring.Api.Data;
 namespace TaskMonitoring.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260929003514_EmployeeCore")]
+    [Migration("20260929062000_EmployeeCore")]
     partial class EmployeeCore
     {
         /// <inheritdoc />
