@@ -9,8 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  harden:
-    if: ${{ !contains(github.event.head_commit.message, 'generated access uniqueness') }}
+  generate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -57,21 +56,23 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore and build
+      - name: Restore tools and packages
         run: |
           dotnet tool restore
           dotnet restore TaskMonitoring.slnx
-          dotnet build TaskMonitoring.slnx --configuration Release --no-restore
 
-      - name: Generate uniqueness migration
+      - name: Build
+        run: dotnet build TaskMonitoring.slnx --configuration Release --no-restore
+
+      - name: Generate canonical EF migration
         env:
           TASK_MONITORING_DESIGN_CONNECTION: Host=localhost;Port=5432;Database=design_only;Username=design;Password=design
         run: dotnet ef migrations add AccessAssignmentUniqueness --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build
 
-      - name: Commit hardening and generated migration
+      - name: Commit generated changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/Backend/TaskMonitoring.Api/Data/AppDbContext.cs src/Backend/TaskMonitoring.Api/Migrations
-          git commit -m "chore: generated access uniqueness"
+          git commit -m "chore: generated access uniqueness [skip ci]"
           git push origin HEAD:feature/admin-management-access-assignments
