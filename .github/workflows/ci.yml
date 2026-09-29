@@ -13,6 +13,22 @@ jobs:
   backend:
     name: Backend build and tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: task_monitoring_tests
+          POSTGRES_USER: task_monitoring
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U task_monitoring -d task_monitoring_tests"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=task_monitoring_tests;Username=task_monitoring
     steps:
       - name: Checkout
         uses: actions/checkout@v5
