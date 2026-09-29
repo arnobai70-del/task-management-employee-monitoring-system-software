@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>TaskMonitoring.Employee.Shared</AssemblyName>
+    <RootNamespace>TaskMonitoring.Employee.Shared</RootNamespace>
+  </PropertyGroup>
+</Project>
