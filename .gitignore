@@ -9,3 +9,5 @@ TestResults/
 coverage/
 artifacts/
 *.local.json
+node_modules/
+dist/
