@@ -1,0 +1,46 @@
+name: Patch management routes
+
+on:
+  push:
+    branches:
+      - feature/admin-management-access-assignments
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'wire management pages') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/admin-management-access-assignments
+      - name: Patch App routes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/AdminWeb/src/App.tsx')
+          s = p.read_text()
+          imports = "import { DepartmentManagementPage, EmployeeManagementPage } from './EmployeeDepartmentManagement';\nimport { ProjectManagementPage, ShiftManagementPage, TaskManagementPage } from './WorkManagement';\n"
+          if "EmployeeDepartmentManagement" not in s:
+              s = s.replace("import AccessAssignmentsPage from './AccessAssignments';\n", "import AccessAssignmentsPage from './AccessAssignments';\n" + imports)
+          old = "  { path: '/employees', label: 'Employees', short: 'EM', permission: 'employees.read' },\n  { path: '/attendance', label: 'Attendance', short: 'AT', permission: 'attendance.read' },"
+          new = "  { path: '/employees', label: 'Employees', short: 'EM', permission: 'employees.read' },\n  { path: '/departments', label: 'Departments', short: 'DP', permission: 'departments.read' },\n  { path: '/shifts', label: 'Shifts', short: 'SH', permission: 'shifts.read' },\n  { path: '/attendance', label: 'Attendance', short: 'AT', permission: 'attendance.read' },"
+          if "path: '/departments'" not in s:
+              s = s.replace(old, new)
+          s = s.replace('<Route path="/employees" element={<ProtectedPage permission="employees.read"><EmployeesPage /></ProtectedPage>} />', '<Route path="/employees" element={<ProtectedPage permission="employees.read"><EmployeeManagementPage /></ProtectedPage>} />')
+          if '<Route path="/departments"' not in s:
+              s = s.replace('<Route path="/employees" element={<ProtectedPage permission="employees.read"><EmployeeManagementPage /></ProtectedPage>} />', '<Route path="/employees" element={<ProtectedPage permission="employees.read"><EmployeeManagementPage /></ProtectedPage>} />\n      <Route path="/departments" element={<ProtectedPage permission="departments.read"><DepartmentManagementPage /></ProtectedPage>} />\n      <Route path="/shifts" element={<ProtectedPage permission="shifts.read"><ShiftManagementPage /></ProtectedPage>} />')
+          s = s.replace('<Route path="/projects" element={<ProtectedPage permission="projects.read"><ProjectsPage /></ProtectedPage>} />', '<Route path="/projects" element={<ProtectedPage permission="projects.read"><ProjectManagementPage /></ProtectedPage>} />')
+          s = s.replace('<Route path="/tasks" element={<ProtectedPage permission="tasks.read"><TasksPage /></ProtectedPage>} />', '<Route path="/tasks" element={<ProtectedPage permission="tasks.read"><TaskManagementPage /></ProtectedPage>} />')
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/AdminWeb/src/App.tsx
+          git commit -m "chore: wire management pages"
+          git push origin HEAD:feature/admin-management-access-assignments
