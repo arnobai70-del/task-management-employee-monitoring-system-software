@@ -153,6 +153,11 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
             return OperationResult<ShiftAssignmentResponse>.Invalid("assignment_reference_required", "Employee and shift are required.");
         }
 
+        if (request.EffectiveFrom == default)
+        {
+            return OperationResult<ShiftAssignmentResponse>.Invalid("assignment_effective_from_required", "Effective-from date is required.");
+        }
+
         if (request.EffectiveTo.HasValue && request.EffectiveTo.Value < request.EffectiveFrom)
         {
             return OperationResult<ShiftAssignmentResponse>.Invalid("assignment_date_range_invalid", "Effective-to date cannot be before effective-from date.");
@@ -252,6 +257,17 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
             return OperationResult<AttendanceStateResponse>.Invalid(employeeResult.Error.Code, employeeResult.Error.Message);
         }
 
+        var openSession = await SessionQuery().AsNoTracking().SingleOrDefaultAsync(
+            x => x.EmployeeId == employeeResult.Employee!.Id && !x.EndedAtUtc.HasValue,
+            cancellationToken);
+        if (openSession is not null)
+        {
+            var openState = openSession.Breaks.Any(x => !x.EndedAtUtc.HasValue)
+                ? AttendanceState.OnBreak
+                : AttendanceState.Working;
+            return OperationResult<AttendanceStateResponse>.Success(new AttendanceStateResponse(openState, ToSessionResponse(openSession)));
+        }
+
         var now = UtcNow();
         var resolved = await ResolveCurrentShiftAsync(employeeResult.Employee!.Id, now, cancellationToken);
         if (resolved is null)
@@ -287,6 +303,13 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
 
         var employee = employeeResult.Employee!;
         var now = UtcNow();
+        if (await dbContext.WorkSessions.AnyAsync(
+            x => x.EmployeeId == employee.Id && !x.EndedAtUtc.HasValue,
+            cancellationToken))
+        {
+            return OperationResult<WorkSessionResponse>.Conflict("work_session_already_open", "An existing work session must be checked out before starting a new one.");
+        }
+
         var resolved = await ResolveCurrentShiftAsync(employee.Id, now, cancellationToken);
         if (resolved is null)
         {

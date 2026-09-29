@@ -152,6 +152,62 @@ public sealed class AttendanceCoreServiceTests
     }
 
     [Fact]
+    public async Task Existing_open_session_blocks_a_new_work_date_and_remains_visible_in_status()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var (user, employee) = await AddEmployeeAsync(db, cancellationToken);
+        var shift = AddShift(db, "DAY", "Day Shift", new TimeOnly(9, 0), new TimeOnly(17, 0));
+        var assignment = AddAssignment(db, employee, shift, new DateOnly(2026, 9, 29), new DateOnly(2026, 9, 30));
+        db.WorkSessions.Add(new WorkSession
+        {
+            EmployeeId = employee.Id,
+            Employee = employee,
+            ShiftId = shift.Id,
+            Shift = shift,
+            ShiftAssignmentId = assignment.Id,
+            ShiftAssignment = assignment,
+            WorkDate = new DateOnly(2026, 9, 29),
+            ScheduledStartUtc = DateTime.Parse("2026-09-29T03:00:00Z").ToUniversalTime(),
+            ScheduledEndUtc = DateTime.Parse("2026-09-29T11:00:00Z").ToUniversalTime(),
+            StartedAtUtc = DateTime.Parse("2026-09-29T03:00:00Z").ToUniversalTime()
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        var service = new AttendanceCoreService(db, new MutableTimeProvider(DateTimeOffset.Parse("2026-09-30T03:00:00Z")));
+        var actor = Actor(user.Id);
+
+        var status = await service.GetMyStatusAsync(actor, cancellationToken);
+        var checkIn = await service.CheckInAsync(actor, cancellationToken);
+
+        Assert.Equal(OperationStatus.Success, status.Status);
+        Assert.NotNull(status.Value);
+        Assert.Equal(AttendanceState.Working, status.Value.State);
+        Assert.Equal(new DateOnly(2026, 9, 29), status.Value.Session!.WorkDate);
+        Assert.Equal(OperationStatus.Conflict, checkIn.Status);
+        Assert.Equal("work_session_already_open", checkIn.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Assignment_requires_an_effective_from_date()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var (_, employee) = await AddEmployeeAsync(db, cancellationToken);
+        var shift = AddShift(db, "DAY", "Day Shift", new TimeOnly(9, 0), new TimeOnly(17, 0));
+        await db.SaveChangesAsync(cancellationToken);
+        var service = new AttendanceCoreService(db, new MutableTimeProvider(DateTimeOffset.Parse("2026-09-29T00:00:00Z")));
+
+        var result = await service.CreateShiftAssignmentAsync(new CreateShiftAssignmentRequest
+        {
+            EmployeeId = employee.Id,
+            ShiftId = shift.Id
+        }, Actor(), cancellationToken);
+
+        Assert.Equal(OperationStatus.Invalid, result.Status);
+        Assert.Equal("assignment_effective_from_required", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task Overnight_shift_after_midnight_uses_previous_work_date()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
