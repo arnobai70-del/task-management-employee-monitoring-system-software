@@ -25,63 +25,20 @@ jobs:
           service_path = Path('src/Backend/TaskMonitoring.Api/Services/AttendanceCoreService.cs')
           text = service_path.read_text()
 
-          old = '''        if (request.EffectiveTo.HasValue && request.EffectiveTo.Value < request.EffectiveFrom)
-          {
-              return OperationResult<ShiftAssignmentResponse>.Invalid("assignment_date_range_invalid", "Effective-to date cannot be before effective-from date.");
-          }'''
-          new = '''        if (request.EffectiveFrom == default)
-          {
-              return OperationResult<ShiftAssignmentResponse>.Invalid("assignment_effective_from_required", "Effective-from date is required.");
-          }
-
-          if (request.EffectiveTo.HasValue && request.EffectiveTo.Value < request.EffectiveFrom)
-          {
-              return OperationResult<ShiftAssignmentResponse>.Invalid("assignment_date_range_invalid", "Effective-to date cannot be before effective-from date.");
-          }'''
+          old = "        if (request.EffectiveTo.HasValue && request.EffectiveTo.Value < request.EffectiveFrom)\n        {\n            return OperationResult<ShiftAssignmentResponse>.Invalid(\"assignment_date_range_invalid\", \"Effective-to date cannot be before effective-from date.\");\n        }"
+          new = "        if (request.EffectiveFrom == default)\n        {\n            return OperationResult<ShiftAssignmentResponse>.Invalid(\"assignment_effective_from_required\", \"Effective-from date is required.\");\n        }\n\n" + old
           if old not in text:
               raise SystemExit('Assignment validation anchor not found')
           text = text.replace(old, new, 1)
 
-          old = '''        var now = UtcNow();
-          var resolved = await ResolveCurrentShiftAsync(employeeResult.Employee!.Id, now, cancellationToken);
-          if (resolved is null)
-          {
-              return OperationResult<AttendanceStateResponse>.Success(new AttendanceStateResponse(AttendanceState.NoShift, null));
-          }'''
-          new = '''        var openSession = await SessionQuery().AsNoTracking().SingleOrDefaultAsync(
-              x => x.EmployeeId == employeeResult.Employee!.Id && !x.EndedAtUtc.HasValue,
-              cancellationToken);
-          if (openSession is not null)
-          {
-              var openState = openSession.Breaks.Any(x => !x.EndedAtUtc.HasValue)
-                  ? AttendanceState.OnBreak
-                  : AttendanceState.Working;
-              return OperationResult<AttendanceStateResponse>.Success(new AttendanceStateResponse(openState, ToSessionResponse(openSession)));
-          }
-
-          var now = UtcNow();
-          var resolved = await ResolveCurrentShiftAsync(employeeResult.Employee!.Id, now, cancellationToken);
-          if (resolved is null)
-          {
-              return OperationResult<AttendanceStateResponse>.Success(new AttendanceStateResponse(AttendanceState.NoShift, null));
-          }'''
+          old = "        var now = UtcNow();\n        var resolved = await ResolveCurrentShiftAsync(employeeResult.Employee!.Id, now, cancellationToken);"
+          new = "        var openSession = await SessionQuery().AsNoTracking().SingleOrDefaultAsync(\n            x => x.EmployeeId == employeeResult.Employee!.Id && !x.EndedAtUtc.HasValue,\n            cancellationToken);\n        if (openSession is not null)\n        {\n            var openState = openSession.Breaks.Any(x => !x.EndedAtUtc.HasValue)\n                ? AttendanceState.OnBreak\n                : AttendanceState.Working;\n            return OperationResult<AttendanceStateResponse>.Success(new AttendanceStateResponse(openState, ToSessionResponse(openSession)));\n        }\n\n" + old
           if old not in text:
               raise SystemExit('Status resolution anchor not found')
           text = text.replace(old, new, 1)
 
-          old = '''        var employee = employeeResult.Employee!;
-          var now = UtcNow();
-          var resolved = await ResolveCurrentShiftAsync(employee.Id, now, cancellationToken);'''
-          new = '''        var employee = employeeResult.Employee!;
-          var now = UtcNow();
-          if (await dbContext.WorkSessions.AnyAsync(
-              x => x.EmployeeId == employee.Id && !x.EndedAtUtc.HasValue,
-              cancellationToken))
-          {
-              return OperationResult<WorkSessionResponse>.Conflict("work_session_already_open", "An existing work session must be checked out before starting a new one.");
-          }
-
-          var resolved = await ResolveCurrentShiftAsync(employee.Id, now, cancellationToken);'''
+          old = "        var employee = employeeResult.Employee!;\n        var now = UtcNow();\n        var resolved = await ResolveCurrentShiftAsync(employee.Id, now, cancellationToken);"
+          new = "        var employee = employeeResult.Employee!;\n        var now = UtcNow();\n        if (await dbContext.WorkSessions.AnyAsync(\n            x => x.EmployeeId == employee.Id && !x.EndedAtUtc.HasValue,\n            cancellationToken))\n        {\n            return OperationResult<WorkSessionResponse>.Conflict(\"work_session_already_open\", \"An existing work session must be checked out before starting a new one.\");\n        }\n\n        var resolved = await ResolveCurrentShiftAsync(employee.Id, now, cancellationToken);"
           if old not in text:
               raise SystemExit('Check-in anchor not found')
           text = text.replace(old, new, 1)
@@ -89,69 +46,71 @@ jobs:
 
           test_path = Path('tests/Backend.Tests/AttendanceCoreServiceTests.cs')
           tests = test_path.read_text()
-          anchor = '''    [Fact]
-          public async Task Overnight_shift_after_midnight_uses_previous_work_date()'''
-          inserted = '''    [Fact]
-          public async Task Existing_open_session_blocks_a_new_work_date_and_remains_visible_in_status()
-          {
-              var cancellationToken = TestContext.Current.CancellationToken;
-              await using var db = CreateDbContext();
-              var (user, employee) = await AddEmployeeAsync(db, cancellationToken);
-              var shift = AddShift(db, "DAY", "Day Shift", new TimeOnly(9, 0), new TimeOnly(17, 0));
-              AddAssignment(db, employee, shift, new DateOnly(2026, 9, 29), new DateOnly(2026, 9, 30));
-              db.WorkSessions.Add(new WorkSession
-              {
-                  EmployeeId = employee.Id,
-                  Employee = employee,
-                  ShiftId = shift.Id,
-                  Shift = shift,
-                  ShiftAssignmentId = db.EmployeeShiftAssignments.Local.Single().Id,
-                  ShiftAssignment = db.EmployeeShiftAssignments.Local.Single(),
-                  WorkDate = new DateOnly(2026, 9, 29),
-                  ScheduledStartUtc = DateTime.Parse("2026-09-29T03:00:00Z").ToUniversalTime(),
-                  ScheduledEndUtc = DateTime.Parse("2026-09-29T11:00:00Z").ToUniversalTime(),
-                  StartedAtUtc = DateTime.Parse("2026-09-29T03:00:00Z").ToUniversalTime()
-              });
-              await db.SaveChangesAsync(cancellationToken);
-              var service = new AttendanceCoreService(db, new MutableTimeProvider(DateTimeOffset.Parse("2026-09-30T03:00:00Z")));
-              var actor = Actor(user.Id);
-
-              var status = await service.GetMyStatusAsync(actor, cancellationToken);
-              var checkIn = await service.CheckInAsync(actor, cancellationToken);
-
-              Assert.Equal(OperationStatus.Success, status.Status);
-              Assert.NotNull(status.Value);
-              Assert.Equal(AttendanceState.Working, status.Value.State);
-              Assert.Equal(new DateOnly(2026, 9, 29), status.Value.Session!.WorkDate);
-              Assert.Equal(OperationStatus.Conflict, checkIn.Status);
-              Assert.Equal("work_session_already_open", checkIn.ErrorCode);
-          }
-
-          [Fact]
-          public async Task Assignment_requires_an_effective_from_date()
-          {
-              var cancellationToken = TestContext.Current.CancellationToken;
-              await using var db = CreateDbContext();
-              var (_, employee) = await AddEmployeeAsync(db, cancellationToken);
-              var shift = AddShift(db, "DAY", "Day Shift", new TimeOnly(9, 0), new TimeOnly(17, 0));
-              await db.SaveChangesAsync(cancellationToken);
-              var service = new AttendanceCoreService(db, new MutableTimeProvider(DateTimeOffset.Parse("2026-09-29T00:00:00Z")));
-
-              var result = await service.CreateShiftAssignmentAsync(new CreateShiftAssignmentRequest
-              {
-                  EmployeeId = employee.Id,
-                  ShiftId = shift.Id
-              }, Actor(), cancellationToken);
-
-              Assert.Equal(OperationStatus.Invalid, result.Status);
-              Assert.Equal("assignment_effective_from_required", result.ErrorCode);
-          }
-
-          [Fact]
-          public async Task Overnight_shift_after_midnight_uses_previous_work_date()'''
+          anchor = "    [Fact]\n    public async Task Overnight_shift_after_midnight_uses_previous_work_date()"
+          lines = [
+              "    [Fact]",
+              "    public async Task Existing_open_session_blocks_a_new_work_date_and_remains_visible_in_status()",
+              "    {",
+              "        var cancellationToken = TestContext.Current.CancellationToken;",
+              "        await using var db = CreateDbContext();",
+              "        var (user, employee) = await AddEmployeeAsync(db, cancellationToken);",
+              "        var shift = AddShift(db, \"DAY\", \"Day Shift\", new TimeOnly(9, 0), new TimeOnly(17, 0));",
+              "        var assignment = AddAssignment(db, employee, shift, new DateOnly(2026, 9, 29), new DateOnly(2026, 9, 30));",
+              "        db.WorkSessions.Add(new WorkSession",
+              "        {",
+              "            EmployeeId = employee.Id,",
+              "            Employee = employee,",
+              "            ShiftId = shift.Id,",
+              "            Shift = shift,",
+              "            ShiftAssignmentId = assignment.Id,",
+              "            ShiftAssignment = assignment,",
+              "            WorkDate = new DateOnly(2026, 9, 29),",
+              "            ScheduledStartUtc = DateTime.Parse(\"2026-09-29T03:00:00Z\").ToUniversalTime(),",
+              "            ScheduledEndUtc = DateTime.Parse(\"2026-09-29T11:00:00Z\").ToUniversalTime(),",
+              "            StartedAtUtc = DateTime.Parse(\"2026-09-29T03:00:00Z\").ToUniversalTime()",
+              "        });",
+              "        await db.SaveChangesAsync(cancellationToken);",
+              "        var service = new AttendanceCoreService(db, new MutableTimeProvider(DateTimeOffset.Parse(\"2026-09-30T03:00:00Z\")));",
+              "        var actor = Actor(user.Id);",
+              "",
+              "        var status = await service.GetMyStatusAsync(actor, cancellationToken);",
+              "        var checkIn = await service.CheckInAsync(actor, cancellationToken);",
+              "",
+              "        Assert.Equal(OperationStatus.Success, status.Status);",
+              "        Assert.NotNull(status.Value);",
+              "        Assert.Equal(AttendanceState.Working, status.Value.State);",
+              "        Assert.Equal(new DateOnly(2026, 9, 29), status.Value.Session!.WorkDate);",
+              "        Assert.Equal(OperationStatus.Conflict, checkIn.Status);",
+              "        Assert.Equal(\"work_session_already_open\", checkIn.ErrorCode);",
+              "    }",
+              "",
+              "    [Fact]",
+              "    public async Task Assignment_requires_an_effective_from_date()",
+              "    {",
+              "        var cancellationToken = TestContext.Current.CancellationToken;",
+              "        await using var db = CreateDbContext();",
+              "        var (_, employee) = await AddEmployeeAsync(db, cancellationToken);",
+              "        var shift = AddShift(db, \"DAY\", \"Day Shift\", new TimeOnly(9, 0), new TimeOnly(17, 0));",
+              "        await db.SaveChangesAsync(cancellationToken);",
+              "        var service = new AttendanceCoreService(db, new MutableTimeProvider(DateTimeOffset.Parse(\"2026-09-29T00:00:00Z\")));",
+              "",
+              "        var result = await service.CreateShiftAssignmentAsync(new CreateShiftAssignmentRequest",
+              "        {",
+              "            EmployeeId = employee.Id,",
+              "            ShiftId = shift.Id",
+              "        }, Actor(), cancellationToken);",
+              "",
+              "        Assert.Equal(OperationStatus.Invalid, result.Status);",
+              "        Assert.Equal(\"assignment_effective_from_required\", result.ErrorCode);",
+              "    }",
+              "",
+              "    [Fact]",
+              "    public async Task Overnight_shift_after_midnight_uses_previous_work_date()",
+          ]
           if anchor not in tests:
               raise SystemExit('Attendance test anchor not found')
-          test_path.write_text(tests.replace(anchor, inserted, 1))
+          tests = tests.replace(anchor, "\n".join(lines), 1)
+          test_path.write_text(tests)
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
