@@ -14,62 +14,65 @@ public sealed class AuthServiceTests
     [Fact]
     public async Task Login_with_valid_credentials_issues_tokens_and_stores_only_refresh_hash()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         await using var db = CreateDbContext();
         var user = CreateUser("developer@example.com", "Correct-Horse-Battery-42");
         db.Users.Add(user);
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(cancellationToken);
         var service = CreateService(db);
 
-        var result = await service.LoginAsync(new LoginRequest(user.Email, "Correct-Horse-Battery-42"), "127.0.0.1", "tests", CancellationToken.None);
+        var result = await service.LoginAsync(new LoginRequest(user.Email, "Correct-Horse-Battery-42"), "127.0.0.1", "tests", cancellationToken);
 
         Assert.Equal(AuthStatus.Success, result.Status);
         Assert.NotNull(result.Response);
         Assert.NotEmpty(result.Response.AccessToken);
         Assert.NotEmpty(result.Response.RefreshToken);
-        var stored = await db.RefreshTokens.SingleAsync();
+        var stored = await db.RefreshTokens.SingleAsync(cancellationToken);
         Assert.NotEqual(result.Response.RefreshToken, stored.TokenHash);
         Assert.Equal(64, stored.TokenHash.Length);
-        Assert.Contains(await db.AuditLogs.ToListAsync(), x => x.Action == "auth.login.succeeded");
+        Assert.Contains(await db.AuditLogs.ToListAsync(cancellationToken), x => x.Action == "auth.login.succeeded");
     }
 
     [Fact]
     public async Task Reusing_rotated_refresh_token_revokes_active_family()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         await using var db = CreateDbContext();
         var user = CreateUser("manager@example.com", "Correct-Horse-Battery-43");
         db.Users.Add(user);
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(cancellationToken);
         var service = CreateService(db);
 
-        var login = await service.LoginAsync(new LoginRequest(user.Email, "Correct-Horse-Battery-43"), "127.0.0.1", "tests", CancellationToken.None);
+        var login = await service.LoginAsync(new LoginRequest(user.Email, "Correct-Horse-Battery-43"), "127.0.0.1", "tests", cancellationToken);
         var firstRefresh = login.Response!.RefreshToken;
-        var rotation = await service.RefreshAsync(new RefreshRequest(firstRefresh), "127.0.0.1", "tests", CancellationToken.None);
+        var rotation = await service.RefreshAsync(new RefreshRequest(firstRefresh), "127.0.0.1", "tests", cancellationToken);
         Assert.Equal(AuthStatus.Success, rotation.Status);
 
-        var reuse = await service.RefreshAsync(new RefreshRequest(firstRefresh), "127.0.0.1", "tests", CancellationToken.None);
+        var reuse = await service.RefreshAsync(new RefreshRequest(firstRefresh), "127.0.0.1", "tests", cancellationToken);
 
         Assert.Equal(AuthStatus.InvalidRefreshToken, reuse.Status);
-        var tokens = await db.RefreshTokens.ToListAsync();
+        var tokens = await db.RefreshTokens.ToListAsync(cancellationToken);
         Assert.All(tokens, token => Assert.True(token.IsRevoked));
-        Assert.Contains(await db.AuditLogs.ToListAsync(), x => x.Action == "auth.refresh.reuse_detected");
+        Assert.Contains(await db.AuditLogs.ToListAsync(cancellationToken), x => x.Action == "auth.refresh.reuse_detected");
     }
 
     [Fact]
     public async Task Five_failed_logins_lock_the_account_temporarily()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         await using var db = CreateDbContext();
         var user = CreateUser("employee@example.com", "Correct-Horse-Battery-44");
         db.Users.Add(user);
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(cancellationToken);
         var service = CreateService(db);
 
         for (var attempt = 0; attempt < 5; attempt++)
         {
-            var result = await service.LoginAsync(new LoginRequest(user.Email, "wrong-password"), null, "tests", CancellationToken.None);
+            var result = await service.LoginAsync(new LoginRequest(user.Email, "wrong-password"), null, "tests", cancellationToken);
             Assert.Equal(AuthStatus.InvalidCredentials, result.Status);
         }
 
-        var stored = await db.Users.SingleAsync();
+        var stored = await db.Users.SingleAsync(cancellationToken);
         Assert.NotNull(stored.LockoutEndUtc);
         Assert.True(stored.LockoutEndUtc > DateTime.UtcNow);
     }
