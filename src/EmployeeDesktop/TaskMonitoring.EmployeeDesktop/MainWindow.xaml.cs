@@ -8,12 +8,16 @@ namespace TaskMonitoring.EmployeeDesktop;
 public partial class MainWindow : Window
 {
     private readonly EmployeeApiClient _api = new();
+    private readonly EmployeeRealtimeClient _realtime;
     private readonly DispatcherTimer _presenceTimer;
     private bool _allowClose;
 
     public MainWindow()
     {
         InitializeComponent();
+        _realtime = new EmployeeRealtimeClient(_api);
+        _realtime.NotificationReceived += Realtime_NotificationReceived;
+        _realtime.ConnectionChanged += Realtime_ConnectionChanged;
         _presenceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _presenceTimer.Tick += PresenceTimer_Tick;
     }
@@ -36,6 +40,7 @@ public partial class MainWindow : Window
         _presenceTimer.Stop();
         try
         {
+            await _realtime.StopAsync();
             await _api.LogoutAsync();
         }
         catch
@@ -71,6 +76,7 @@ public partial class MainWindow : Window
             MessageText.Text = "Signed in successfully.";
             await RefreshWorkspaceAsync();
             await SendPresenceHeartbeatAsync();
+            await _realtime.StartAsync();
             _presenceTimer.Start();
         });
     }
@@ -80,6 +86,7 @@ public partial class MainWindow : Window
         await RunAsync(async () =>
         {
             _presenceTimer.Stop();
+            await _realtime.StopAsync();
             await _api.LogoutAsync();
             ClearWorkspace();
             ConnectionStatusText.Text = "Server: signed out";
@@ -105,6 +112,24 @@ public partial class MainWindow : Window
         {
             ConnectionStatusText.Text = $"Server: presence sync delayed ({ex.Message})";
         }
+    }
+
+    private void Realtime_NotificationReceived(object? sender, EmployeeNotificationResponse notification)
+    {
+        _ = Dispatcher.InvokeAsync(async () =>
+        {
+            MessageText.Text = $"New notification: {notification.Title}";
+            await RefreshNotificationsAsync();
+            await RefreshTasksAsync();
+        });
+    }
+
+    private void Realtime_ConnectionChanged(object? sender, bool connected)
+    {
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            RealtimeStatusText.Text = connected ? "Notifications: realtime connected" : "Notifications: reconnecting";
+        });
     }
 
     private async void RefreshAttendanceButton_Click(object sender, RoutedEventArgs e)
@@ -222,6 +247,7 @@ public partial class MainWindow : Window
         WebsiteGrid.ItemsSource = null;
         NotificationsGrid.ItemsSource = null;
         NotificationsCountText.Text = "0 notifications";
+        RealtimeStatusText.Text = "Notifications: disconnected";
     }
 
     private async Task RunAsync(Func<Task> operation)
