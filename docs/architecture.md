@@ -17,14 +17,14 @@ The product is a client-server system. Employee desktop software requires a vali
 The backend starts as a modular monolith so deployment, authorization, and transactions stay simple while the domain is evolving. The current foundation includes:
 
 - PostgreSQL + Entity Framework Core.
-- Source-controlled identity/authorization, Employee Core, and Attendance Core migrations.
+- Source-controlled identity/authorization, Employee Core, Attendance Core, and Project / Task Core migrations.
 - JWT access tokens with short lifetime.
 - Opaque rotating refresh tokens; only SHA-256 token hashes are persisted.
 - Role and permission entities stored in the database.
 - Idempotent startup seeding for built-in roles/permissions after the schema exists.
 - Permission claims and authorization policies.
 - Login lockout and API rate limiting.
-- Security, administration, shift, and attendance audit records.
+- Security, administration, attendance, project, and task audit records.
 - Central exception handling with safe user-facing errors.
 - Health and OpenAPI endpoints.
 - CI checks for Release build warnings/errors, EF model drift, business rules, and the complete migration chain against PostgreSQL.
@@ -81,6 +81,43 @@ The employee status endpoint checks for an already-open session before resolving
 
 Important shift and attendance lifecycle operations are audit logged with the acting user, target record, request context, and relevant event metadata.
 
+## Project / Task Core
+
+Project / Task Core establishes the collaborative work model used by future admin and employee clients.
+
+### Project model
+
+- `Project` stores a unique normalized code, name, description, lifecycle status, optional start/due dates, and timestamps.
+- Project statuses are `Planning`, `Active`, `OnHold`, `Completed`, and `Archived`.
+- New projects cannot begin in `Completed` or `Archived` state.
+- A project cannot move to `Completed` or `Archived` while it still has tasks outside `Done` or `Cancelled`.
+- Archived projects are immutable through Project / Task Core service paths.
+- Project summaries calculate active-member and open-task counts in translated database projections rather than relying on loaded navigation collections.
+
+`ProjectMember` preserves membership history instead of deleting rows. A unique `(ProjectId, EmployeeId)` record can be reactivated and carries either `Member` or `Manager` role. Only active employees may join projects. Removing a member is blocked while that employee owns an open task, preventing orphaned active assignments.
+
+### Task model and workflow
+
+- `ProjectTask` stores project, title, description, priority, status, optional assignee, optional due date, creator, completion timestamp, and audit timestamps.
+- Priorities are `Low`, `Normal`, `High`, and `Urgent`.
+- Assignees must be active employees and active project members.
+- Task due dates must stay within configured project start/due boundaries.
+- New tasks cannot be added to completed or archived projects.
+- Status transitions are explicit: `ToDo -> InProgress/Blocked/Cancelled`, `InProgress -> Blocked/Done/Cancelled`, `Blocked -> InProgress/Cancelled`, `Done -> InProgress`, and `Cancelled -> ToDo`.
+- Entering `Done` records `CompletedAtUtc`; reopening clears it.
+
+`TaskComment` is append-only user-authored discussion. `TaskActivity` is append-only structured history for creation, edits, status changes, and comments. These records support future audit views and activity feeds without mutating historical events.
+
+### Authorization boundaries
+
+- `projects.read` permits project and membership lookup.
+- `projects.manage` permits project creation/update and membership management.
+- `tasks.read` permits task, comment, and activity lookup.
+- `tasks.manage` permits task creation, edits, assignment, and status transitions.
+- `tasks.comment` permits comment creation; the current controller also requires `tasks.read`, so comment writers can only comment where they can read task context.
+
+Project/member/task mutations also write global audit events with actor, target, request context, and relevant metadata.
+
 ## Database startup policy
 
 Production should keep `Database:AutoMigrate=false` and apply committed migrations deliberately during deployment. After the schema is ready, API startup seeds missing built-in identity metadata and optionally creates the one-time bootstrap administrator when bootstrap credentials are supplied. Seeding is idempotent and does not replace existing role or permission assignments.
@@ -93,8 +130,10 @@ Passwords are hashed with ASP.NET Core `PasswordHasher<TUser>`. JWT signing keys
 
 Attendance self-service is server validated; the future desktop client will not be trusted to calculate late/early status or mutate attendance history directly. Administrative shift and attendance reads remain permission-controlled and auditable.
 
+Project and task lifecycle rules are also server validated. Clients cannot bypass active project membership for task assignment, arbitrary task status transitions, open-task project completion guards, or open-assignment member-removal guards.
+
 Sensitive monitoring features are intentionally outside the current foundation. If later approved, monitoring must remain transparent, business-scoped, permission-controlled, auditable, and subject to explicit retention rules. Hidden spyware behavior, keylogging, credential capture, covert camera/microphone use, and unrelated private-file collection remain out of scope.
 
 ## Database changes
 
-Schema changes must be added as Entity Framework Core migrations and committed with the code that depends on them. Migration IDs must preserve dependency order. The current dependency order is identity foundation, Employee Core, then Attendance Core. The pinned `dotnet-ef` tool and CI `has-pending-model-changes` check prevent entity/model changes from silently drifting away from committed migrations, while the PostgreSQL migration test validates that the full chain applies correctly to a fresh database.
+Schema changes must be added as Entity Framework Core migrations and committed with the code that depends on them. Migration IDs must preserve dependency order. The current dependency order is identity foundation, Employee Core, Attendance Core, then Project / Task Core (`20260929070000_ProjectTaskCore`). The pinned `dotnet-ef` tool and CI `has-pending-model-changes` check prevent entity/model changes from silently drifting away from committed migrations, while the PostgreSQL migration test validates that the full chain applies correctly to a fresh database and accepts representative identity, employee, attendance, project, membership, task, comment, and activity records.
