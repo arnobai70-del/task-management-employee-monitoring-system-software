@@ -81,7 +81,7 @@ public sealed class AttendanceCoreServiceTests
         Assert.Equal(new DateOnly(2026, 9, 29), first.Value.WorkDate);
         Assert.Equal(10, first.Value.LateMinutes);
         Assert.Equal(OperationStatus.Conflict, duplicate.Status);
-        Assert.Equal("attendance_already_recorded", duplicate.ErrorCode);
+        Assert.Equal("work_session_already_open", duplicate.ErrorCode);
         Assert.Contains(await db.AuditLogs.ToListAsync(cancellationToken), x => x.Action == "attendance.checked_in");
     }
 
