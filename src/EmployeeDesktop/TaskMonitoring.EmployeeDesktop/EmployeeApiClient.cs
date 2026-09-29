@@ -16,6 +16,7 @@ public sealed class EmployeeApiClient : IDisposable
     private DateTime _refreshTokenExpiresAtUtc;
 
     public bool IsAuthenticated => !string.IsNullOrWhiteSpace(_refreshToken) && _refreshTokenExpiresAtUtc > DateTime.UtcNow;
+    public Uri? ServerBaseUri => _http.BaseAddress;
 
     public void ConfigureServer(string serverUrl)
     {
@@ -46,6 +47,12 @@ public sealed class EmployeeApiClient : IDisposable
         {
             ClearSession();
         }
+    }
+
+    public async Task<string> GetValidAccessTokenAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureFreshAccessTokenAsync(cancellationToken);
+        return _accessToken ?? throw new InvalidOperationException("Sign in before connecting realtime features.");
     }
 
     public Task<AttendanceStateResponse> GetAttendanceStatusAsync(CancellationToken cancellationToken = default)
