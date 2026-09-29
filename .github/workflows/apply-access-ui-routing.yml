@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   patch:
-    if: ${{ !contains(github.event.head_commit.message, 'apply access UI routing') }}
+    if: ${{ !contains(github.event.head_commit.message, 'route access assignment UI') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -24,13 +24,13 @@ jobs:
           s = p.read_text()
           if "import AccessAssignmentsPage from './AccessAssignments';" not in s:
               s = s.replace("import { useAuth } from './auth';\n", "import { useAuth } from './auth';\nimport AccessAssignmentsPage from './AccessAssignments';\n")
-          marker = "  { path: '/surveys', label: 'Surveys', short: 'SV', permission: 'surveys.read' }\n"
-          access = "  { path: '/access/rdp', label: 'RDP Assign', short: 'RD', permission: 'access.assignments.read' },\n  { path: '/access/ip', label: 'IP Assign', short: 'IP', permission: 'access.assignments.read' },\n  { path: '/access/websites', label: 'Website Assign', short: 'WB', permission: 'access.assignments.read' },\n"
-          if access not in s:
-              s = s.replace(marker, marker[:-1] + ',\n' + access.rstrip('\n') + '\n')
+          old_nav = "  { path: '/surveys', label: 'Surveys', short: 'SV', permission: 'surveys.read' }\n];"
+          new_nav = "  { path: '/surveys', label: 'Surveys', short: 'SV', permission: 'surveys.read' },\n  { path: '/access/rdp', label: 'RDP Assign', short: 'RD', permission: 'access.assignments.read' },\n  { path: '/access/ip', label: 'IP Assign', short: 'IP', permission: 'access.assignments.read' },\n  { path: '/access/websites', label: 'Website Assign', short: 'WB', permission: 'access.assignments.read' }\n];"
+          if "/access/rdp" not in s:
+              s = s.replace(old_nav, new_nav)
           route_marker = "      <Route path=\"/surveys\" element={<ProtectedPage permission=\"surveys.read\"><SurveysPage /></ProtectedPage>} />\n"
           routes = "      <Route path=\"/access/rdp\" element={<ProtectedPage permission=\"access.assignments.read\"><AccessAssignmentsPage kind=\"rdp\" /></ProtectedPage>} />\n      <Route path=\"/access/ip\" element={<ProtectedPage permission=\"access.assignments.read\"><AccessAssignmentsPage kind=\"ip\" /></ProtectedPage>} />\n      <Route path=\"/access/websites\" element={<ProtectedPage permission=\"access.assignments.read\"><AccessAssignmentsPage kind=\"websites\" /></ProtectedPage>} />\n"
-          if routes not in s:
+          if '<Route path="/access/rdp"' not in s:
               s = s.replace(route_marker, route_marker + routes)
           p.write_text(s)
           PY
@@ -40,5 +40,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/AdminWeb/src/App.tsx
-          git commit -m "chore: apply access UI routing"
+          git commit -m "chore: route access assignment UI"
           git push origin HEAD:feature/admin-management-access-assignments
