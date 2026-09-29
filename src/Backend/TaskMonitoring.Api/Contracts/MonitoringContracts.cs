@@ -62,6 +62,8 @@ public sealed record RecordApplicationActivityRequest(
 public sealed record RecordBusinessDomainActivityRequest(
     [property: Required, StringLength(253)] string Domain);
 
+public sealed record MonitoringIngestResponse(bool Accepted, string? Reason);
+
 public sealed record MonitoringActivityResponse(
     Guid Id,
     Guid EmployeeId,
