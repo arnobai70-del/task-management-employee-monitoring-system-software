@@ -28,11 +28,15 @@ jobs:
           --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj
           --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj
           --output-dir Migrations
-      - name: Print generated migration files
+      - name: Collect generated files
         shell: bash
         run: |
-          for file in $(git status --short src/Backend/TaskMonitoring.Api/Migrations | awk '{print $2}'); do
-            echo "===== BEGIN FILE: $file ====="
-            cat "$file"
-            echo "===== END FILE: $file ====="
-          done
+          mkdir -p generated
+          cp src/Backend/TaskMonitoring.Api/Migrations/*RealtimePresenceNotifications*.cs generated/
+          cp src/Backend/TaskMonitoring.Api/Migrations/AppDbContextModelSnapshot.cs generated/
+          ls -la generated
+      - uses: actions/upload-artifact@v4
+        with:
+          name: realtime-migration
+          path: generated
+          if-no-files-found: error
