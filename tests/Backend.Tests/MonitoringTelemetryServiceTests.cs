@@ -96,6 +96,25 @@ public sealed class MonitoringTelemetryServiceTests
     }
 
     [Fact]
+    public async Task Business_domain_ingestion_rejects_full_urls()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDb();
+        var employee = AddEmployee(db, "MON-URL", "URL Boundary");
+        await db.SaveChangesAsync(cancellationToken);
+        var service = CreateService(db);
+
+        var result = await service.RecordDomainAsync(
+            new RequestActor(employee.UserId, null, null),
+            new RecordBusinessDomainActivityRequest("https://jira.example.com/project?id=123"),
+            cancellationToken);
+
+        Assert.False(result.Value!.Accepted);
+        Assert.Equal("domain_not_approved", result.Value.Reason);
+        Assert.Empty(await db.MonitoringActivitySegments.ToListAsync(cancellationToken));
+    }
+
+    [Fact]
     public async Task Assigned_website_hostname_is_approved_only_for_assigned_employee()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -122,7 +141,7 @@ public sealed class MonitoringTelemetryServiceTests
     }
 
     [Fact]
-    public async Task Policy_update_is_audited_without_logging_disclosure_body()
+    public async Task Application_rule_creation_is_audited()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var db = CreateDb();
@@ -131,24 +150,34 @@ public sealed class MonitoringTelemetryServiceTests
         await db.SaveChangesAsync(cancellationToken);
         var service = CreateService(db);
 
-        var result = await service.UpdatePolicyAsync(
-            new UpdateMonitoringPolicyRequest(true, 45, 14, "This clearly describes approved work application and business-domain monitoring without collecting unrelated content."),
+        var result = await service.CreateApplicationAsync(
+            new UpsertApprovedApplicationRequest("code.exe", "Visual Studio Code", false, true),
             new RequestActor(actorUser.Id, "127.0.0.1", "test-agent"),
             cancellationToken);
 
         Assert.Equal(OperationStatus.Success, result.Status);
         var audit = await db.AuditLogs.SingleAsync(cancellationToken);
-        Assert.Equal("monitoring.policy.updated", audit.Action);
-        Assert.Contains("\"RetentionDays\":14", audit.MetadataJson, StringComparison.Ordinal);
-        Assert.DoesNotContain("This clearly describes", audit.MetadataJson, StringComparison.Ordinal);
+        Assert.Equal("monitoring.application.created", audit.Action);
+        Assert.Contains("\"ProcessName\":\"code\"", audit.MetadataJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("password", audit.MetadataJson, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task Activity_query_rejects_explicit_ranges_over_thirty_one_days()
+    public async Task Activity_query_rejects_explicit_ranges_over_thirty_one_days_when_retention_allows_them()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var now = new DateTime(2026, 9, 30, 10, 0, 0, DateTimeKind.Utc);
         await using var db = CreateDb();
+        db.MonitoringPolicies.Add(new MonitoringPolicy
+        {
+            IsEnabled = true,
+            SampleIntervalSeconds = 30,
+            RetentionDays = 365,
+            DisclosureText = MonitoringDefaults.DisclosureText,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        });
+        await db.SaveChangesAsync(cancellationToken);
         var service = new MonitoringTelemetryService(db, new MutableTimeProvider(now));
 
         var result = await service.GetActivityAsync(null, null, now.AddDays(-32), now, null, 1, 50, cancellationToken);
