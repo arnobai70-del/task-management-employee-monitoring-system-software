@@ -25,6 +25,10 @@ export class ApiRequestError extends Error {
   }
 }
 
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
+
 export function readSession(): AuthSession | null {
   const raw = sessionStorage.getItem(SESSION_KEY);
   if (!raw) return null;
@@ -129,6 +133,20 @@ export async function logout(session: AuthSession): Promise<void> {
 function expiresSoon(session: AuthSession): boolean {
   const expiresAt = Date.parse(session.accessTokenExpiresAtUtc);
   return !Number.isFinite(expiresAt) || expiresAt <= Date.now() + 30_000;
+}
+
+export async function getValidAccessToken(): Promise<string> {
+  let session = readSession();
+  if (!session) throw new ApiRequestError(401, 'authentication_required', 'Please sign in again.');
+  if (expiresSoon(session)) {
+    try {
+      session = await refreshSession(session);
+    } catch (error) {
+      saveSession(null);
+      throw error;
+    }
+  }
+  return session.accessToken;
 }
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
