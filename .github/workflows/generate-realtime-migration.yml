@@ -1,0 +1,38 @@
+name: Generate realtime migration
+
+on:
+  push:
+    branches:
+      - feature/realtime-presence-notifications
+    paths:
+      - .github/workflows/generate-realtime-migration.yml
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet tool restore
+      - run: dotnet restore TaskMonitoring.slnx
+      - name: Generate migration
+        env:
+          TASK_MONITORING_DESIGN_CONNECTION: Host=localhost;Port=5432;Database=design;Username=design;Password=design
+        run: >-
+          dotnet ef migrations add RealtimePresenceNotifications
+          --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj
+          --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj
+          --output-dir Migrations
+      - name: Print generated migration files
+        shell: bash
+        run: |
+          for file in $(git status --short src/Backend/TaskMonitoring.Api/Migrations | awk '{print $2}'); do
+            echo "===== BEGIN FILE: $file ====="
+            cat "$file"
+            echo "===== END FILE: $file ====="
+          done
