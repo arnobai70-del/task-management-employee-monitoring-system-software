@@ -17,5 +17,5 @@ public static class PermissionCatalog
         [AuditRead] = "View security and administrative audit logs."
     };
 
-    public static IReadOnlyCollection<string> All => Definitions.Keys;
+    public static IEnumerable<string> All => Definitions.Keys;
 }
