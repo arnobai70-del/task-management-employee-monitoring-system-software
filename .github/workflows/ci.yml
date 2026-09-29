@@ -47,10 +47,13 @@ jobs:
       - name: Build
         run: dotnet build TaskMonitoring.slnx --configuration Release --no-restore
 
-      - name: Verify EF model matches migrations
+      - name: Diagnose EF model snapshot difference
         env:
           TASK_MONITORING_DESIGN_CONNECTION: ${{ env.TEST_POSTGRES_CONNECTION }}
-        run: dotnet ef migrations has-pending-model-changes --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build
-
-      - name: Test
-        run: dotnet test tests/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --no-restore
+        run: |
+          dotnet ef migrations add SnapshotDiagnostic --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build --output-dir Migrations/Diagnostic
+          echo '=== DIAGNOSTIC MIGRATION FILES ==='
+          find src/Backend/TaskMonitoring.Api/Migrations/Diagnostic -maxdepth 1 -type f -print -exec sed -n '1,260p' {} \;
+          echo '=== UPDATED MODEL SNAPSHOT ==='
+          sed -n '1,520p' src/Backend/TaskMonitoring.Api/Migrations/AppDbContextModelSnapshot.cs
+          exit 1
