@@ -755,7 +755,7 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
             Action = action,
             TargetType = targetType,
             TargetId = targetId.ToString(),
-            DetailsJson = JsonSerializer.Serialize(details),
+            MetadataJson = JsonSerializer.Serialize(details),
             IpAddress = actor.IpAddress,
             UserAgent = actor.UserAgent,
             CreatedAtUtc = UtcNow()
