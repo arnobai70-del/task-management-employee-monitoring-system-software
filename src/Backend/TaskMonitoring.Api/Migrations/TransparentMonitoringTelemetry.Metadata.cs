@@ -1,9 +1,23 @@
 using System;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using TaskMonitoring.Api.Data;
 
 #nullable disable
 
 namespace TaskMonitoring.Api.Migrations;
+
+[DbContext(typeof(AppDbContext))]
+[Migration("20260929225909_TransparentMonitoringTelemetry")]
+partial class TransparentMonitoringTelemetry
+{
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
+    {
+        new RealtimePresenceNotificationsModelSnapshot().BuildRealtimeInto(modelBuilder);
+        TransparentMonitoringTelemetryModelMetadata.Configure(modelBuilder);
+    }
+}
 
 internal static class TransparentMonitoringTelemetryModelMetadata
 {
