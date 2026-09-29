@@ -29,7 +29,7 @@ public sealed class AdminLookupController(AppDbContext dbContext) : ControllerBa
     public async Task<ActionResult<IReadOnlyCollection<ManagementRoleOption>>> EmployeeRoles(CancellationToken cancellationToken)
         => Ok(await dbContext.Roles.AsNoTracking()
             .Where(x => x.IsActive)
-            .OrderBy(x => x.NormalizedName)
+            .OrderBy(x => x.Name)
             .Select(x => new ManagementRoleOption(x.Id, x.Name))
             .ToListAsync(cancellationToken));
 
