@@ -19,7 +19,7 @@ jobs:
         env:
           POSTGRES_DB: task_monitoring_tests
           POSTGRES_USER: task_monitoring
-          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}
         ports:
           - 5432:5432
         options: >-
@@ -28,7 +28,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=task_monitoring_tests;Username=task_monitoring
+      TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=task_monitoring_tests;Username=task_monitoring;Password=ci-${{ github.run_id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -47,13 +47,10 @@ jobs:
       - name: Build
         run: dotnet build TaskMonitoring.slnx --configuration Release --no-restore
 
-      - name: Diagnose EF model snapshot difference
+      - name: Verify EF model matches migrations
         env:
           TASK_MONITORING_DESIGN_CONNECTION: ${{ env.TEST_POSTGRES_CONNECTION }}
-        run: |
-          dotnet ef migrations add SnapshotDiagnostic --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build --output-dir Migrations/Diagnostic
-          echo '=== DIAGNOSTIC MIGRATION FILES ==='
-          find src/Backend/TaskMonitoring.Api/Migrations/Diagnostic -maxdepth 1 -type f -print -exec sed -n '1,260p' {} \;
-          echo '=== UPDATED MODEL SNAPSHOT ==='
-          sed -n '1,520p' src/Backend/TaskMonitoring.Api/Migrations/AppDbContextModelSnapshot.cs
-          exit 1
+        run: dotnet ef migrations has-pending-model-changes --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build
+
+      - name: Test
+        run: dotnet test tests/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --no-restore
