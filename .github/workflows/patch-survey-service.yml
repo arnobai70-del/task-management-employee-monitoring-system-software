@@ -1,0 +1,89 @@
+name: Patch Survey Service
+
+on:
+  push:
+    branches:
+      - feature/survey-field-operations-core
+    paths:
+      - .github/workflows/patch-survey-service.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v5
+        with:
+          ref: feature/survey-field-operations-core
+
+      - name: Make new survey entities explicit EF additions
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/Backend/TaskMonitoring.Api/Services/SurveyCoreService.cs')
+          text = path.read_text()
+          old_submission = '''        if (latest is null)
+        {
+            submission = NewSubmission(assignment, 1, now);
+            assignment.Submissions.Add(submission);
+        }
+        else if (latest.Status == SurveySubmissionStatus.Draft)
+        {
+            submission = latest;
+        }
+        else if (latest.Status == SurveySubmissionStatus.Rejected)
+        {
+            submission = NewSubmission(assignment, latest.RevisionNumber + 1, now);
+            assignment.Submissions.Add(submission);
+        }'''
+          new_submission = '''        if (latest is null)
+        {
+            submission = NewSubmission(assignment, 1, now);
+            assignment.Submissions.Add(submission);
+            dbContext.SurveySubmissions.Add(submission);
+        }
+        else if (latest.Status == SurveySubmissionStatus.Draft)
+        {
+            submission = latest;
+        }
+        else if (latest.Status == SurveySubmissionStatus.Rejected)
+        {
+            submission = NewSubmission(assignment, latest.RevisionNumber + 1, now);
+            assignment.Submissions.Add(submission);
+            dbContext.SurveySubmissions.Add(submission);
+        }'''
+          old_answer = '''            submission.Answers.Add(new SurveyAnswer
+            {
+                SurveySubmissionId = submission.Id,
+                SurveySubmission = submission,
+                SurveyQuestionId = question.Id,
+                SurveyQuestion = question,
+                ValueJson = answer.Value.GetRawText()
+            });'''
+          new_answer = '''            var surveyAnswer = new SurveyAnswer
+            {
+                SurveySubmissionId = submission.Id,
+                SurveySubmission = submission,
+                SurveyQuestionId = question.Id,
+                SurveyQuestion = question,
+                ValueJson = answer.Value.GetRawText()
+            };
+            submission.Answers.Add(surveyAnswer);
+            dbContext.SurveyAnswers.Add(surveyAnswer);'''
+          if old_submission not in text:
+              raise SystemExit('Submission creation anchor not found')
+          if old_answer not in text:
+              raise SystemExit('Survey answer anchor not found')
+          text = text.replace(old_submission, new_submission, 1)
+          text = text.replace(old_answer, new_answer, 1)
+          path.write_text(text)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Backend/TaskMonitoring.Api/Services/SurveyCoreService.cs
+          git commit -m "fix: explicitly add survey submission entities"
+          git push origin HEAD:feature/survey-field-operations-core
