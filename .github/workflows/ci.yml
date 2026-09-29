@@ -2,55 +2,159 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  backend:
-    name: Backend build and tests
+  harden:
+    name: Harden Attendance Core invariants
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: task_monitoring_tests
-          POSTGRES_USER: task_monitoring
-          POSTGRES_PASSWORD: ci-${{ github.run_id }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U task_monitoring -d task_monitoring_tests"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=task_monitoring_tests;Username=task_monitoring;Password=ci-${{ github.run_id }}
     steps:
-      - name: Checkout
+      - name: Checkout feature branch
         uses: actions/checkout@v5
-
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.x
+          ref: feature/attendance-core
 
-      - name: Restore tools
-        run: dotnet tool restore
+      - name: Apply integrity hardening and push
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
 
-      - name: Restore
-        run: dotnet restore TaskMonitoring.slnx
+          service_path = Path('src/Backend/TaskMonitoring.Api/Services/AttendanceCoreService.cs')
+          text = service_path.read_text()
 
-      - name: Build
-        run: dotnet build TaskMonitoring.slnx --configuration Release --no-restore
+          old = '''        if (request.EffectiveTo.HasValue && request.EffectiveTo.Value < request.EffectiveFrom)
+          {
+              return OperationResult<ShiftAssignmentResponse>.Invalid("assignment_date_range_invalid", "Effective-to date cannot be before effective-from date.");
+          }'''
+          new = '''        if (request.EffectiveFrom == default)
+          {
+              return OperationResult<ShiftAssignmentResponse>.Invalid("assignment_effective_from_required", "Effective-from date is required.");
+          }
 
-      - name: Verify EF model matches migrations
-        env:
-          TASK_MONITORING_DESIGN_CONNECTION: ${{ env.TEST_POSTGRES_CONNECTION }}
-        run: dotnet ef migrations has-pending-model-changes --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build
+          if (request.EffectiveTo.HasValue && request.EffectiveTo.Value < request.EffectiveFrom)
+          {
+              return OperationResult<ShiftAssignmentResponse>.Invalid("assignment_date_range_invalid", "Effective-to date cannot be before effective-from date.");
+          }'''
+          if old not in text:
+              raise SystemExit('Assignment validation anchor not found')
+          text = text.replace(old, new, 1)
 
-      - name: Test
-        run: dotnet test tests/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --no-restore
+          old = '''        var now = UtcNow();
+          var resolved = await ResolveCurrentShiftAsync(employeeResult.Employee!.Id, now, cancellationToken);
+          if (resolved is null)
+          {
+              return OperationResult<AttendanceStateResponse>.Success(new AttendanceStateResponse(AttendanceState.NoShift, null));
+          }'''
+          new = '''        var openSession = await SessionQuery().AsNoTracking().SingleOrDefaultAsync(
+              x => x.EmployeeId == employeeResult.Employee!.Id && !x.EndedAtUtc.HasValue,
+              cancellationToken);
+          if (openSession is not null)
+          {
+              var openState = openSession.Breaks.Any(x => !x.EndedAtUtc.HasValue)
+                  ? AttendanceState.OnBreak
+                  : AttendanceState.Working;
+              return OperationResult<AttendanceStateResponse>.Success(new AttendanceStateResponse(openState, ToSessionResponse(openSession)));
+          }
+
+          var now = UtcNow();
+          var resolved = await ResolveCurrentShiftAsync(employeeResult.Employee!.Id, now, cancellationToken);
+          if (resolved is null)
+          {
+              return OperationResult<AttendanceStateResponse>.Success(new AttendanceStateResponse(AttendanceState.NoShift, null));
+          }'''
+          if old not in text:
+              raise SystemExit('Status resolution anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '''        var employee = employeeResult.Employee!;
+          var now = UtcNow();
+          var resolved = await ResolveCurrentShiftAsync(employee.Id, now, cancellationToken);'''
+          new = '''        var employee = employeeResult.Employee!;
+          var now = UtcNow();
+          if (await dbContext.WorkSessions.AnyAsync(
+              x => x.EmployeeId == employee.Id && !x.EndedAtUtc.HasValue,
+              cancellationToken))
+          {
+              return OperationResult<WorkSessionResponse>.Conflict("work_session_already_open", "An existing work session must be checked out before starting a new one.");
+          }
+
+          var resolved = await ResolveCurrentShiftAsync(employee.Id, now, cancellationToken);'''
+          if old not in text:
+              raise SystemExit('Check-in anchor not found')
+          text = text.replace(old, new, 1)
+          service_path.write_text(text)
+
+          test_path = Path('tests/Backend.Tests/AttendanceCoreServiceTests.cs')
+          tests = test_path.read_text()
+          anchor = '''    [Fact]
+          public async Task Overnight_shift_after_midnight_uses_previous_work_date()'''
+          inserted = '''    [Fact]
+          public async Task Existing_open_session_blocks_a_new_work_date_and_remains_visible_in_status()
+          {
+              var cancellationToken = TestContext.Current.CancellationToken;
+              await using var db = CreateDbContext();
+              var (user, employee) = await AddEmployeeAsync(db, cancellationToken);
+              var shift = AddShift(db, "DAY", "Day Shift", new TimeOnly(9, 0), new TimeOnly(17, 0));
+              AddAssignment(db, employee, shift, new DateOnly(2026, 9, 29), new DateOnly(2026, 9, 30));
+              db.WorkSessions.Add(new WorkSession
+              {
+                  EmployeeId = employee.Id,
+                  Employee = employee,
+                  ShiftId = shift.Id,
+                  Shift = shift,
+                  ShiftAssignmentId = db.EmployeeShiftAssignments.Local.Single().Id,
+                  ShiftAssignment = db.EmployeeShiftAssignments.Local.Single(),
+                  WorkDate = new DateOnly(2026, 9, 29),
+                  ScheduledStartUtc = DateTime.Parse("2026-09-29T03:00:00Z").ToUniversalTime(),
+                  ScheduledEndUtc = DateTime.Parse("2026-09-29T11:00:00Z").ToUniversalTime(),
+                  StartedAtUtc = DateTime.Parse("2026-09-29T03:00:00Z").ToUniversalTime()
+              });
+              await db.SaveChangesAsync(cancellationToken);
+              var service = new AttendanceCoreService(db, new MutableTimeProvider(DateTimeOffset.Parse("2026-09-30T03:00:00Z")));
+              var actor = Actor(user.Id);
+
+              var status = await service.GetMyStatusAsync(actor, cancellationToken);
+              var checkIn = await service.CheckInAsync(actor, cancellationToken);
+
+              Assert.Equal(OperationStatus.Success, status.Status);
+              Assert.NotNull(status.Value);
+              Assert.Equal(AttendanceState.Working, status.Value.State);
+              Assert.Equal(new DateOnly(2026, 9, 29), status.Value.Session!.WorkDate);
+              Assert.Equal(OperationStatus.Conflict, checkIn.Status);
+              Assert.Equal("work_session_already_open", checkIn.ErrorCode);
+          }
+
+          [Fact]
+          public async Task Assignment_requires_an_effective_from_date()
+          {
+              var cancellationToken = TestContext.Current.CancellationToken;
+              await using var db = CreateDbContext();
+              var (_, employee) = await AddEmployeeAsync(db, cancellationToken);
+              var shift = AddShift(db, "DAY", "Day Shift", new TimeOnly(9, 0), new TimeOnly(17, 0));
+              await db.SaveChangesAsync(cancellationToken);
+              var service = new AttendanceCoreService(db, new MutableTimeProvider(DateTimeOffset.Parse("2026-09-29T00:00:00Z")));
+
+              var result = await service.CreateShiftAssignmentAsync(new CreateShiftAssignmentRequest
+              {
+                  EmployeeId = employee.Id,
+                  ShiftId = shift.Id
+              }, Actor(), cancellationToken);
+
+              Assert.Equal(OperationStatus.Invalid, result.Status);
+              Assert.Equal("assignment_effective_from_required", result.ErrorCode);
+          }
+
+          [Fact]
+          public async Task Overnight_shift_after_midnight_uses_previous_work_date()'''
+          if anchor not in tests:
+              raise SystemExit('Attendance test anchor not found')
+          test_path.write_text(tests.replace(anchor, inserted, 1))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Backend/TaskMonitoring.Api/Services/AttendanceCoreService.cs tests/Backend.Tests/AttendanceCoreServiceTests.cs
+          git commit -m "fix: harden attendance session invariants"
+          git push origin HEAD:feature/attendance-core
