@@ -23,43 +23,18 @@ jobs:
           from pathlib import Path
           path = Path('src/Backend/TaskMonitoring.Api/Services/AttendanceCoreService.cs')
           text = path.read_text()
-          old = '''        var session = sessionResult.Session!;
-          if (session.Breaks.Any(x => !x.EndedAtUtc.HasValue))
-          {
-              return OperationResult<WorkSessionResponse>.Conflict("break_already_open", "A break is already in progress.");
-          }
-
-          var now = UtcNow();
-          var workBreak = new WorkBreak
-          {
-              WorkSessionId = session.Id,
-              WorkSession = session,
-              StartedAtUtc = now,
-              CreatedAtUtc = now
-          };
-          session.Breaks.Add(workBreak);
-          session.UpdatedAtUtc = now;'''
-          new = '''        var session = sessionResult.Session!;
-          if (await dbContext.WorkBreaks.AnyAsync(
+          old_check = 'if (session.Breaks.Any(x => !x.EndedAtUtc.HasValue))'
+          new_check = '''if (await dbContext.WorkBreaks.AnyAsync(
               x => x.WorkSessionId == session.Id && !x.EndedAtUtc.HasValue,
-              cancellationToken))
-          {
-              return OperationResult<WorkSessionResponse>.Conflict("break_already_open", "A break is already in progress.");
-          }
-
-          var now = UtcNow();
-          var workBreak = new WorkBreak
-          {
-              WorkSessionId = session.Id,
-              WorkSession = session,
-              StartedAtUtc = now,
-              CreatedAtUtc = now
-          };
-          dbContext.WorkBreaks.Add(workBreak);
-          session.UpdatedAtUtc = now;'''
-          if old not in text:
-              raise SystemExit('Expected StartBreak block not found')
-          path.write_text(text.replace(old, new, 1))
+              cancellationToken))'''
+          if old_check not in text:
+              raise SystemExit('Expected open-break check not found')
+          text = text.replace(old_check, new_check, 1)
+          old_add = 'session.Breaks.Add(workBreak);'
+          if old_add not in text:
+              raise SystemExit('Expected break collection add not found')
+          text = text.replace(old_add, 'dbContext.WorkBreaks.Add(workBreak);', 1)
+          path.write_text(text)
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
