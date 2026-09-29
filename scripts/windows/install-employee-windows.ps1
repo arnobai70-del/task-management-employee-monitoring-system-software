@@ -47,6 +47,9 @@ if (-not (Test-Path $updaterSourceExe -PathType Leaf)) {
     throw "Updater executable was not found: $updaterSourceExe"
 }
 Assert-TaskMonitoringPackageHash -PackagePath $packagePath -ExpectedSha256 ([string]$manifest.package.sha256)
+if ((Get-Item $packagePath).Length -ne [long]$manifest.package.sizeBytes) {
+    throw 'Release manifest package size does not match the runtime archive.'
+}
 
 $serverUri = ConvertTo-TaskMonitoringUri -Value $ServerUrl -Name 'ServerUrl' -AllowHttp:$AllowHttpForDevelopment
 $updateManifestUri = $null
@@ -109,6 +112,8 @@ $serviceExe = Join-Path $serviceStage 'TaskMonitoring.EmployeeService.exe'
 if (-not (Test-Path $desktopExe -PathType Leaf) -or -not (Test-Path $serviceExe -PathType Leaf)) {
     throw 'Release package does not contain the expected desktop/service executables.'
 }
+Assert-TaskMonitoringFileVersion -Path $desktopExe -ExpectedVersion ([string]$manifest.version)
+Assert-TaskMonitoringFileVersion -Path $serviceExe -ExpectedVersion ([string]$manifest.version)
 
 if (-not $AllowUnsignedDevelopmentBuild) {
     Assert-TaskMonitoringAuthenticodeSignature -Path $desktopExe -ExpectedPublisherCertificateSha256 $PublisherCertificateSha256
