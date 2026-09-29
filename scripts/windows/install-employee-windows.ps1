@@ -98,11 +98,14 @@ $backupInstallRoot = Join-Path $backupRoot 'InstallRoot'
 $updaterRoot = Join-Path $ProgramDataRoot 'Updater'
 $backupUpdaterRoot = Join-Path $backupRoot 'Updater'
 $maintenanceRoot = Join-Path $ProgramDataRoot 'Maintenance'
+$backupMaintenanceRoot = Join-Path $backupRoot 'Maintenance'
 $logsRoot = Join-Path $ProgramDataRoot 'logs'
 $statePath = Join-Path $ProgramDataRoot 'install-state.json'
+$backupStatePath = Join-Path $backupRoot 'install-state.json'
 $updateSettingsPath = Join-Path $ProgramDataRoot 'update-settings.json'
+$backupUpdateSettingsPath = Join-Path $backupRoot 'update-settings.json'
 
-New-Item -ItemType Directory -Force -Path $stagingRoot, $runtimeStage, $backupRoot, $maintenanceRoot, $logsRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $stagingRoot, $runtimeStage, $backupRoot, $logsRoot | Out-Null
 Expand-Archive -Path $packagePath -DestinationPath $runtimeStage -Force
 
 $desktopStage = Join-Path $runtimeStage 'desktop'
@@ -122,6 +125,8 @@ if (-not $AllowUnsignedDevelopmentBuild) {
 }
 
 $serviceExisted = $null -ne (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)
+& schtasks.exe /Query /TN $taskName 2>$null | Out-Null
+$updateTaskExisted = $LASTEXITCODE -eq 0
 & schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
 Stop-TaskMonitoringEmployeeService -ServiceName $serviceName
 
@@ -134,8 +139,17 @@ try {
     if (Test-Path $updaterRoot) {
         Move-Item -Path $updaterRoot -Destination $backupUpdaterRoot
     }
+    if (Test-Path $maintenanceRoot) {
+        Move-Item -Path $maintenanceRoot -Destination $backupMaintenanceRoot
+    }
+    if (Test-Path $statePath -PathType Leaf) {
+        Copy-Item -Path $statePath -Destination $backupStatePath -Force
+    }
+    if (Test-Path $updateSettingsPath -PathType Leaf) {
+        Copy-Item -Path $updateSettingsPath -Destination $backupUpdateSettingsPath -Force
+    }
 
-    New-Item -ItemType Directory -Force -Path $InstallRoot, $updaterRoot | Out-Null
+    New-Item -ItemType Directory -Force -Path $InstallRoot, $updaterRoot, $maintenanceRoot | Out-Null
     Move-Item -Path $desktopStage -Destination (Join-Path $InstallRoot 'Desktop')
     Move-Item -Path $serviceStage -Destination (Join-Path $InstallRoot 'Service')
     Copy-Item -Path (Join-Path $updaterSource '*') -Destination $updaterRoot -Recurse -Force
@@ -246,9 +260,6 @@ try {
     New-ItemProperty -Path $uninstallKey -Name NoModify -Value 1 -PropertyType DWord -Force | Out-Null
     New-ItemProperty -Path $uninstallKey -Name NoRepair -Value 1 -PropertyType DWord -Force | Out-Null
 
-    if (Test-Path $backupRoot) {
-        Write-Host "Previous installation backup retained at: $backupRoot"
-    }
     Write-Host "Installed TaskMonitoring Employee Workspace $($manifest.version)."
     Write-Host "Server: $($serverUri.AbsoluteUri.TrimEnd('/'))"
     Write-Host "Install root: $InstallRoot"
@@ -256,7 +267,12 @@ try {
 }
 catch {
     Write-Warning "Installation failed. Attempting rollback: $($_.Exception.Message)"
+    & schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
     try { Stop-TaskMonitoringEmployeeService -ServiceName $serviceName } catch { }
+
+    if (-not $serviceExisted -and $null -ne (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)) {
+        & sc.exe delete $serviceName | Out-Null
+    }
 
     if ($activatedNewInstall -and (Test-Path $InstallRoot)) {
         Remove-Item -Recurse -Force $InstallRoot
@@ -264,16 +280,50 @@ catch {
     if ($activatedNewInstall -and (Test-Path $updaterRoot)) {
         Remove-Item -Recurse -Force $updaterRoot
     }
+    if (Test-Path $maintenanceRoot) {
+        Remove-Item -Recurse -Force $maintenanceRoot -ErrorAction SilentlyContinue
+    }
     if (Test-Path $backupInstallRoot) {
         Move-Item -Path $backupInstallRoot -Destination $InstallRoot
     }
     if (Test-Path $backupUpdaterRoot) {
         Move-Item -Path $backupUpdaterRoot -Destination $updaterRoot
     }
+    if (Test-Path $backupMaintenanceRoot) {
+        Move-Item -Path $backupMaintenanceRoot -Destination $maintenanceRoot
+    }
+
+    if (Test-Path $backupStatePath -PathType Leaf) {
+        Copy-Item -Path $backupStatePath -Destination $statePath -Force
+    }
+    else {
+        Remove-Item -Force $statePath -ErrorAction SilentlyContinue
+    }
+    if (Test-Path $backupUpdateSettingsPath -PathType Leaf) {
+        Copy-Item -Path $backupUpdateSettingsPath -Destination $updateSettingsPath -Force
+    }
+    else {
+        Remove-Item -Force $updateSettingsPath -ErrorAction SilentlyContinue
+    }
 
     if ($serviceExisted) {
         try { Start-TaskMonitoringEmployeeService -ServiceName $serviceName } catch { }
     }
+
+    if ($updateTaskExisted) {
+        $restoredUpdaterExe = Join-Path $updaterRoot 'TaskMonitoring.EmployeeUpdater.exe'
+        if ((Test-Path $restoredUpdaterExe -PathType Leaf) -and (Test-Path $updateSettingsPath -PathType Leaf)) {
+            $restoredTaskCommand = ('"{0}" --settings "{1}"' -f $restoredUpdaterExe, $updateSettingsPath)
+            & schtasks.exe /Create /TN $taskName /TR $restoredTaskCommand /SC HOURLY /MO 4 /RU SYSTEM /RL HIGHEST /F | Out-Null
+        }
+    }
+
+    if (-not $serviceExisted) {
+        Remove-Item -Force (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\TaskMonitoring Employee Workspace.lnk') -ErrorAction SilentlyContinue
+        Remove-Item -Force (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'TaskMonitoring Employee Workspace.lnk') -ErrorAction SilentlyContinue
+        Remove-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\TaskMonitoringEmployee' -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     throw
 }
 finally {
