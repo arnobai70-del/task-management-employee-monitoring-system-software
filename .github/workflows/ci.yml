@@ -2,42 +2,55 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch:
-    name: Patch Attendance Core break persistence
+  backend:
+    name: Backend build and tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: task_monitoring_tests
+          POSTGRES_USER: task_monitoring
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U task_monitoring -d task_monitoring_tests"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=task_monitoring_tests;Username=task_monitoring;Password=ci-${{ github.run_id }}
     steps:
-      - name: Checkout feature branch
+      - name: Checkout
         uses: actions/checkout@v5
-        with:
-          ref: feature/attendance-core
 
-      - name: Apply persistence fix and push
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('src/Backend/TaskMonitoring.Api/Services/AttendanceCoreService.cs')
-          text = path.read_text()
-          old_check = 'if (session.Breaks.Any(x => !x.EndedAtUtc.HasValue))'
-          new_check = '''if (await dbContext.WorkBreaks.AnyAsync(
-              x => x.WorkSessionId == session.Id && !x.EndedAtUtc.HasValue,
-              cancellationToken))'''
-          if old_check not in text:
-              raise SystemExit('Expected open-break check not found')
-          text = text.replace(old_check, new_check, 1)
-          old_add = 'session.Breaks.Add(workBreak);'
-          if old_add not in text:
-              raise SystemExit('Expected break collection add not found')
-          text = text.replace(old_add, 'dbContext.WorkBreaks.Add(workBreak);', 1)
-          path.write_text(text)
-          PY
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/Backend/TaskMonitoring.Api/Services/AttendanceCoreService.cs
-          git commit -m "fix: persist attendance breaks explicitly"
-          git push origin HEAD:feature/attendance-core
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Restore
+        run: dotnet restore TaskMonitoring.slnx
+
+      - name: Build
+        run: dotnet build TaskMonitoring.slnx --configuration Release --no-restore
+
+      - name: Verify EF model matches migrations
+        env:
+          TASK_MONITORING_DESIGN_CONNECTION: ${{ env.TEST_POSTGRES_CONNECTION }}
+        run: dotnet ef migrations has-pending-model-changes --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build
+
+      - name: Test
+        run: dotnet test tests/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --no-restore
