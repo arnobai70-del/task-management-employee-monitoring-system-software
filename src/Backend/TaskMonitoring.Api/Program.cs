@@ -40,6 +40,7 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmployeeCoreService, EmployeeCoreService>();
 builder.Services.AddScoped<IAttendanceCoreService, AttendanceCoreService>();
+builder.Services.AddScoped<IProjectTaskCoreService, ProjectTaskCoreService>();
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

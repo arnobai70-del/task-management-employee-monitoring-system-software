@@ -114,6 +114,56 @@ public sealed class DatabaseMigrationTests
             EndedAtUtc = DateTime.Parse("2026-09-29T07:15:00Z").ToUniversalTime(),
             DurationMinutes = 15
         };
+        var project = new Project
+        {
+            Code = "MIG-PRJ",
+            NormalizedCode = "MIG-PRJ",
+            Name = "Migration Project",
+            NormalizedName = "MIGRATION PROJECT",
+            Status = ProjectStatus.Active,
+            StartDate = new DateOnly(2026, 9, 1),
+            DueDate = new DateOnly(2026, 10, 31)
+        };
+        var projectMember = new ProjectMember
+        {
+            ProjectId = project.Id,
+            Project = project,
+            EmployeeId = employee.Id,
+            Employee = employee,
+            Role = ProjectMemberRole.Manager,
+            IsActive = true
+        };
+        var projectTask = new ProjectTask
+        {
+            ProjectId = project.Id,
+            Project = project,
+            Title = "Migration Project Task",
+            NormalizedTitle = "MIGRATION PROJECT TASK",
+            Status = ProjectTaskStatus.InProgress,
+            Priority = ProjectTaskPriority.High,
+            AssigneeEmployeeId = employee.Id,
+            AssigneeEmployee = employee,
+            DueDate = new DateOnly(2026, 10, 15),
+            CreatedByUserId = user.Id,
+            CreatedByUser = user
+        };
+        var taskComment = new TaskComment
+        {
+            ProjectTaskId = projectTask.Id,
+            ProjectTask = projectTask,
+            AuthorUserId = user.Id,
+            AuthorUser = user,
+            Body = "Migration comment"
+        };
+        var taskActivity = new TaskActivity
+        {
+            ProjectTaskId = projectTask.Id,
+            ProjectTask = projectTask,
+            ActorUserId = user.Id,
+            ActorUser = user,
+            Action = "task.created",
+            DetailsJson = "{}"
+        };
 
         db.Users.Add(user);
         db.Departments.Add(department);
@@ -122,6 +172,11 @@ public sealed class DatabaseMigrationTests
         db.EmployeeShiftAssignments.Add(assignment);
         db.WorkSessions.Add(workSession);
         db.WorkBreaks.Add(workBreak);
+        db.Projects.Add(project);
+        db.ProjectMembers.Add(projectMember);
+        db.ProjectTasks.Add(projectTask);
+        db.TaskComments.Add(taskComment);
+        db.TaskActivities.Add(taskActivity);
         await db.SaveChangesAsync(cancellationToken);
 
         Assert.Equal(1, await db.Users.CountAsync(cancellationToken));
@@ -131,5 +186,10 @@ public sealed class DatabaseMigrationTests
         Assert.Equal(1, await db.EmployeeShiftAssignments.CountAsync(cancellationToken));
         Assert.Equal(1, await db.WorkSessions.CountAsync(cancellationToken));
         Assert.Equal(1, await db.WorkBreaks.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.Projects.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.ProjectMembers.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.ProjectTasks.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.TaskComments.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.TaskActivities.CountAsync(cancellationToken));
     }
 }

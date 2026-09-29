@@ -13,6 +13,11 @@ public static class PermissionCatalog
     public const string ShiftsRead = "shifts.read";
     public const string ShiftsManage = "shifts.manage";
     public const string AttendanceRead = "attendance.read";
+    public const string ProjectsRead = "projects.read";
+    public const string ProjectsManage = "projects.manage";
+    public const string TasksRead = "tasks.read";
+    public const string TasksManage = "tasks.manage";
+    public const string TasksComment = "tasks.comment";
     public const string AuditRead = "audit.read";
 
     public static readonly IReadOnlyDictionary<string, string> Definitions = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -28,6 +33,11 @@ public static class PermissionCatalog
         [ShiftsRead] = "View shift definitions and employee shift assignments.",
         [ShiftsManage] = "Create and update shifts and assign shifts to employees.",
         [AttendanceRead] = "View organization-wide attendance and work-session records.",
+        [ProjectsRead] = "View projects and project membership.",
+        [ProjectsManage] = "Create and update projects and manage project membership.",
+        [TasksRead] = "View project tasks, comments, and activity history.",
+        [TasksManage] = "Create, edit, assign, and transition project tasks.",
+        [TasksComment] = "Add comments to project tasks.",
         [AuditRead] = "View security and administrative audit logs."
     };
 
