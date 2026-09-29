@@ -302,7 +302,11 @@ public sealed class MainForm : Form
         {
             await _apiClient.LogoutAsync(_lifetime.Token);
         }
-        catch (Exception exception) when (exception is ApiClientException or HttpRequestException)
+        catch (ApiClientException)
+        {
+            // Local credentials are cleared even when the server rejects the request.
+        }
+        catch (HttpRequestException)
         {
             // Local credentials are cleared even when the server cannot be reached.
         }
@@ -494,7 +498,11 @@ public sealed class MainForm : Form
             var intervalSeconds = Math.Clamp(response.RecommendedIntervalSeconds, 30, 300);
             _heartbeatTimer.Interval = checked(intervalSeconds * 1000);
         }
-        catch (Exception exception) when (exception is ApiClientException or HttpRequestException)
+        catch (ApiClientException)
+        {
+            _heartbeatLabel.Text = $"Connection issue - {DateTime.Now:T}. Attendance actions require the server.";
+        }
+        catch (HttpRequestException)
         {
             _heartbeatLabel.Text = $"Connection issue - {DateTime.Now:T}. Attendance actions require the server.";
         }
