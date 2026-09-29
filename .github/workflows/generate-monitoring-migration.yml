@@ -1,0 +1,43 @@
+name: Generate monitoring migration
+
+on:
+  push:
+    branches:
+      - feature/transparent-monitoring-telemetry
+    paths:
+      - .github/workflows/generate-monitoring-migration.yml
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet tool restore
+      - run: dotnet restore TaskMonitoring.slnx
+      - name: Generate migration
+        env:
+          TASK_MONITORING_DESIGN_CONNECTION: Host=localhost;Port=5432;Database=design;Username=design;Password=design
+        run: >-
+          dotnet ef migrations add TransparentMonitoringTelemetry
+          --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj
+          --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj
+          --output-dir Migrations
+      - name: Collect generated files
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/monitoring-migration"
+          git status --short src/Backend/TaskMonitoring.Api/Migrations
+          for file in $(git status --short src/Backend/TaskMonitoring.Api/Migrations | awk '{print $2}'); do
+            cp --parents "$file" "${{ runner.temp }}/monitoring-migration"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: monitoring-migration
+          path: ${{ runner.temp }}/monitoring-migration
+          if-no-files-found: error
