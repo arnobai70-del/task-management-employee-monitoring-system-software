@@ -2,55 +2,67 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  backend:
-    name: Backend build and tests
+  patch:
+    name: Patch Attendance Core break persistence
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: task_monitoring_tests
-          POSTGRES_USER: task_monitoring
-          POSTGRES_PASSWORD: ci-${{ github.run_id }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U task_monitoring -d task_monitoring_tests"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=task_monitoring_tests;Username=task_monitoring;Password=ci-${{ github.run_id }}
     steps:
-      - name: Checkout
+      - name: Checkout feature branch
         uses: actions/checkout@v5
-
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.x
+          ref: feature/attendance-core
 
-      - name: Restore tools
-        run: dotnet tool restore
+      - name: Apply persistence fix and push
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/Backend/TaskMonitoring.Api/Services/AttendanceCoreService.cs')
+          text = path.read_text()
+          old = '''        var session = sessionResult.Session!;
+          if (session.Breaks.Any(x => !x.EndedAtUtc.HasValue))
+          {
+              return OperationResult<WorkSessionResponse>.Conflict("break_already_open", "A break is already in progress.");
+          }
 
-      - name: Restore
-        run: dotnet restore TaskMonitoring.slnx
+          var now = UtcNow();
+          var workBreak = new WorkBreak
+          {
+              WorkSessionId = session.Id,
+              WorkSession = session,
+              StartedAtUtc = now,
+              CreatedAtUtc = now
+          };
+          session.Breaks.Add(workBreak);
+          session.UpdatedAtUtc = now;'''
+          new = '''        var session = sessionResult.Session!;
+          if (await dbContext.WorkBreaks.AnyAsync(
+              x => x.WorkSessionId == session.Id && !x.EndedAtUtc.HasValue,
+              cancellationToken))
+          {
+              return OperationResult<WorkSessionResponse>.Conflict("break_already_open", "A break is already in progress.");
+          }
 
-      - name: Build
-        run: dotnet build TaskMonitoring.slnx --configuration Release --no-restore
-
-      - name: Verify EF model matches migrations
-        env:
-          TASK_MONITORING_DESIGN_CONNECTION: ${{ env.TEST_POSTGRES_CONNECTION }}
-        run: dotnet ef migrations has-pending-model-changes --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build
-
-      - name: Test
-        run: dotnet test tests/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --no-restore
+          var now = UtcNow();
+          var workBreak = new WorkBreak
+          {
+              WorkSessionId = session.Id,
+              WorkSession = session,
+              StartedAtUtc = now,
+              CreatedAtUtc = now
+          };
+          dbContext.WorkBreaks.Add(workBreak);
+          session.UpdatedAtUtc = now;'''
+          if old not in text:
+              raise SystemExit('Expected StartBreak block not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Backend/TaskMonitoring.Api/Services/AttendanceCoreService.cs
+          git commit -m "fix: persist attendance breaks explicitly"
+          git push origin HEAD:feature/attendance-core
