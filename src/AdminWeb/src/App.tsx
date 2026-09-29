@@ -2,6 +2,9 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
+import AccessAssignmentsPage from './AccessAssignments';
+import { DepartmentManagementPage, EmployeeManagementPage } from './EmployeeDepartmentManagement';
+import { ProjectManagementPage, ShiftManagementPage, TaskManagementPage } from './WorkManagement';
 import type {
   AttendanceDailyMetric,
   DashboardOverview,
@@ -24,10 +27,15 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', short: 'DB', permission: 'reports.read' },
   { path: '/employees', label: 'Employees', short: 'EM', permission: 'employees.read' },
+  { path: '/departments', label: 'Departments', short: 'DP', permission: 'departments.read' },
+  { path: '/shifts', label: 'Shifts', short: 'SH', permission: 'shifts.read' },
   { path: '/attendance', label: 'Attendance', short: 'AT', permission: 'attendance.read' },
   { path: '/projects', label: 'Projects', short: 'PR', permission: 'projects.read' },
   { path: '/tasks', label: 'Tasks', short: 'TK', permission: 'tasks.read' },
-  { path: '/surveys', label: 'Surveys', short: 'SV', permission: 'surveys.read' }
+  { path: '/surveys', label: 'Surveys', short: 'SV', permission: 'surveys.read' },
+  { path: '/access/rdp', label: 'RDP Assign', short: 'RD', permission: 'access.assignments.read' },
+  { path: '/access/ip', label: 'IP Assign', short: 'IP', permission: 'access.assignments.read' },
+  { path: '/access/websites', label: 'Website Assign', short: 'WB', permission: 'access.assignments.read' }
 ];
 
 function firstAllowedPath(can: (permission: string) => boolean): string {
@@ -331,11 +339,16 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/dashboard" element={<ProtectedPage permission="reports.read"><DashboardPage /></ProtectedPage>} />
-      <Route path="/employees" element={<ProtectedPage permission="employees.read"><EmployeesPage /></ProtectedPage>} />
+      <Route path="/employees" element={<ProtectedPage permission="employees.read"><EmployeeManagementPage /></ProtectedPage>} />
+      <Route path="/departments" element={<ProtectedPage permission="departments.read"><DepartmentManagementPage /></ProtectedPage>} />
+      <Route path="/shifts" element={<ProtectedPage permission="shifts.read"><ShiftManagementPage /></ProtectedPage>} />
       <Route path="/attendance" element={<ProtectedPage permission="attendance.read"><AttendancePage /></ProtectedPage>} />
-      <Route path="/projects" element={<ProtectedPage permission="projects.read"><ProjectsPage /></ProtectedPage>} />
-      <Route path="/tasks" element={<ProtectedPage permission="tasks.read"><TasksPage /></ProtectedPage>} />
+      <Route path="/projects" element={<ProtectedPage permission="projects.read"><ProjectManagementPage /></ProtectedPage>} />
+      <Route path="/tasks" element={<ProtectedPage permission="tasks.read"><TaskManagementPage /></ProtectedPage>} />
       <Route path="/surveys" element={<ProtectedPage permission="surveys.read"><SurveysPage /></ProtectedPage>} />
+      <Route path="/access/rdp" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="rdp" /></ProtectedPage>} />
+      <Route path="/access/ip" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="ip" /></ProtectedPage>} />
+      <Route path="/access/websites" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="websites" /></ProtectedPage>} />
       <Route path="/forbidden" element={<ForbiddenPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
