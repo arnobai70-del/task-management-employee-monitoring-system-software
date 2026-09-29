@@ -115,9 +115,10 @@ public sealed class EmployeeDesktopService(
         var clientVersion = request.ClientVersion.Trim();
         var platform = request.Platform.Trim();
         var state = attendanceResult.Value.State.ToString();
+        var presenceSet = dbContext.Set<EmployeeClientPresence>();
 
-        var presence = await dbContext.EmployeeClientPresences
-            .SingleOrDefaultAsync(x => x.EmployeeId == employee.Id, cancellationToken);
+        var presence = await presenceSet.SingleOrDefaultAsync(x => x.EmployeeId == employee.Id, cancellationToken);
+        var added = presence is null;
 
         if (presence is null)
         {
@@ -131,7 +132,7 @@ public sealed class EmployeeDesktopService(
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
             };
-            dbContext.EmployeeClientPresences.Add(presence);
+            presenceSet.Add(presence);
         }
         else
         {
@@ -142,11 +143,10 @@ public sealed class EmployeeDesktopService(
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException) when (presence.EntityWasAdded(dbContext))
+        catch (DbUpdateException) when (added)
         {
             dbContext.Entry(presence).State = EntityState.Detached;
-            presence = await dbContext.EmployeeClientPresences
-                .SingleAsync(x => x.EmployeeId == employee.Id, cancellationToken);
+            presence = await presenceSet.SingleAsync(x => x.EmployeeId == employee.Id, cancellationToken);
             ApplyHeartbeat(presence, clientVersion, platform, state, now);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
@@ -168,7 +168,7 @@ public sealed class EmployeeDesktopService(
         pageSize = Math.Clamp(pageSize, 1, 100);
         var cutoff = UtcNow().AddSeconds(-OnlineWindowSeconds);
 
-        var query = dbContext.EmployeeClientPresences
+        var query = dbContext.Set<EmployeeClientPresence>()
             .AsNoTracking()
             .Where(x => x.Employee.IsActive);
 
@@ -261,10 +261,4 @@ public sealed class EmployeeDesktopService(
         string? DepartmentName,
         string? SupervisorName,
         bool IsActive);
-}
-
-file static class EmployeeClientPresenceExtensions
-{
-    public static bool EntityWasAdded(this EmployeeClientPresence presence, AppDbContext dbContext)
-        => dbContext.Entry(presence).State == EntityState.Added;
 }
