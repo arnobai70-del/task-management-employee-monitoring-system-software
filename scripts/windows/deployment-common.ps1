@@ -41,6 +41,29 @@ function ConvertTo-TaskMonitoringVersion {
     return [Version]::new([int]$Matches[1], [int]$Matches[2], [int]$Matches[3])
 }
 
+function Assert-TaskMonitoringFileVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedVersion
+    )
+
+    $expected = ConvertTo-TaskMonitoringVersion -Value $ExpectedVersion
+    $fileVersionText = [Diagnostics.FileVersionInfo]::GetVersionInfo($Path).FileVersion
+    if ([string]::IsNullOrWhiteSpace($fileVersionText)) {
+        throw "Executable version metadata is missing from '$Path'."
+    }
+
+    $fileVersion = $null
+    if (-not [Version]::TryParse(($fileVersionText -split '[+-]')[0], [ref]$fileVersion)) {
+        throw "Executable version metadata '$fileVersionText' is invalid for '$Path'."
+    }
+
+    $actual = [Version]::new($fileVersion.Major, $fileVersion.Minor, [Math]::Max(0, $fileVersion.Build))
+    if ($actual -ne $expected) {
+        throw "Executable version mismatch for '$Path'. Expected $expected; actual $actual."
+    }
+}
+
 function Write-TaskMonitoringJson {
     param(
         [Parameter(Mandatory = $true)]$Value,
