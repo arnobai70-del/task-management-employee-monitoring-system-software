@@ -32,6 +32,9 @@ public sealed class Employee
     public Guid? SupervisorEmployeeId { get; set; }
     public Employee? Supervisor { get; set; }
     public ICollection<Employee> DirectReports { get; set; } = new List<Employee>();
+    public ICollection<RdpAssignment> RdpAssignments { get; set; } = new List<RdpAssignment>();
+    public ICollection<IpAssignment> IpAssignments { get; set; } = new List<IpAssignment>();
+    public ICollection<WebsiteAssignment> WebsiteAssignments { get; set; } = new List<WebsiteAssignment>();
     public string EmployeeCode { get; set; } = string.Empty;
     public string NormalizedEmployeeCode { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
