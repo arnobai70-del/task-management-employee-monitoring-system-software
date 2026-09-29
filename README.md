@@ -4,11 +4,26 @@ A centralized, internet-required task management, attendance, survey operations,
 
 ## Status
 
-Development has started. The repository now contains the backend foundation: ASP.NET Core API structure, PostgreSQL/EF Core data model and committed migration, JWT authentication with rotating refresh tokens, database-backed roles/permissions, security audit logging, API rate limiting, health/OpenAPI endpoints, automated tests, and CI.
+Development is active. The repository now contains the secure backend foundation plus the first Employee Core slice.
 
-CI validates a warning-free Release build, Entity Framework model/migration consistency, authentication behavior, and the initial migration against a real PostgreSQL service.
+Implemented backend capabilities include:
 
-The employee desktop client, background Windows service, admin web dashboard, attendance, project/task, survey, reporting, and realtime modules are not yet implemented.
+- ASP.NET Core / .NET 10 API foundation.
+- PostgreSQL + Entity Framework Core with source-controlled migrations.
+- JWT access tokens and rotating opaque refresh tokens.
+- Database-backed roles and permissions.
+- Login lockout, authentication rate limiting, and security audit logging.
+- Department create/read/update and activation state management.
+- Employee provisioning with user account creation, password hashing, department assignment, supervisor assignment, and role assignment.
+- Employee search/filter/paging and profile updates.
+- Reporting-line cycle prevention and self-access protection.
+- Non-destructive employee deactivation with active refresh-token revocation.
+- Permission-protected Employee Core APIs; role assignment requires both employee-management and role-management authority.
+- Health/OpenAPI endpoints, automated tests, EF model-drift checks, and PostgreSQL migration validation in CI.
+
+CI currently validates a warning-free Release build, Entity Framework model/migration consistency, authentication behavior, Employee Core business rules, and the complete migration chain against a fresh PostgreSQL service.
+
+The employee desktop client, background Windows service, admin web dashboard, attendance/work-session, project/task, survey, reporting, notification, realtime-presence, installer, and update modules are not yet implemented.
 
 ## Architecture
 
@@ -45,6 +60,9 @@ Normal employee functionality is intentionally internet/server dependent. The sy
 src/
   Backend/
     TaskMonitoring.Api/
+      Controllers/
+      Domain/
+      Services/
       Migrations/
 tests/
   Backend.Tests/
@@ -53,6 +71,18 @@ docs/
 ```
 
 Additional clients will be added as their phases begin; backend business rules should not be duplicated in clients.
+
+## Employee Core API surface
+
+The current administration surface includes:
+
+- `/api/departments` — department listing, creation, and updates.
+- `/api/employees` — employee listing/search, provisioning, detail lookup, and updates/deactivation.
+- `/api/roles` — role lookup used by employee administration.
+
+Employee and department read/write operations use dedicated permission policies. Creating or updating an employee includes role assignment, so those write operations also require `roles.manage`; this prevents an employee manager from escalating another account to a privileged role without role-management authority.
+
+Employee records are not hard-deleted. Deactivation preserves audit/history references, disables the linked user account, and revokes its active refresh tokens.
 
 ## Local prerequisites
 
@@ -97,11 +127,11 @@ dotnet ef database update \
 
 Production should apply migrations deliberately during deployment and keep `Database__AutoMigrate=false`. Local development may set `Database__AutoMigrate=true` when automatic migration on API startup is useful.
 
-After changing EF entities or mappings, add and commit a migration. CI also rejects model changes that do not have a matching migration.
+After changing EF entities or mappings, add and commit a migration. CI rejects model changes that do not have a matching migration and also applies the complete migration chain to a fresh PostgreSQL database.
 
 ## Run the API
 
-Export the required ASP.NET Core environment variables from your secret store or shell, ensure the database migration has been applied, then:
+Export the required ASP.NET Core environment variables from your secret store or shell, ensure the database migrations have been applied, then:
 
 ```bash
 dotnet restore TaskMonitoring.slnx
@@ -132,8 +162,10 @@ The database migration test expects `TEST_POSTGRES_CONNECTION` to point to an is
 - No plain-text passwords.
 - No secrets or production credentials in source control.
 - Server-side authentication, authorization, and validation are mandatory.
+- Privilege-bearing role assignment requires explicit role-management authority.
 - Refresh tokens are random opaque values and only their SHA-256 hashes are stored.
-- Important authentication events are audited.
+- Deactivating an employee revokes active refresh tokens and disables the linked account.
+- Important authentication and administration events are audited.
 - Hidden spyware behavior, keylogging, password capture, covert camera/microphone activation, and unrelated private-file collection are explicitly out of scope.
 - Any future screenshot, app-usage, URL, or location telemetry must have a legitimate business need, clear disclosure, permissions, and retention controls.
 
