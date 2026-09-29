@@ -1,6 +1,6 @@
 import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { useEffect, useMemo, useState } from 'react';
-import { apiFetch, apiUrl, readSession } from './api';
+import { apiFetch, apiUrl, getValidAccessToken } from './api';
 import { useAuth } from './auth';
 
 interface PresenceItem {
@@ -61,9 +61,7 @@ export default function PresencePanel() {
   useEffect(() => {
     if (!allowed) return;
     const connection = new HubConnectionBuilder()
-      .withUrl(apiUrl('/hubs/realtime'), {
-        accessTokenFactory: () => readSession()?.accessToken ?? ''
-      })
+      .withUrl(apiUrl('/hubs/realtime'), { accessTokenFactory: getValidAccessToken })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .configureLogging(LogLevel.Warning)
       .build();
