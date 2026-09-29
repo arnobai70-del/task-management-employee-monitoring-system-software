@@ -8,9 +8,6 @@
     <RootNamespace>TaskMonitoring.EmployeeDesktop</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="../TaskMonitoring.Employee.Shared/TaskMonitoring.Employee.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>
