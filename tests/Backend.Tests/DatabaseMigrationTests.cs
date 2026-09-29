@@ -12,7 +12,7 @@ namespace Backend.Tests;
 public sealed class DatabaseMigrationTests
 {
     [Fact]
-    public async Task Initial_migration_applies_to_real_postgres_and_foundation_seed_is_idempotent()
+    public async Task Migrations_apply_to_real_postgres_and_foundation_seed_is_idempotent()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var connectionString = Environment.GetEnvironmentVariable("TEST_POSTGRES_CONNECTION");
@@ -45,14 +45,39 @@ public sealed class DatabaseMigrationTests
             .SingleAsync(x => x.Name == "SuperAdmin", cancellationToken);
         Assert.Equal(PermissionCatalog.Definitions.Count, superAdmin.RolePermissions.Count);
 
-        db.Users.Add(new User
+        var user = new User
         {
             Email = "migration-test@example.com",
             NormalizedEmail = "MIGRATION-TEST@EXAMPLE.COM",
             PasswordHash = "ci-test-hash"
-        });
+        };
+        var department = new Department
+        {
+            Code = "QA",
+            NormalizedCode = "QA",
+            Name = "Quality Assurance",
+            NormalizedName = "QUALITY ASSURANCE"
+        };
+        var employee = new Employee
+        {
+            UserId = user.Id,
+            User = user,
+            DepartmentId = department.Id,
+            Department = department,
+            EmployeeCode = "MIG-001",
+            NormalizedEmployeeCode = "MIG-001",
+            FullName = "Migration Test Employee",
+            NormalizedFullName = "MIGRATION TEST EMPLOYEE",
+            JobTitle = "QA Engineer"
+        };
+
+        db.Users.Add(user);
+        db.Departments.Add(department);
+        db.Employees.Add(employee);
         await db.SaveChangesAsync(cancellationToken);
 
         Assert.Equal(1, await db.Users.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.Departments.CountAsync(cancellationToken));
+        Assert.Equal(1, await db.Employees.CountAsync(cancellationToken));
     }
 }

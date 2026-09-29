@@ -12,6 +12,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Department> Departments => Set<Department>();
+    public DbSet<Employee> Employees => Set<Employee>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -82,6 +84,39 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.UserAgent).HasMaxLength(512);
             entity.HasIndex(x => x.CreatedAtUtc);
             entity.HasIndex(x => new { x.ActorUserId, x.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<Department>(entity =>
+        {
+            entity.ToTable("departments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.NormalizedCode).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.NormalizedName).HasMaxLength(150).IsRequired();
+            entity.HasIndex(x => x.NormalizedCode).IsUnique();
+            entity.HasIndex(x => x.NormalizedName).IsUnique();
+        });
+
+        modelBuilder.Entity<Employee>(entity =>
+        {
+            entity.ToTable("employees");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EmployeeCode).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.NormalizedEmployeeCode).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.NormalizedFullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.JobTitle).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Phone).HasMaxLength(50);
+            entity.Property(x => x.EmploymentType).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => x.UserId).IsUnique();
+            entity.HasIndex(x => x.NormalizedEmployeeCode).IsUnique();
+            entity.HasIndex(x => x.NormalizedFullName);
+            entity.HasIndex(x => x.DepartmentId);
+            entity.HasIndex(x => x.SupervisorEmployeeId);
+            entity.HasOne(x => x.User).WithOne(x => x.Employee).HasForeignKey<Employee>(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Department).WithMany(x => x.Employees).HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Supervisor).WithMany(x => x.DirectReports).HasForeignKey(x => x.SupervisorEmployeeId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
