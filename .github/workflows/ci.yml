@@ -54,3 +54,25 @@ jobs:
 
       - name: Test
         run: dotnet test tests/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --no-restore
+
+  admin-web:
+    name: Admin web build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/AdminWeb
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Type-check and build
+        run: npm run build
