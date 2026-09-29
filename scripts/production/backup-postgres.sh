@@ -52,8 +52,11 @@ fi
 
 cat "$temporary_path" | compose exec -T postgres pg_restore --list >/dev/null
 mv "$temporary_path" "$backup_path"
-sha256sum "$(basename "$backup_path")" > "$backup_path.sha256.tmp"
-mv "$backup_path.sha256.tmp" "$backup_path.sha256"
+(
+  cd "$backup_root"
+  sha256sum "$(basename "$backup_path")" > "$(basename "$backup_path").sha256.tmp"
+  mv "$(basename "$backup_path").sha256.tmp" "$(basename "$backup_path").sha256"
+)
 chmod 600 "$backup_path" "$backup_path.sha256"
 
 printf '%s\n' "$backup_path"
