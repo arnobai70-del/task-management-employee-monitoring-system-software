@@ -44,6 +44,7 @@ builder.Services.AddScoped<IProjectTaskCoreService, ProjectTaskCoreService>();
 builder.Services.AddScoped<ISurveyCoreService, SurveyCoreService>();
 builder.Services.AddScoped<IReportingDashboardService, ReportingDashboardService>();
 builder.Services.AddScoped<IAccessAssignmentService, AccessAssignmentService>();
+builder.Services.AddScoped<IEmployeeDesktopService, EmployeeDesktopService>();
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

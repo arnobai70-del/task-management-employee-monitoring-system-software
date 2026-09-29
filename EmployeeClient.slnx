@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/EmployeeDesktop/TaskMonitoring.Employee.Shared/TaskMonitoring.Employee.Shared.csproj" />
+  <Project Path="src/EmployeeDesktop/TaskMonitoring.EmployeeDesktop/TaskMonitoring.EmployeeDesktop.csproj" />
+  <Project Path="src/EmployeeAgent/TaskMonitoring.EmployeeAgent/TaskMonitoring.EmployeeAgent.csproj" />
+  <Project Path="tests/EmployeeClient.Tests/EmployeeClient.Tests.csproj" />
+</Solution>

@@ -35,6 +35,7 @@ public sealed class Employee
     public ICollection<RdpAssignment> RdpAssignments { get; set; } = new List<RdpAssignment>();
     public ICollection<IpAssignment> IpAssignments { get; set; } = new List<IpAssignment>();
     public ICollection<WebsiteAssignment> WebsiteAssignments { get; set; } = new List<WebsiteAssignment>();
+    public EmployeeClientPresence? ClientPresence { get; set; }
     public string EmployeeCode { get; set; } = string.Empty;
     public string NormalizedEmployeeCode { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;

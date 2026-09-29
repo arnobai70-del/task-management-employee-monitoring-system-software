@@ -1,6 +1,6 @@
 # Task Management & Employee Monitoring System
 
-A centralized, internet-required task management, attendance, survey operations, reporting, and transparent employee work-monitoring platform for development teams and survey/field teams.
+A centralized, internet-required task management, attendance, survey operations, reporting, access-assignment, and transparent employee work-status platform for development teams and survey/field teams.
 
 ## Status
 
@@ -13,19 +13,27 @@ Development is active. Implemented milestones now include:
 - Employee Core: departments, employee provisioning, supervisors, roles, activation/deactivation, search and paging.
 - Attendance Core: shifts, effective-dated assignments, check-in/out, breaks, late/early calculation and overnight-shift handling.
 - Project / Task Core: projects, membership, task assignment, priorities, due dates, guarded status transitions, comments and activity history.
-- Survey / Field Operations Core: forms, typed questions, field assignments, drafts/submission, immutable revisions and supervisor review.
+- Survey / Field Operations Core: forms, typed questions, field assignments, drafts/submission, immutable revisions and supervisor review APIs.
 - Reporting / Dashboard API Core: workforce, attendance, projects, tasks, employee workload and survey progress.
-- Admin Web foundation: authenticated responsive React console with permission-aware navigation plus live Dashboard, Employees, Attendance, Projects, Tasks and Surveys read views.
-- GitHub Actions quality gates for backend build/tests, EF migration drift, PostgreSQL integration paths and Admin Web TypeScript/Vite production builds.
+- Admin Web: authenticated responsive React console with permission-aware navigation; management workflows for employees, departments, shifts, projects, project membership, tasks, and RDP/IP/website assignments; Survey UI remains read-only in the current console.
+- Access Assignment Core: audited RDP/IP/website assignment management without storing reusable passwords, private keys or session cookies.
+- Employee Desktop Client: Windows employee login, secure rotating session persistence, attendance controls, assigned task/access views, visible heartbeat/status, explicit privacy disclosure and opt-in per-user Windows startup.
+- Employee Windows Agent: credential-free backend health/connectivity service separated from employee authentication and activity data.
+- GitHub Actions quality gates for backend build/tests, EF migration drift, PostgreSQL integration paths, Admin Web production builds, and Windows employee client/agent builds and tests.
 
-Still pending: Admin Web write/management workflows, employee desktop client, background Windows service, realtime presence, notifications, approved transparent monitoring telemetry, installer and updater.
+Still pending for later milestones: dedicated Admin Web realtime/presence screen, Survey management write UI, notifications, approved additional transparent telemetry (if a legitimate requirement is defined), signed installer package, automatic updater, and production deployment hardening.
 
 ## Architecture
 
 ```text
 Employee PC
-  -> Desktop Client (planned)
-  -> Background Monitoring Service (planned)
+  -> Employee Desktop Client
+       -> Login / rotating refresh token protected with Windows DPAPI
+       -> Attendance self-service
+       -> Assigned tasks and business access
+       -> Visible authenticated heartbeat
+  -> Windows Employee Agent
+       -> Credential-free backend /health connectivity check only
   -> Internet / HTTPS
   -> ASP.NET Core API
   -> PostgreSQL
@@ -42,10 +50,12 @@ Normal employee functionality is intentionally server/internet dependent. The pr
 - Authentication: JWT access tokens + rotating opaque refresh tokens
 - Authorization: database-backed roles and permissions
 - Admin Web: React 19 + TypeScript + Vite + React Router
+- Employee Desktop: C# / .NET 10 Windows Forms
+- Windows Agent: .NET 10 Worker/Windows Service
+- Employee desktop local secret protection: Windows DPAPI, current-user scope
 - API documentation: OpenAPI
-- Backend tests: xUnit v3 on Microsoft Testing Platform
-- CI: GitHub Actions
-- Planned desktop/background agent: C#/.NET Windows applications/services
+- Backend/client tests: xUnit v3 on Microsoft Testing Platform
+- CI: GitHub Actions on Linux and Windows runners
 - Planned realtime: SignalR
 
 ## Repository structure
@@ -67,11 +77,22 @@ src/
     package.json
     vite.config.ts
     tsconfig.json
+  EmployeeDesktop/
+    TaskMonitoring.Employee.Shared/
+    TaskMonitoring.EmployeeDesktop/
+  EmployeeAgent/
+    TaskMonitoring.EmployeeAgent/
 tests/
   Backend.Tests/
+  EmployeeClient.Tests/
 docs/
   architecture.md
   admin-web.md
+  employee-desktop.md
+scripts/
+  publish-employee-client.ps1
+  install-employee-agent.ps1
+  uninstall-employee-agent.ps1
 .github/workflows/
 ```
 
@@ -83,29 +104,24 @@ Backend business rules are authoritative and must not be duplicated or weakened 
 - `/api/departments`, `/api/employees`, `/api/roles` — organization and employee administration.
 - `/api/shifts`, `/api/attendance` — shift and attendance workflows.
 - `/api/projects`, `/api/tasks` — project/task operations.
+- `/api/access-assignments/*` — RDP, IP and website assignment administration.
+- `/api/desktop/me` — self-scoped employee desktop dashboard.
+- `/api/desktop/me/heartbeat` — minimal authenticated employee desktop heartbeat.
+- `/api/desktop/presence` — permission-protected employee presence view API.
 - `/api/surveys`, `/api/survey-assignments`, `/api/survey-submissions` — field survey and review workflows.
 - `/api/reports/*` — read-only dashboard/reporting endpoints.
 - `/health` — API health endpoint.
 - `/openapi/v1.json` — OpenAPI document.
 
-Permissions are enforced server-side. Important current permission families include `employees.*`, `departments.*`, `roles.*`, `shifts.*`, `attendance.*`, `projects.*`, `tasks.*`, survey permissions, `reports.read`, and `audit.read`.
+Permissions are enforced server-side. Important current permission families include `employees.*`, `departments.*`, `roles.*`, `shifts.*`, `attendance.*`, `projects.*`, `tasks.*`, `access.assignments.*`, survey permissions, `reports.read`, and `audit.read`.
 
 ## Admin Web
 
-The current browser console lives in `src/AdminWeb`.
+The browser console lives in `src/AdminWeb`.
 
-Implemented routes:
+Current navigation covers Dashboard, Employees, Attendance, Projects, Tasks, Surveys, RDP Assign, IP Assign and Website Access according to server-issued permissions. Employee/department/shift/project/task/access write controls are permission-aware and backend authorization remains authoritative for every action. Survey management write UI is intentionally deferred; the current Survey screen remains read-only.
 
-- `/dashboard` — requires `reports.read`.
-- `/employees` — requires `employees.read`.
-- `/attendance` — requires `attendance.read`.
-- `/projects` — requires `projects.read`.
-- `/tasks` — requires `tasks.read`.
-- `/surveys` — requires `surveys.read`.
-
-Navigation is generated from server-issued permission claims. The browser uses those claims only for presentation/route guarding; backend authorization remains authoritative for every API request.
-
-The current auth contract returns refresh tokens in JSON. Admin Web therefore stores the browser session in `sessionStorage` rather than persistent `localStorage`, rotates refresh tokens through `/api/auth/refresh`, retries one authorized request after refresh, and clears the session when refresh fails.
+The current auth contract returns refresh tokens in JSON. Admin Web stores the browser session in `sessionStorage` rather than persistent `localStorage`, rotates refresh tokens through `/api/auth/refresh`, retries one authorized request after refresh, and clears the session when refresh fails.
 
 Run the Admin Web locally:
 
@@ -129,7 +145,33 @@ npm install --no-audit --no-fund
 npm run build
 ```
 
-The production output is written to `src/AdminWeb/dist`. See [`docs/admin-web.md`](docs/admin-web.md) for session, deployment and permission details.
+See [`docs/admin-web.md`](docs/admin-web.md) for session, deployment and permission details.
+
+## Employee Desktop and Windows Agent
+
+The Windows desktop client is in `src/EmployeeDesktop/TaskMonitoring.EmployeeDesktop`. It supports employee sign-in, attendance self-actions, assigned tasks and access information, a visible authenticated heartbeat, and a Privacy & Status screen that tells the employee exactly what this phase does and does not collect.
+
+Access tokens stay in memory. The rotating refresh token is encrypted using Windows DPAPI with `DataProtectionScope.CurrentUser` and stored under the current user's local application-data folder. Employee passwords are never persisted.
+
+The separate `TaskMonitoring.EmployeeAgent` Windows service receives no employee password, access token or refresh token. It checks only the backend `/health` endpoint and logs connectivity state changes. It does not launch the desktop UI.
+
+Production client endpoints require HTTPS; plain HTTP is allowed only for loopback development URLs.
+
+Build/publish on Windows:
+
+```powershell
+./scripts/publish-employee-client.ps1 -Runtime win-x64
+```
+
+Install the connectivity service from an elevated PowerShell session:
+
+```powershell
+./scripts/install-employee-agent.ps1 `
+  -AgentDirectory ./artifacts/employee-client/agent-win-x64 `
+  -ServerBaseUrl https://task-monitoring.example.com/
+```
+
+See [`docs/employee-desktop.md`](docs/employee-desktop.md) for architecture, privacy, configuration and deployment details.
 
 ## Backend local prerequisites
 
@@ -202,23 +244,35 @@ npm install --no-audit --no-fund
 npm run build
 ```
 
+Windows employee client validation:
+
+```powershell
+dotnet restore EmployeeClient.slnx
+dotnet build EmployeeClient.slnx --configuration Release --no-restore
+dotnet test tests/EmployeeClient.Tests/EmployeeClient.Tests.csproj --configuration Release --no-build --no-restore
+```
+
 The PostgreSQL integration test expects `TEST_POSTGRES_CONNECTION` to point to an isolated test database. GitHub Actions supplies one automatically.
 
 ## Security and monitoring principles
 
 - No plain-text passwords or committed production secrets.
 - Server-side authentication, authorization and validation are mandatory.
-- Browser permission checks are UX controls only; they never replace backend policies.
+- Browser/client permission presentation never replaces backend policies.
 - Refresh tokens are random opaque values and only their SHA-256 hashes are persisted server-side.
 - Admin Web does not persist its current session in `localStorage`.
+- Employee Desktop persists only the rotating refresh token and protects it with Windows DPAPI current-user scope; access tokens remain in memory.
+- The Windows Agent has no employee credentials and performs backend health/connectivity checks only.
+- Desktop self-service employee identity comes from the authenticated JWT `sub`; callers cannot select another employee ID for self-scoped data.
 - Deactivating an employee disables the linked account and revokes active refresh tokens.
-- Organization-wide attendance, project/task, survey, reporting, role and audit access require explicit permissions.
+- Organization-wide attendance, project/task, survey, reporting, role, access-assignment and audit access require explicit permissions.
 - Important authentication and business mutations are audit logged.
 - Hidden spyware behavior, keylogging, password capture, covert camera/microphone activation and unrelated private-file collection are explicitly out of scope.
-- Any future screenshot, app-usage, URL or location telemetry must have a legitimate business need, clear employee disclosure, explicit authorization boundaries, auditability and retention controls.
+- The current desktop heartbeat does not collect screenshots, clipboard, browser history, application-window contents, microphone/camera data, or unrelated private files.
+- Any future screenshot, app-usage, URL or location telemetry must have a legitimate business need, clear employee disclosure, explicit authorization boundaries, auditability and retention controls before implementation.
 
 ## Development workflow
 
 Large features use focused branches and meaningful commits. A feature is complete only when its applicable API/data/UI layers, validation, permissions, error handling, tests/CI gates and documentation work together.
 
-See [`docs/architecture.md`](docs/architecture.md) for architecture direction and [`docs/admin-web.md`](docs/admin-web.md) for Admin Web details.
+See [`docs/architecture.md`](docs/architecture.md), [`docs/admin-web.md`](docs/admin-web.md), and [`docs/employee-desktop.md`](docs/employee-desktop.md) for architecture and client details.
