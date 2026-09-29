@@ -2,71 +2,55 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  hardening:
-    name: Apply Employee Core hardening
+  backend:
+    name: Backend build and tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: task_monitoring_tests
+          POSTGRES_USER: task_monitoring
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U task_monitoring -d task_monitoring_tests"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=task_monitoring_tests;Username=task_monitoring;Password=ci-${{ github.run_id }}
     steps:
-      - name: Checkout feature branch
+      - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
         with:
-          ref: feature/employee-core
+          dotnet-version: 10.0.x
 
-      - name: Apply hardening patch and persist
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
+      - name: Restore tools
+        run: dotnet tool restore
 
-          service_path = Path('src/Backend/TaskMonitoring.Api/Services/EmployeeCoreService.cs')
-          service = service_path.read_text()
-          service = service.replace(
-              '        page = Math.Max(page, 1);\n',
-              '        page = Math.Clamp(page, 1, 1_000_000);\n')
-          old_roles = '''        dbContext.UserRoles.RemoveRange(employee.User.UserRoles);
-                  employee.User.UserRoles.Clear();
-                  foreach (var role in references.Roles)
-                  {
-                      employee.User.UserRoles.Add(new UserRole { UserId = employee.UserId, RoleId = role.Id });
-                  }
-          '''
-          new_roles = '''        var userRolesToRemove = employee.User.UserRoles
-                      .Where(x => !requestedRoleIds.Contains(x.RoleId))
-                      .ToArray();
-                  dbContext.UserRoles.RemoveRange(userRolesToRemove);
-                  foreach (var role in references.Roles.Where(x => !currentRoleIds.Contains(x.Id)))
-                  {
-                      employee.User.UserRoles.Add(new UserRole { UserId = employee.UserId, RoleId = role.Id });
-                  }
-          '''
-          if old_roles not in service:
-              raise SystemExit('role update block not found')
-          service = service.replace(old_roles, new_roles)
-          service_path.write_text(service)
+      - name: Restore
+        run: dotnet restore TaskMonitoring.slnx
 
-          controller_path = Path('src/Backend/TaskMonitoring.Api/Controllers/EmployeesController.cs')
-          controller = controller_path.read_text()
-          marker = '    [Authorize(Policy = PermissionCatalog.EmployeesManage)]\n'
-          replacement = marker + '    [Authorize(Policy = PermissionCatalog.RolesManage)]\n'
-          if controller.count(marker) != 2:
-              raise SystemExit('expected exactly two employee manage authorization markers')
-          controller = controller.replace(marker, replacement)
-          controller_path.write_text(controller)
+      - name: Build
+        run: dotnet build TaskMonitoring.slnx --configuration Release --no-restore
 
-          program_path = Path('src/Backend/TaskMonitoring.Api/Program.cs')
-          program = program_path.read_text()
-          old_converter = 'new JsonStringEnumConverter()'
-          new_converter = 'new JsonStringEnumConverter(allowIntegerValues: false)'
-          if old_converter not in program:
-              raise SystemExit('enum converter marker not found')
-          program_path.write_text(program.replace(old_converter, new_converter))
-          PY
-          git diff --check
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/Backend/TaskMonitoring.Api/Services/EmployeeCoreService.cs src/Backend/TaskMonitoring.Api/Controllers/EmployeesController.cs src/Backend/TaskMonitoring.Api/Program.cs
-          git commit -m "fix: harden employee access management"
-          git push origin HEAD:feature/employee-core
+      - name: Verify EF model matches migrations
+        env:
+          TASK_MONITORING_DESIGN_CONNECTION: ${{ env.TEST_POSTGRES_CONNECTION }}
+        run: dotnet ef migrations has-pending-model-changes --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj --configuration Release --no-build
+
+      - name: Test
+        run: dotnet test tests/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --no-restore
