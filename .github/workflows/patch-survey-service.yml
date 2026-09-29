@@ -26,37 +26,15 @@ jobs:
           from pathlib import Path
           path = Path('src/Backend/TaskMonitoring.Api/Services/SurveyCoreService.cs')
           text = path.read_text()
-          old_submission = '''        if (latest is null)
-        {
-            submission = NewSubmission(assignment, 1, now);
-            assignment.Submissions.Add(submission);
-        }
-        else if (latest.Status == SurveySubmissionStatus.Draft)
-        {
-            submission = latest;
-        }
-        else if (latest.Status == SurveySubmissionStatus.Rejected)
-        {
-            submission = NewSubmission(assignment, latest.RevisionNumber + 1, now);
-            assignment.Submissions.Add(submission);
-        }'''
-          new_submission = '''        if (latest is null)
-        {
-            submission = NewSubmission(assignment, 1, now);
-            assignment.Submissions.Add(submission);
-            dbContext.SurveySubmissions.Add(submission);
-        }
-        else if (latest.Status == SurveySubmissionStatus.Draft)
-        {
-            submission = latest;
-        }
-        else if (latest.Status == SurveySubmissionStatus.Rejected)
-        {
-            submission = NewSubmission(assignment, latest.RevisionNumber + 1, now);
-            assignment.Submissions.Add(submission);
-            dbContext.SurveySubmissions.Add(submission);
-        }'''
-          old_answer = '''            submission.Answers.Add(new SurveyAnswer
+          text = text.replace(
+              '            assignment.Submissions.Add(submission);\n        }\n        else if (latest.Status == SurveySubmissionStatus.Draft)',
+              '            assignment.Submissions.Add(submission);\n            dbContext.SurveySubmissions.Add(submission);\n        }\n        else if (latest.Status == SurveySubmissionStatus.Draft)',
+              1)
+          text = text.replace(
+              '            assignment.Submissions.Add(submission);\n        }\n        else\n        {\n            return OperationResult<SurveySubmissionResponse>.Conflict("survey_submission_locked"',
+              '            assignment.Submissions.Add(submission);\n            dbContext.SurveySubmissions.Add(submission);\n        }\n        else\n        {\n            return OperationResult<SurveySubmissionResponse>.Conflict("survey_submission_locked"',
+              1)
+          old = '''            submission.Answers.Add(new SurveyAnswer
             {
                 SurveySubmissionId = submission.Id,
                 SurveySubmission = submission,
@@ -64,7 +42,7 @@ jobs:
                 SurveyQuestion = question,
                 ValueJson = answer.Value.GetRawText()
             });'''
-          new_answer = '''            var surveyAnswer = new SurveyAnswer
+          new = '''            var surveyAnswer = new SurveyAnswer
             {
                 SurveySubmissionId = submission.Id,
                 SurveySubmission = submission,
@@ -74,12 +52,11 @@ jobs:
             };
             submission.Answers.Add(surveyAnswer);
             dbContext.SurveyAnswers.Add(surveyAnswer);'''
-          if old_submission not in text:
-              raise SystemExit('Submission creation anchor not found')
-          if old_answer not in text:
+          if old not in text:
               raise SystemExit('Survey answer anchor not found')
-          text = text.replace(old_submission, new_submission, 1)
-          text = text.replace(old_answer, new_answer, 1)
+          text = text.replace(old, new, 1)
+          if text.count('dbContext.SurveySubmissions.Add(submission);') != 2:
+              raise SystemExit('Expected two explicit submission additions')
           path.write_text(text)
           PY
           git config user.name "github-actions[bot]"
