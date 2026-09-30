@@ -57,7 +57,7 @@ if (trustForwardedHeaders)
 {
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
-        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardedHeaders = XForwardedHeaders.XForwardedFor | XForwardedHeaders.XForwardedProto;
         options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
         options.ForwardLimit = 1;
@@ -91,6 +91,7 @@ builder.Services.AddScoped<IWebsiteWorkReviewService, WebsiteWorkReviewService>(
 builder.Services.AddScoped<IWebsiteWorkProductivityReportService, WebsiteWorkProductivityReportService>();
 builder.Services.AddScoped<IWebsiteWorkTimelineService, WebsiteWorkTimelineService>();
 builder.Services.AddScoped<IWebsiteWorkAttentionService, WebsiteWorkAttentionService>();
+builder.Services.AddScoped<IWebsiteWorkAttentionActionService, WebsiteWorkAttentionActionService>();
 builder.Services.AddScoped<ISurveyCoreService, SurveyCoreService>();
 builder.Services.AddScoped<IExternalSurveyService, ExternalSurveyService>();
 builder.Services.AddScoped<IReportingDashboardService, ReportingDashboardService>();
