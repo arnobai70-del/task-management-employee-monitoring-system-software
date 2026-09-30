@@ -386,10 +386,22 @@ catch {
     }
 
     if ($updateTaskExisted) {
-        $restoredUpdaterExe = Join-Path $updaterRoot 'TaskMonitoring.EmployeeUpdater.exe'
-        if ((Test-Path $restoredUpdaterExe -PathType Leaf) -and (Test-Path $updateSettingsPath -PathType Leaf)) {
-            $restoredTaskCommand = ('"{0}" --settings "{1}"' -f $restoredUpdaterExe, $updateSettingsPath)
-            & schtasks.exe /Create /TN $taskName /TR $restoredTaskCommand /SC HOURLY /MO 4 /RU SYSTEM /RL HIGHEST /F | Out-Null
+        $restoredCentralRunner = Join-Path $maintenanceRoot 'run-central-agent-update.ps1'
+        if ((Test-Path $deviceSecretPath -PathType Leaf) -and
+            (Test-Path $restoredCentralRunner -PathType Leaf) -and
+            (Test-Path $updateSettingsPath -PathType Leaf)) {
+            $restoredTaskCommand = ('powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -ProgramDataRoot "{1}"' -f $restoredCentralRunner, $ProgramDataRoot)
+            & schtasks.exe /Create /TN $taskName /TR $restoredTaskCommand /SC HOURLY /MO 1 /RU SYSTEM /RL HIGHEST /F | Out-Null
+        }
+        else {
+            $restoredUpdaterExe = Join-Path $updaterRoot 'TaskMonitoring.EmployeeUpdater.exe'
+            if ((Test-Path $restoredUpdaterExe -PathType Leaf) -and (Test-Path $updateSettingsPath -PathType Leaf)) {
+                $restoredTaskCommand = ('"{0}" --settings "{1}"' -f $restoredUpdaterExe, $updateSettingsPath)
+                & schtasks.exe /Create /TN $taskName /TR $restoredTaskCommand /SC HOURLY /MO 4 /RU SYSTEM /RL HIGHEST /F | Out-Null
+            }
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'Failed to restore the previous automatic update scheduled task.'
         }
     }
 
