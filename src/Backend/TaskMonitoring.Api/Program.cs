@@ -57,7 +57,7 @@ if (trustForwardedHeaders)
 {
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
-        options.ForwardedHeaders = XForwardedHeaders.XForwardedFor | XForwardedHeaders.XForwardedProto;
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
         options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
         options.ForwardLimit = 1;
