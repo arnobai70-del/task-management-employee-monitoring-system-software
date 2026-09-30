@@ -140,6 +140,7 @@ builder.Services.AddScoped<IMonitoringTelemetryService, MonitoringTelemetryServi
 builder.Services.AddScoped<IOperationsHealthService, OperationsHealthService>();
 builder.Services.AddScoped<IOperationsIncidentService, OperationsIncidentService>();
 builder.Services.AddScoped<IAgentUpdateService, AgentUpdateService>();
+builder.Services.AddScoped<IAgentUpdateIncidentBridge, AgentUpdateIncidentBridge>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddSingleton<IRealtimeEventPublisher, SignalRRealtimeEventPublisher>();
 builder.Services.AddSingleton<IWebsiteWorkRealtimePublisher, SignalRWebsiteWorkRealtimePublisher>();
@@ -148,6 +149,7 @@ builder.Services.AddSingleton<IOperationsIncidentRealtimePublisher, SignalROpera
 builder.Services.AddHostedService<MonitoringRetentionHostedService>();
 builder.Services.AddHostedService<FollowUpReminderHostedService>();
 builder.Services.AddHostedService<OperationsIncidentHostedService>();
+builder.Services.AddHostedService<AgentUpdateIncidentHostedService>();
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
