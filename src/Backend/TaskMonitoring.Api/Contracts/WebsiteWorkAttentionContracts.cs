@@ -33,6 +33,14 @@ public enum WebsiteWorkFollowUpState
     Resolved = 3
 }
 
+public enum WebsiteWorkFollowUpRealtimeAction
+{
+    Assigned = 1,
+    Updated = 2,
+    Removed = 3,
+    Resolved = 4
+}
+
 public sealed record WebsiteWorkAttentionThresholdsResponse(
     int LongWorkingMinutes,
     int PendingReviewMinutes,
@@ -142,3 +150,19 @@ public sealed record WebsiteWorkFollowUpInboxResponse(
     int Resolved,
     int TotalCount,
     IReadOnlyCollection<WebsiteWorkFollowUpInboxItemResponse> Items);
+
+public sealed record WebsiteWorkFollowUpRealtimeResponse(
+    WebsiteWorkFollowUpRealtimeAction Action,
+    Guid TaskId,
+    Guid ProjectId,
+    string ProjectName,
+    Guid EmployeeId,
+    string EmployeeCode,
+    string EmployeeName,
+    string Title,
+    Guid OwnerUserId,
+    string OwnerEmail,
+    string? OwnerName,
+    DateTime DueAtUtc,
+    DateTime OccurredAtUtc,
+    string Message);
