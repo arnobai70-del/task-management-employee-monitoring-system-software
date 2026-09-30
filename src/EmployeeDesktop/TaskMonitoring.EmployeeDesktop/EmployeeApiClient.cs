@@ -91,6 +91,29 @@ public sealed class EmployeeApiClient : IDisposable
                ?? throw new InvalidOperationException("The server returned an empty survey assignment response.");
     }
 
+    public Task<IReadOnlyCollection<WebsiteWorkResponse>> GetMyWebsiteWorkAsync(
+        bool includeClosed = false,
+        CancellationToken cancellationToken = default)
+        => GetAuthorizedAsync<IReadOnlyCollection<WebsiteWorkResponse>>(
+            $"api/me/website-work?includeClosed={includeClosed.ToString().ToLowerInvariant()}",
+            cancellationToken);
+
+    public async Task<WebsiteWorkResponse> StartWebsiteWorkAsync(Guid taskId, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAuthorizedAsync(HttpMethod.Post, $"api/me/website-work/{taskId}/start", null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<WebsiteWorkResponse>(JsonOptions, cancellationToken)
+               ?? throw new InvalidOperationException("The server returned an empty website work response.");
+    }
+
+    public async Task<WebsiteWorkResponse> CompleteWebsiteWorkAsync(Guid taskId, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAuthorizedAsync(HttpMethod.Post, $"api/me/website-work/{taskId}/complete", null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<WebsiteWorkResponse>(JsonOptions, cancellationToken)
+               ?? throw new InvalidOperationException("The server returned an empty website work response.");
+    }
+
     public async Task<EmployeePresenceResponse> RecordPresenceHeartbeatAsync(CancellationToken cancellationToken = default)
     {
         using var response = await SendAuthorizedAsync(
@@ -355,6 +378,34 @@ public sealed record ExternalSurveyAssignmentResponse(
             return DueDate.HasValue && DueDate.Value < today ? "Overdue" : "Ready";
         }
     }
+}
+
+public sealed record WebsiteWorkResponse(
+    Guid Id,
+    Guid ProjectId,
+    string ProjectCode,
+    string ProjectName,
+    Guid? EmployeeId,
+    string? EmployeeCode,
+    string? EmployeeName,
+    string Title,
+    string? Instructions,
+    string Url,
+    string Status,
+    string Priority,
+    DateOnly? DueDate,
+    DateTime? StartedAtUtc,
+    DateTime? CompletedAtUtc,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc)
+{
+    public string StatusLabel => Status switch
+    {
+        "ToDo" => "Ready",
+        "InProgress" => "Working",
+        "Done" => "Completed",
+        _ => Status
+    };
 }
 
 public sealed record AttendanceStateResponse(string State, WorkSessionResponse? Session)

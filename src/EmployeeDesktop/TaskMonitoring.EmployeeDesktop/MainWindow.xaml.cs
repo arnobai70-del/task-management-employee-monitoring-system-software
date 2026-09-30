@@ -176,6 +176,7 @@ public partial class MainWindow : Window
             MessageText.Text = $"New notification: {notification.Title}";
             await RefreshNotificationsAsync();
             await RefreshTasksAsync();
+            await RefreshWebsiteWorkAsync();
             await RefreshSurveysAsync();
         });
     }
@@ -193,6 +194,9 @@ public partial class MainWindow : Window
 
     private async void RefreshTasksButton_Click(object sender, RoutedEventArgs e)
         => await RunAsync(RefreshTasksAsync);
+
+    private async void RefreshWebsiteWorkButton_Click(object sender, RoutedEventArgs e)
+        => await RunAsync(RefreshWebsiteWorkAsync);
 
     private async void RefreshSurveysButton_Click(object sender, RoutedEventArgs e)
         => await RunAsync(RefreshSurveysAsync);
@@ -219,6 +223,69 @@ public partial class MainWindow : Window
             await _api.MarkNotificationReadAsync(notification.Id);
             await RefreshNotificationsAsync();
             MessageText.Text = "Notification marked as read.";
+        });
+    }
+
+    private async void OpenWebsiteWorkButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (WebsiteWorkGrid.SelectedItem is not WebsiteWorkResponse work)
+        {
+            MessageText.Text = "Select a website work target first.";
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            if (work.Status is "Done" or "Cancelled")
+            {
+                throw new InvalidOperationException("Completed or cancelled work cannot be opened.");
+            }
+
+            var confirmed = await _api.StartWebsiteWorkAsync(work.Id);
+            if (!Uri.TryCreate(confirmed.Url, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new InvalidOperationException("The assigned website URL is invalid.");
+            }
+
+            Process.Start(new ProcessStartInfo { FileName = confirmed.Url, UseShellExecute = true });
+            MessageText.Text = $"Working: {confirmed.Title}. The assigned website was opened in your default browser.";
+            await RefreshWebsiteWorkAsync();
+            await RefreshTasksAsync();
+        });
+    }
+
+    private async void CompleteWebsiteWorkButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (WebsiteWorkGrid.SelectedItem is not WebsiteWorkResponse work)
+        {
+            MessageText.Text = "Select a website work target first.";
+            return;
+        }
+
+        if (work.Status != "InProgress")
+        {
+            MessageText.Text = "Start/open this website work before marking it complete.";
+            return;
+        }
+
+        var confirmation = MessageBox.Show(
+            $"Mark this target complete?\n\n{work.Title}\n\nYour manager will receive the completion notification.",
+            "Complete website work",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var completed = await _api.CompleteWebsiteWorkAsync(work.Id);
+            MessageText.Text = $"Completed: {completed.Title}. Your manager was notified.";
+            await RefreshWebsiteWorkAsync();
+            await RefreshTasksAsync();
+            await RefreshNotificationsAsync();
         });
     }
 
@@ -305,6 +372,7 @@ public partial class MainWindow : Window
     {
         await RefreshAttendanceAsync();
         await RefreshTasksAsync();
+        await RefreshWebsiteWorkAsync();
         await RefreshSurveysAsync();
         await RefreshAccessAsync();
         await RefreshNotificationsAsync();
@@ -354,6 +422,13 @@ public partial class MainWindow : Window
         TasksGrid.ItemsSource = result.Items;
     }
 
+    private async Task RefreshWebsiteWorkAsync()
+    {
+        var result = await _api.GetMyWebsiteWorkAsync(IncludeClosedWebsiteWorkBox.IsChecked == true);
+        WebsiteWorkGrid.ItemsSource = result;
+        WebsiteWorkCountText.Text = $"{result.Count} website work item(s)";
+    }
+
     private async Task RefreshSurveysAsync()
     {
         var result = await _api.GetMySurveyLinksAsync(IncludeInactiveSurveysBox.IsChecked == true);
@@ -380,6 +455,8 @@ public partial class MainWindow : Window
     {
         AttendanceStatusText.Text = "Sign in to load your attendance status.";
         TasksGrid.ItemsSource = null;
+        WebsiteWorkGrid.ItemsSource = null;
+        WebsiteWorkCountText.Text = "0 website work item(s)";
         SurveyGrid.ItemsSource = null;
         SurveyCountText.Text = "0 survey assignment(s)";
         RdpGrid.ItemsSource = null;

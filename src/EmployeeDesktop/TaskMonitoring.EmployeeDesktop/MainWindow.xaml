@@ -13,7 +13,7 @@
 
     <StackPanel>
       <TextBlock Text="Employee Workspace" FontSize="28" FontWeight="SemiBold" />
-      <TextBlock Text="Attendance, assigned work, survey links, notifications, approved activity monitoring and company-provided access" Margin="0,6,0,0" Opacity="0.7" />
+      <TextBlock Text="Attendance, assigned tasks, website target work, survey links, notifications, approved activity monitoring and company-provided access" Margin="0,6,0,0" Opacity="0.7" />
     </StackPanel>
 
     <Border Grid.Row="1" Margin="0,20,0,16" Padding="16" BorderBrush="#22000000" BorderThickness="1" CornerRadius="8">
@@ -88,6 +88,31 @@
               <DataGridTextColumn Header="Priority" Binding="{Binding Priority}" Width="100" />
               <DataGridTextColumn Header="Due" Binding="{Binding DueDate}" Width="110" />
               <DataGridTextColumn Header="Comments" Binding="{Binding CommentCount}" Width="80" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </DockPanel>
+      </TabItem>
+
+      <TabItem Header="Website Work">
+        <DockPanel Margin="14">
+          <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <WrapPanel>
+              <Button Content="Refresh work" Width="105" Margin="0,0,10,8" Click="RefreshWebsiteWorkButton_Click" />
+              <Button Content="Start / Open selected" Width="155" Margin="0,0,10,8" Click="OpenWebsiteWorkButton_Click" />
+              <Button Content="Mark Complete" Width="120" Margin="0,0,12,8" Click="CompleteWebsiteWorkButton_Click" />
+              <CheckBox x:Name="IncludeClosedWebsiteWorkBox" Content="Include completed/cancelled" VerticalAlignment="Center" Margin="0,0,16,8" />
+              <TextBlock x:Name="WebsiteWorkCountText" Text="0 website work item(s)" VerticalAlignment="Center" Margin="0,0,0,8" Opacity="0.7" />
+            </WrapPanel>
+            <TextBlock Text="Opening a target changes Ready to Working before the assigned website is launched. When the target is actually finished, return here and choose Mark Complete. Completion is sent to authorized managers with your name and the work target." TextWrapping="Wrap" Opacity="0.7" />
+          </StackPanel>
+          <DataGrid x:Name="WebsiteWorkGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Target" Binding="{Binding Title}" Width="1.7*" />
+              <DataGridTextColumn Header="Website URL" Binding="{Binding Url}" Width="2*" />
+              <DataGridTextColumn Header="Project" Binding="{Binding ProjectName}" Width="1.2*" />
+              <DataGridTextColumn Header="Status" Binding="{Binding StatusLabel}" Width="95" />
+              <DataGridTextColumn Header="Due" Binding="{Binding DueDate}" Width="105" />
+              <DataGridTextColumn Header="Instructions" Binding="{Binding Instructions}" Width="2*" />
             </DataGrid.Columns>
           </DataGrid>
         </DockPanel>
@@ -199,6 +224,7 @@
             <TextBlock Margin="0,14,0,0" TextWrapping="Wrap">While you are signed in, this client sends a periodic presence heartbeat so authorized administrators can see online/offline, last-seen and current attendance-derived Working/On Break state.</TextBlock>
             <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">Foreground application activity is submitted only when the process name matches an active administrator-approved application rule. A window title is read only when that specific rule explicitly enables title capture.</TextBlock>
             <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">Business website activity is recorded only as an approved hostname. This client does not inspect browser history or send URL paths, query strings, page content, form content or unrelated browsing.</TextBlock>
+            <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">Website Work records when you start/open an assigned target and when you explicitly mark it complete. The assigned work URL is stored as work configuration, but this app does not read the external page, passwords, cookies, form fields, earnings, or other page content.</TextBlock>
             <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">Opening a survey assignment records that the assigned survey link was opened, using hostname-only audit metadata. Survey questions and answers stay on the external survey website and are not collected by this app.</TextBlock>
             <TextBlock x:Name="MonitoringDisclosureText" Margin="0,14,0,0" Padding="12" TextWrapping="Wrap" Background="#0D000000" Text="Monitoring disclosure is loaded from the company server after sign-in." />
             <Button Content="Refresh monitoring policy" Width="170" HorizontalAlignment="Left" Margin="0,12,0,0" Click="RefreshMonitoringPolicyButton_Click" />

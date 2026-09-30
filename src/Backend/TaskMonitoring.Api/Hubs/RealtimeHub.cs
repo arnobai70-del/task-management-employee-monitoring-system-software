@@ -18,6 +18,13 @@ public sealed class RealtimeHub(AppDbContext dbContext) : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.PresenceReaders);
         }
 
+        if (Context.User?.Claims.Any(x =>
+                x.Type == "permission" &&
+                (x.Value == PermissionCatalog.TasksRead || x.Value == PermissionCatalog.TasksManage)) == true)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.TaskManagers);
+        }
+
         var subject = Context.User?.FindFirstValue(JwtRegisteredClaimNames.Sub);
         if (Guid.TryParse(subject, out var userId))
         {
@@ -40,6 +47,7 @@ public sealed class RealtimeHub(AppDbContext dbContext) : Hub
 public static class RealtimeGroups
 {
     public const string PresenceReaders = "presence-readers";
+    public const string TaskManagers = "task-managers";
 
     public static string Employee(Guid employeeId) => $"employee:{employeeId:N}";
 }
