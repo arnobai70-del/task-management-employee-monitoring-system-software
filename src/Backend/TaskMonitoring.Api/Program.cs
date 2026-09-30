@@ -64,7 +64,6 @@ if (trustForwardedHeaders)
     });
 }
 
-builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(PresenceOptions.SectionName));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<PresenceOptions>(builder.Configuration.GetSection(PresenceOptions.SectionName));
 builder.Services.AddScoped<TaskNotificationInterceptor>();
