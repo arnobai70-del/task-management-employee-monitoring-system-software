@@ -26,7 +26,7 @@ interface PagedResponse<T> {
 }
 
 type AttentionSeverity = 'Medium' | 'High' | 'Critical';
-type AttentionDisposition = 'Active' | 'Acknowledged' | 'Snoozed' | 'FollowUp';
+type AttentionDisposition = 'Active' | 'Acknowledged' | 'Snoozed' | 'FollowUp' | 'Resolved';
 
 interface AttentionReason {
   type: 'Overdue' | 'LongWorking' | 'RepeatedCorrection' | 'PendingReview';
@@ -81,6 +81,8 @@ interface AttentionResponse {
   total: number;
   activeTotal: number;
   managedTotal: number;
+  pendingFollowUpTotal: number;
+  overdueFollowUpTotal: number;
   critical: number;
   high: number;
   medium: number;
@@ -142,7 +144,8 @@ function localDateTimeInput(date: Date): string {
 function managementLabel(management: AttentionManagement): string {
   if (management.disposition === 'Acknowledged' && management.isSuppressed) return 'Acknowledged';
   if (management.disposition === 'Snoozed') return management.isSuppressed ? 'Snoozed' : 'Snooze expired';
-  if (management.disposition === 'FollowUp') return management.isSuppressed ? 'Follow-up assigned' : 'Follow-up due';
+  if (management.disposition === 'FollowUp') return management.isSuppressed ? 'Follow-up assigned' : 'Follow-up overdue';
+  if (management.disposition === 'Resolved') return 'Follow-up resolved';
   return 'Active';
 }
 
@@ -328,7 +331,8 @@ export default function PresencePanel() {
             <p>Website Work risk signals · auto-refresh every 15 seconds</p>
           </div>
           <div className="header-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {attention && <span>{attention.activeTotal} active · {attention.critical} critical · {attention.high} high · {attention.medium} medium · {attention.managedTotal} managed</span>}
+            {attention && <span>{attention.activeTotal} active · {attention.critical} critical · {attention.high} high · {attention.medium} medium · {attention.pendingFollowUpTotal} follow-ups · {attention.overdueFollowUpTotal} overdue follow-ups · {attention.managedTotal} managed</span>}
+            {manageAttention && <NavLink className="text-link" to="/follow-ups">My follow-ups →</NavLink>}
             <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
               <input type="checkbox" checked={showManaged} onChange={event => setShowManaged(event.target.checked)} /> Show managed
             </label>
@@ -369,7 +373,8 @@ export default function PresencePanel() {
                       </td>
                       <td>
                         <NavLink className="text-link" to={item.status === 'Blocked' ? '/website-work' : '/productivity'}>{item.status === 'Blocked' ? 'Review work →' : 'Inspect →'}</NavLink>
-                        {manageAttention && <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                        {item.management.disposition === 'FollowUp' && manageAttention && <small><NavLink className="text-link" to="/follow-ups">Open follow-up inbox →</NavLink></small>}
+                        {manageAttention && item.management.disposition !== 'Resolved' && <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
                           {item.management.disposition !== 'FollowUp' && <button
                             className="ghost-button"
                             type="button"
