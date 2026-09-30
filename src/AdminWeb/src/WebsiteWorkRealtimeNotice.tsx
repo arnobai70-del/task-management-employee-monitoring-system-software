@@ -358,7 +358,7 @@ export default function WebsiteWorkRealtimeNotice() {
 
       {mayManage && adminSummary.unread > 0 && (
         <NavLink
-          to="/notifications"
+          to="/follow-ups#notifications"
           className="status-badge status-active"
           aria-label={`${adminSummary.unread} unread notifications`}
           style={{
