@@ -66,6 +66,20 @@ public sealed class AdminLookupController(AppDbContext dbContext) : ControllerBa
             .Select(x => new ManagementEmployeeOption(x.EmployeeId, x.Employee.EmployeeCode, x.Employee.FullName))
             .ToListAsync(cancellationToken));
 
+    [HttpGet("surveys/projects")]
+    [Authorize(Policy = PermissionCatalog.SurveysRead)]
+    public async Task<ActionResult<IReadOnlyCollection<ManagementProjectOption>>> SurveyProjects(CancellationToken cancellationToken)
+        => Ok(await dbContext.Projects.AsNoTracking()
+            .Where(x => x.Status != Domain.ProjectStatus.Completed && x.Status != Domain.ProjectStatus.Archived)
+            .OrderBy(x => x.NormalizedName)
+            .Select(x => new ManagementProjectOption(x.Id, x.Code, x.Name, x.Status.ToString()))
+            .ToListAsync(cancellationToken));
+
+    [HttpGet("surveys/employees")]
+    [Authorize(Policy = PermissionCatalog.SurveyAssignmentsRead)]
+    public async Task<ActionResult<IReadOnlyCollection<ManagementEmployeeOption>>> SurveyEmployees(CancellationToken cancellationToken)
+        => Ok(await ActiveEmployeeOptions(cancellationToken));
+
     private Task<List<ManagementEmployeeOption>> ActiveEmployeeOptions(CancellationToken cancellationToken)
         => dbContext.Employees.AsNoTracking()
             .Where(x => x.IsActive)

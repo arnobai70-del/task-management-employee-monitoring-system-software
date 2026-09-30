@@ -6,6 +6,7 @@ import AccessAssignmentsPage from './AccessAssignments';
 import AuditLogsPage from './AuditLogs';
 import { DepartmentManagementPage, EmployeeManagementPage } from './EmployeeDepartmentManagement';
 import PresencePanel from './PresencePanel';
+import SurveyManagementPage from './SurveyManagement';
 import { ProjectManagementPage, ShiftManagementPage, TaskManagementPage } from './WorkManagement';
 import type {
   AttendanceDailyMetric,
@@ -349,7 +350,7 @@ export default function App() {
       <Route path="/attendance" element={<ProtectedPage permission="attendance.read"><AttendancePage /></ProtectedPage>} />
       <Route path="/projects" element={<ProtectedPage permission="projects.read"><ProjectManagementPage /></ProtectedPage>} />
       <Route path="/tasks" element={<ProtectedPage permission="tasks.read"><TaskManagementPage /></ProtectedPage>} />
-      <Route path="/surveys" element={<ProtectedPage permission="surveys.read"><SurveysPage /></ProtectedPage>} />
+      <Route path="/surveys" element={<ProtectedPage permission="surveys.read"><SurveyManagementPage /></ProtectedPage>} />
       <Route path="/access/rdp" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="rdp" /></ProtectedPage>} />
       <Route path="/access/ip" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="ip" /></ProtectedPage>} />
       <Route path="/access/websites" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="websites" /></ProtectedPage>} />
