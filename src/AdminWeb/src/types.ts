@@ -133,3 +133,16 @@ export interface SurveyForm {
   questionCount: number;
   assignmentCount: number;
 }
+
+export interface AuditLog {
+  id: string;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  metadataJson: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAtUtc: string;
+}
