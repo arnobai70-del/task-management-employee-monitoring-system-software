@@ -82,6 +82,13 @@ builder.Services.AddOptions<FollowUpReminderOptions>()
         "FollowUpReminders:EscalationFallbackRoles must contain at least one non-empty role name.")
     .Validate(options => options.ScanIntervalSeconds is >= 30 and <= 3600, "FollowUpReminders:ScanIntervalSeconds must be between 30 and 3600.")
     .ValidateOnStart();
+builder.Services.AddOptions<OperationsOptions>()
+    .Bind(builder.Configuration.GetSection(OperationsOptions.SectionName))
+    .Validate(options => options.DetailedAgentStaleMinutes is >= 1 and <= 60, "Operations:DetailedAgentStaleMinutes must be between 1 and 60.")
+    .Validate(options => options.BackupStaleHours is >= 1 and <= 168, "Operations:BackupStaleHours must be between 1 and 168.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.StableReleaseManifestPath), "Operations:StableReleaseManifestPath is required.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.BackupStatusPath), "Operations:BackupStatusPath is required.")
+    .ValidateOnStart();
 builder.Services.AddScoped<TaskNotificationInterceptor>();
 builder.Services.AddScoped<SurveyNotificationInterceptor>();
 builder.Services.AddScoped<WebsiteWorkFollowUpRealtimeInterceptor>();
@@ -93,6 +100,7 @@ builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
         serviceProvider.GetRequiredService<WebsiteWorkFollowUpRealtimeInterceptor>(),
         serviceProvider.GetRequiredService<AdminNotificationRealtimeInterceptor>()));
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IAgentHealthRegistry, AgentHealthRegistry>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -116,6 +124,7 @@ builder.Services.AddScoped<IAccessAssignmentService, AccessAssignmentService>();
 builder.Services.AddScoped<IEmployeeWorkspaceService, EmployeeWorkspaceService>();
 builder.Services.AddScoped<IRealtimeWorkspaceService, RealtimeWorkspaceService>();
 builder.Services.AddScoped<IMonitoringTelemetryService, MonitoringTelemetryService>();
+builder.Services.AddScoped<IOperationsHealthService, OperationsHealthService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddSingleton<IRealtimeEventPublisher, SignalRRealtimeEventPublisher>();
 builder.Services.AddSingleton<IWebsiteWorkRealtimePublisher, SignalRWebsiteWorkRealtimePublisher>();

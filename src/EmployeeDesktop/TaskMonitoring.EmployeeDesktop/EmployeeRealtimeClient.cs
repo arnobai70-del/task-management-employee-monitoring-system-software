@@ -4,7 +4,10 @@ namespace TaskMonitoring.EmployeeDesktop;
 
 public sealed class EmployeeRealtimeClient(EmployeeApiClient apiClient) : IAsyncDisposable
 {
+    private readonly AgentHealthReporter _agentHealthReporter = new(apiClient);
     private HubConnection? _connection;
+    private CancellationTokenSource? _agentHealthCancellation;
+    private Task? _agentHealthTask;
 
     public event EventHandler<EmployeeNotificationResponse>? NotificationReceived;
     public event EventHandler<bool>? ConnectionChanged;
@@ -54,6 +57,7 @@ public sealed class EmployeeRealtimeClient(EmployeeApiClient apiClient) : IAsync
         try
         {
             await connection.StartAsync(cancellationToken);
+            StartAgentHealthLoop();
             ConnectionChanged?.Invoke(this, true);
         }
         catch
@@ -68,6 +72,7 @@ public sealed class EmployeeRealtimeClient(EmployeeApiClient apiClient) : IAsync
     {
         var connection = _connection;
         _connection = null;
+        await StopAgentHealthLoopAsync();
         if (connection is null)
         {
             return;
@@ -84,8 +89,74 @@ public sealed class EmployeeRealtimeClient(EmployeeApiClient apiClient) : IAsync
         }
     }
 
+    private void StartAgentHealthLoop()
+    {
+        if (_agentHealthTask is not null)
+        {
+            return;
+        }
+
+        _agentHealthCancellation = new CancellationTokenSource();
+        _agentHealthTask = RunAgentHealthLoopAsync(_agentHealthCancellation.Token);
+    }
+
+    private async Task RunAgentHealthLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await _agentHealthReporter.ReportAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch
+            {
+                // Presence heartbeat remains authoritative for online/offline state.
+                // Detailed operational health is best-effort and retries on the next interval.
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+        }
+    }
+
+    private async Task StopAgentHealthLoopAsync()
+    {
+        var cancellation = _agentHealthCancellation;
+        var task = _agentHealthTask;
+        _agentHealthCancellation = null;
+        _agentHealthTask = null;
+        if (cancellation is null)
+        {
+            return;
+        }
+
+        await cancellation.CancelAsync();
+        if (task is not null)
+        {
+            try
+            {
+                await task;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+        cancellation.Dispose();
+    }
+
     public async ValueTask DisposeAsync()
     {
         await StopAsync();
+        _agentHealthReporter.Dispose();
     }
 }

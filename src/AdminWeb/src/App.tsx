@@ -5,6 +5,7 @@ import { useAuth } from './auth';
 import AccessAssignmentsPage from './AccessAssignments';
 import AuditLogsPage from './AuditLogs';
 import EscalationSlaAnalyticsPage from './EscalationSlaAnalytics';
+import OperationsDashboardPage from './OperationsDashboard';
 import { DepartmentManagementPage, EmployeeManagementPage } from './EmployeeDepartmentManagement';
 import PresencePanel from './PresencePanel';
 import ProductivityReportsPage from './ProductivityReports';
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', short: 'DB', permission: 'reports.read' },
   { path: '/productivity', label: 'Productivity', short: 'PD', permission: 'reports.read' },
   { path: '/sla-analytics', label: 'SLA Analytics', short: 'SL', permission: 'reports.read' },
+  { path: '/operations', label: 'Operations', short: 'OP', permission: 'reports.read' },
   { path: '/employees', label: 'Employees', short: 'EM', permission: 'employees.read' },
   { path: '/departments', label: 'Departments', short: 'DP', permission: 'departments.read' },
   { path: '/shifts', label: 'Shifts', short: 'SH', permission: 'shifts.read' },
@@ -356,6 +358,7 @@ export default function App() {
       <Route path="/dashboard" element={<ProtectedPage permission="reports.read"><DashboardPage /></ProtectedPage>} />
       <Route path="/productivity" element={<ProtectedPage permission="reports.read"><ProductivityReportsPage /></ProtectedPage>} />
       <Route path="/sla-analytics" element={<ProtectedPage permission="reports.read"><EscalationSlaAnalyticsPage /></ProtectedPage>} />
+      <Route path="/operations" element={<ProtectedPage permission="reports.read"><OperationsDashboardPage /></ProtectedPage>} />
       <Route path="/employees" element={<ProtectedPage permission="employees.read"><EmployeeManagementPage /></ProtectedPage>} />
       <Route path="/departments" element={<ProtectedPage permission="departments.read"><DepartmentManagementPage /></ProtectedPage>} />
       <Route path="/shifts" element={<ProtectedPage permission="shifts.read"><ShiftManagementPage /></ProtectedPage>} />
