@@ -7,6 +7,9 @@ namespace TaskMonitoring.Api.Services;
 public interface IWebsiteWorkRealtimePublisher
 {
     Task PublishCompletionAsync(WebsiteWorkCompletionResponse completion, CancellationToken cancellationToken);
+
+    Task PublishSubmissionAsync(WebsiteWorkSubmissionResponse submission, CancellationToken cancellationToken)
+        => Task.CompletedTask;
 }
 
 public sealed class SignalRWebsiteWorkRealtimePublisher(IHubContext<RealtimeHub> hubContext) : IWebsiteWorkRealtimePublisher
@@ -14,4 +17,8 @@ public sealed class SignalRWebsiteWorkRealtimePublisher(IHubContext<RealtimeHub>
     public Task PublishCompletionAsync(WebsiteWorkCompletionResponse completion, CancellationToken cancellationToken)
         => hubContext.Clients.Group(RealtimeGroups.TaskManagers)
             .SendAsync("websiteWorkCompleted", completion, cancellationToken);
+
+    public Task PublishSubmissionAsync(WebsiteWorkSubmissionResponse submission, CancellationToken cancellationToken)
+        => hubContext.Clients.Group(RealtimeGroups.TaskManagers)
+            .SendAsync("websiteWorkSubmitted", submission, cancellationToken);
 }

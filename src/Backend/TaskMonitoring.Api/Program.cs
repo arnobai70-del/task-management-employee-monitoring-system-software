@@ -81,6 +81,7 @@ builder.Services.AddScoped<IAttendanceCoreService, AttendanceCoreService>();
 builder.Services.AddScoped<IProjectTaskCoreService, ProjectTaskCoreService>();
 builder.Services.AddScoped<IWebsiteWorkService, WebsiteWorkService>();
 builder.Services.AddScoped<IWebsiteWorkProgressService, WebsiteWorkProgressService>();
+builder.Services.AddScoped<IWebsiteWorkReviewService, WebsiteWorkReviewService>();
 builder.Services.AddScoped<ISurveyCoreService, SurveyCoreService>();
 builder.Services.AddScoped<IExternalSurveyService, ExternalSurveyService>();
 builder.Services.AddScoped<IReportingDashboardService, ReportingDashboardService>();
