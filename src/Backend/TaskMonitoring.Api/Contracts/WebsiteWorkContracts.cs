@@ -102,6 +102,7 @@ public sealed record WebsiteWorkEmployeeTodayResponse(
     string EmployeeCode,
     string EmployeeName,
     int WorkingNow,
+    int PendingReview,
     int SubmittedToday,
     int ApprovedToday,
     int ReopenedToday,
