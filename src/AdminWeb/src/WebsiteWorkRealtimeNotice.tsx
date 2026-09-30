@@ -31,6 +31,14 @@ interface WebsiteWorkSubmission {
 type WebsiteWorkFollowUpRealtimeAction = 'Assigned' | 'Updated' | 'Removed' | 'Resolved';
 type FollowUpState = 'Pending' | 'Overdue' | 'Resolved';
 
+type AdminNotificationKind =
+  | 'FollowUpAssigned'
+  | 'FollowUpUpdated'
+  | 'FollowUpRemoved'
+  | 'FollowUpResolved'
+  | 'FollowUpDueSoon'
+  | 'FollowUpOverdue';
+
 interface WebsiteWorkFollowUpRealtime {
   action: WebsiteWorkFollowUpRealtimeAction;
   taskId: string;
@@ -46,6 +54,17 @@ interface WebsiteWorkFollowUpRealtime {
   dueAtUtc: string;
   occurredAtUtc: string;
   message: string;
+}
+
+export interface AdminNotificationRealtime {
+  id: string;
+  kind: AdminNotificationKind;
+  title: string;
+  message: string;
+  taskId: string;
+  actionUrl: string;
+  createdAtUtc: string;
+  readAtUtc: string | null;
 }
 
 interface FollowUpItem {
@@ -69,6 +88,11 @@ interface FollowUpInboxResponse {
 export interface WebsiteWorkFollowUpSummary {
   pending: number;
   overdue: number;
+}
+
+interface AdminNotificationSummary {
+  unread: number;
+  total: number;
 }
 
 interface PendingWebsiteWork {
@@ -97,13 +121,7 @@ interface Notice {
 export const websiteWorkCompletedEvent = 'taskmonitoring:website-work-completed';
 export const websiteWorkFollowUpChangedEvent = 'taskmonitoring:website-work-follow-up-changed';
 export const websiteWorkFollowUpSummaryEvent = 'taskmonitoring:website-work-follow-up-summary';
-
-function followUpNoticeTitle(action: WebsiteWorkFollowUpRealtimeAction): string {
-  if (action === 'Assigned') return 'New follow-up assigned';
-  if (action === 'Updated') return 'Follow-up updated';
-  if (action === 'Resolved') return 'Follow-up resolved';
-  return 'Follow-up changed';
-}
+export const adminNotificationChangedEvent = 'taskmonitoring:admin-notification-changed';
 
 export default function WebsiteWorkRealtimeNotice() {
   const { can } = useAuth();
@@ -112,6 +130,7 @@ export default function WebsiteWorkRealtimeNotice() {
   const [latest, setLatest] = useState<Notice | null>(null);
   const [pending, setPending] = useState<PendingWebsiteWork[]>([]);
   const [followUpSummary, setFollowUpSummary] = useState<WebsiteWorkFollowUpSummary>({ pending: 0, overdue: 0 });
+  const [adminSummary, setAdminSummary] = useState<AdminNotificationSummary>({ unread: 0, total: 0 });
   const [reviewError, setReviewError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const dismissTimer = useRef<number | null>(null);
@@ -137,6 +156,19 @@ export default function WebsiteWorkRealtimeNotice() {
       setReviewError(caught instanceof Error ? caught.message : 'Unable to load pending website work reviews.');
     }
   }, [can, mayManage]);
+
+  const loadAdminSummary = useCallback(async () => {
+    if (!mayManage) {
+      setAdminSummary({ unread: 0, total: 0 });
+      return;
+    }
+
+    try {
+      setAdminSummary(await apiFetch<AdminNotificationSummary>('/api/admin-notifications/summary'));
+    } catch {
+      // The notification center remains available and the next poll/realtime event retries the summary.
+    }
+  }, [mayManage]);
 
   const publishFollowUpSummary = useCallback((summary: WebsiteWorkFollowUpSummary) => {
     setFollowUpSummary(summary);
@@ -189,6 +221,18 @@ export default function WebsiteWorkRealtimeNotice() {
   }, [loadFollowUps, mayManage]);
 
   useEffect(() => {
+    if (!mayManage) return;
+    void loadAdminSummary();
+    const timer = window.setInterval(() => void loadAdminSummary(), 30_000);
+    const refresh = () => void loadAdminSummary();
+    window.addEventListener(adminNotificationChangedEvent, refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener(adminNotificationChangedEvent, refresh);
+    };
+  }, [loadAdminSummary, mayManage]);
+
+  useEffect(() => {
     if (!allowed) return;
 
     const connection = new HubConnectionBuilder()
@@ -216,24 +260,34 @@ export default function WebsiteWorkRealtimeNotice() {
     });
 
     connection.on('websiteWorkFollowUpChanged', (followUp: WebsiteWorkFollowUpRealtime) => {
-      showNotice({
-        title: followUpNoticeTitle(followUp.action),
-        message: followUp.message,
-        detail: `${followUp.projectName} · due ${new Date(followUp.dueAtUtc).toLocaleString()}`
-      });
       window.dispatchEvent(new CustomEvent<WebsiteWorkFollowUpRealtime>(websiteWorkFollowUpChangedEvent, { detail: followUp }));
       void loadFollowUps(false);
     });
 
+    connection.on('adminNotificationCreated', (notification: AdminNotificationRealtime) => {
+      showNotice({
+        title: notification.title,
+        message: notification.message,
+        detail: notification.kind === 'FollowUpOverdue'
+          ? 'Overdue · saved in Notifications'
+          : notification.kind === 'FollowUpDueSoon'
+            ? 'Due soon · saved in Notifications'
+            : 'Saved in Notifications'
+      });
+      window.dispatchEvent(new CustomEvent<AdminNotificationRealtime>(adminNotificationChangedEvent, { detail: notification }));
+      void loadAdminSummary();
+      void loadFollowUps(false);
+    });
+
     void connection.start().catch(() => {
-      // Pending review/follow-up polling and durable server data remain available if realtime reconnects later.
+      // Pending review/follow-up polling and durable server notifications remain available if realtime reconnects later.
     });
 
     return () => {
       if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current);
       void connection.stop();
     };
-  }, [allowed, loadFollowUps, loadPending, showNotice]);
+  }, [allowed, loadAdminSummary, loadFollowUps, loadPending, showNotice]);
 
   async function approve(item: PendingWebsiteWork) {
     if (!mayManage || !window.confirm(`Approve completion for "${item.title}" by ${item.employeeName || 'this worker'}?`)) return;
@@ -302,6 +356,25 @@ export default function WebsiteWorkRealtimeNotice() {
         </aside>
       )}
 
+      {mayManage && adminSummary.unread > 0 && (
+        <NavLink
+          to="/follow-ups#notifications"
+          className="status-badge status-active"
+          aria-label={`${adminSummary.unread} unread notifications`}
+          style={{
+            position: 'fixed',
+            right: 20,
+            top: 76,
+            zIndex: 31,
+            textDecoration: 'none',
+            padding: '8px 12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,.16)'
+          }}
+        >
+          Notifications {adminSummary.unread}
+        </NavLink>
+      )}
+
       {mayManage && followUpCount > 0 && (
         <NavLink
           to="/follow-ups"
@@ -310,7 +383,7 @@ export default function WebsiteWorkRealtimeNotice() {
           style={{
             position: 'fixed',
             right: 20,
-            top: 76,
+            top: adminSummary.unread > 0 ? 116 : 76,
             zIndex: 30,
             textDecoration: 'none',
             padding: '8px 12px',

@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Domain;
@@ -67,34 +66,47 @@ public sealed class WebsiteWorkFollowUpRealtimeInterceptor(
 
             if (entry.Entity.Action == WebsiteWorkAttentionActionService.FollowUpAssignedAction)
             {
-                QueueAssignment(task, entry.Entity, previousFollowUp);
+                QueueAssignment(context, task, entry.Entity, previousFollowUp);
                 continue;
             }
 
             if (entry.Entity.Action == WebsiteWorkAttentionActionService.FollowUpResolvedAction)
             {
-                QueueResolved(task, entry.Entity);
+                QueueResolved(context, task, entry.Entity);
                 continue;
             }
 
             if (previousFollowUp is not null)
             {
-                _pending.Add((
+                var message = $"Follow-up is no longer current: {task.AssigneeEmployee.FullName} · {task.Title}";
+                var payload = BuildPayload(
+                    WebsiteWorkFollowUpRealtimeAction.Removed,
+                    task,
                     previousFollowUp.OwnerUserId,
-                    BuildPayload(
-                        WebsiteWorkFollowUpRealtimeAction.Removed,
-                        task,
-                        previousFollowUp.OwnerUserId,
-                        previousFollowUp.OwnerEmail,
-                        previousFollowUp.OwnerName,
-                        previousFollowUp.DueAtUtc,
-                        entry.Entity.CreatedAtUtc,
-                        $"Follow-up is no longer current: {task.AssigneeEmployee.FullName} · {task.Title}")));
+                    previousFollowUp.OwnerEmail,
+                    previousFollowUp.OwnerName,
+                    previousFollowUp.DueAtUtc,
+                    entry.Entity.CreatedAtUtc,
+                    message);
+                QueueDelivery(
+                    context,
+                    task,
+                    entry.Entity,
+                    previousFollowUp.OwnerUserId,
+                    AdminNotificationKind.FollowUpRemoved,
+                    "Follow-up changed",
+                    message,
+                    previousFollowUp.DueAtUtc,
+                    payload);
             }
         }
     }
 
-    private void QueueAssignment(ProjectTask task, TaskActivity activity, FollowUpSnapshot? previousFollowUp)
+    private void QueueAssignment(
+        DbContext context,
+        ProjectTask task,
+        TaskActivity activity,
+        FollowUpSnapshot? previousFollowUp)
     {
         var details = ParseDetails(activity.DetailsJson);
         var ownerUserId = ReadGuid(details, "followUpOwnerUserId");
@@ -110,35 +122,53 @@ public sealed class WebsiteWorkFollowUpRealtimeInterceptor(
 
         if (previousFollowUp is not null && !sameOwner)
         {
-            _pending.Add((
+            var removedMessage = $"Follow-up reassigned: {task.AssigneeEmployee!.FullName} · {task.Title}";
+            var removedPayload = BuildPayload(
+                WebsiteWorkFollowUpRealtimeAction.Removed,
+                task,
                 previousFollowUp.OwnerUserId,
-                BuildPayload(
-                    WebsiteWorkFollowUpRealtimeAction.Removed,
-                    task,
-                    previousFollowUp.OwnerUserId,
-                    previousFollowUp.OwnerEmail,
-                    previousFollowUp.OwnerName,
-                    previousFollowUp.DueAtUtc,
-                    activity.CreatedAtUtc,
-                    $"Follow-up reassigned: {task.AssigneeEmployee!.FullName} · {task.Title}")));
+                previousFollowUp.OwnerEmail,
+                previousFollowUp.OwnerName,
+                previousFollowUp.DueAtUtc,
+                activity.CreatedAtUtc,
+                removedMessage);
+            QueueDelivery(
+                context,
+                task,
+                activity,
+                previousFollowUp.OwnerUserId,
+                AdminNotificationKind.FollowUpRemoved,
+                "Follow-up reassigned",
+                removedMessage,
+                previousFollowUp.DueAtUtc,
+                removedPayload);
         }
 
-        _pending.Add((
+        var message = sameOwner
+            ? $"Follow-up updated: {task.AssigneeEmployee!.FullName} · {task.Title}"
+            : $"Follow-up assigned: {task.AssigneeEmployee!.FullName} · {task.Title}";
+        var payload = BuildPayload(
+            sameOwner ? WebsiteWorkFollowUpRealtimeAction.Updated : WebsiteWorkFollowUpRealtimeAction.Assigned,
+            task,
             ownerUserId.Value,
-            BuildPayload(
-                sameOwner ? WebsiteWorkFollowUpRealtimeAction.Updated : WebsiteWorkFollowUpRealtimeAction.Assigned,
-                task,
-                ownerUserId.Value,
-                ownerEmail,
-                ownerName,
-                dueAtUtc.Value,
-                activity.CreatedAtUtc,
-                sameOwner
-                    ? $"Follow-up updated: {task.AssigneeEmployee!.FullName} · {task.Title}"
-                    : $"Follow-up assigned: {task.AssigneeEmployee!.FullName} · {task.Title}")));
+            ownerEmail,
+            ownerName,
+            dueAtUtc.Value,
+            activity.CreatedAtUtc,
+            message);
+        QueueDelivery(
+            context,
+            task,
+            activity,
+            ownerUserId.Value,
+            sameOwner ? AdminNotificationKind.FollowUpUpdated : AdminNotificationKind.FollowUpAssigned,
+            sameOwner ? "Follow-up updated" : "New follow-up assigned",
+            message,
+            dueAtUtc.Value,
+            payload);
     }
 
-    private void QueueResolved(ProjectTask task, TaskActivity activity)
+    private void QueueResolved(DbContext context, ProjectTask task, TaskActivity activity)
     {
         var details = ParseDetails(activity.DetailsJson);
         var ownerUserId = ReadGuid(details, "followUpOwnerUserId");
@@ -149,17 +179,51 @@ public sealed class WebsiteWorkFollowUpRealtimeInterceptor(
             return;
         }
 
-        _pending.Add((
+        var message = $"Follow-up resolved: {task.AssigneeEmployee!.FullName} · {task.Title}";
+        var payload = BuildPayload(
+            WebsiteWorkFollowUpRealtimeAction.Resolved,
+            task,
             ownerUserId.Value,
-            BuildPayload(
-                WebsiteWorkFollowUpRealtimeAction.Resolved,
-                task,
-                ownerUserId.Value,
-                ownerEmail,
-                ReadString(details, "followUpOwnerName"),
-                dueAtUtc.Value,
-                activity.CreatedAtUtc,
-                $"Follow-up resolved: {task.AssigneeEmployee!.FullName} · {task.Title}")));
+            ownerEmail,
+            ReadString(details, "followUpOwnerName"),
+            dueAtUtc.Value,
+            activity.CreatedAtUtc,
+            message);
+        QueueDelivery(
+            context,
+            task,
+            activity,
+            ownerUserId.Value,
+            AdminNotificationKind.FollowUpResolved,
+            "Follow-up resolved",
+            message,
+            dueAtUtc.Value,
+            payload);
+    }
+
+    private void QueueDelivery(
+        DbContext context,
+        ProjectTask task,
+        TaskActivity sourceActivity,
+        Guid userId,
+        AdminNotificationKind kind,
+        string notificationTitle,
+        string message,
+        DateTime dueAtUtc,
+        WebsiteWorkFollowUpRealtimeResponse payload)
+    {
+        _pending.Add((userId, payload));
+
+        var notification = AdminNotificationService.CreateActivity(
+            task,
+            userId,
+            kind,
+            notificationTitle,
+            message,
+            sourceActivity.Id,
+            sourceActivity.CreatedAtUtc,
+            dueAtUtc);
+        context.Add(notification);
     }
 
     private static WebsiteWorkFollowUpRealtimeResponse BuildPayload(

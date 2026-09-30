@@ -72,14 +72,21 @@ builder.Services.AddOptions<WebsiteWorkAttentionOptions>()
     .Validate(options => options.PendingReviewMinutes is >= 5 and <= 1440, "WebsiteWorkAttention:PendingReviewMinutes must be between 5 and 1440.")
     .Validate(options => options.RepeatedCorrectionCount is >= 1 and <= 20, "WebsiteWorkAttention:RepeatedCorrectionCount must be between 1 and 20.")
     .ValidateOnStart();
+builder.Services.AddOptions<FollowUpReminderOptions>()
+    .Bind(builder.Configuration.GetSection(FollowUpReminderOptions.SectionName))
+    .Validate(options => options.DueSoonMinutes is >= 5 and <= 1440, "FollowUpReminders:DueSoonMinutes must be between 5 and 1440.")
+    .Validate(options => options.ScanIntervalSeconds is >= 30 and <= 3600, "FollowUpReminders:ScanIntervalSeconds must be between 30 and 3600.")
+    .ValidateOnStart();
 builder.Services.AddScoped<TaskNotificationInterceptor>();
 builder.Services.AddScoped<SurveyNotificationInterceptor>();
 builder.Services.AddScoped<WebsiteWorkFollowUpRealtimeInterceptor>();
+builder.Services.AddScoped<AdminNotificationRealtimeInterceptor>();
 builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
     options.UseNpgsql(connectionString).AddInterceptors(
         serviceProvider.GetRequiredService<TaskNotificationInterceptor>(),
         serviceProvider.GetRequiredService<SurveyNotificationInterceptor>(),
-        serviceProvider.GetRequiredService<WebsiteWorkFollowUpRealtimeInterceptor>()));
+        serviceProvider.GetRequiredService<WebsiteWorkFollowUpRealtimeInterceptor>(),
+        serviceProvider.GetRequiredService<AdminNotificationRealtimeInterceptor>()));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ITokenService, TokenService>();
@@ -94,6 +101,8 @@ builder.Services.AddScoped<IWebsiteWorkProductivityReportService, WebsiteWorkPro
 builder.Services.AddScoped<IWebsiteWorkTimelineService, WebsiteWorkTimelineService>();
 builder.Services.AddScoped<IWebsiteWorkAttentionService, WebsiteWorkAttentionService>();
 builder.Services.AddScoped<IWebsiteWorkAttentionActionService, WebsiteWorkAttentionActionService>();
+builder.Services.AddScoped<IAdminNotificationService, AdminNotificationService>();
+builder.Services.AddScoped<IFollowUpReminderService, FollowUpReminderService>();
 builder.Services.AddScoped<ISurveyCoreService, SurveyCoreService>();
 builder.Services.AddScoped<IExternalSurveyService, ExternalSurveyService>();
 builder.Services.AddScoped<IReportingDashboardService, ReportingDashboardService>();
@@ -104,7 +113,9 @@ builder.Services.AddScoped<IMonitoringTelemetryService, MonitoringTelemetryServi
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddSingleton<IRealtimeEventPublisher, SignalRRealtimeEventPublisher>();
 builder.Services.AddSingleton<IWebsiteWorkRealtimePublisher, SignalRWebsiteWorkRealtimePublisher>();
+builder.Services.AddSingleton<IAdminNotificationRealtimePublisher, SignalRAdminNotificationRealtimePublisher>();
 builder.Services.AddHostedService<MonitoringRetentionHostedService>();
+builder.Services.AddHostedService<FollowUpReminderHostedService>();
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
