@@ -101,7 +101,7 @@ export default function OperationsIncidentRealtimeNotice() {
 
       {allowed && activeCount > 0 && (
         <NavLink
-          to="/incidents"
+          to="/operations"
           className={`status-badge status-${(summary?.openCritical ?? 0) > 0 ? 'urgent' : 'warning'}`}
           aria-label={`${activeCount} active operations incidents, ${summary?.openCritical ?? 0} critical`}
           style={{
