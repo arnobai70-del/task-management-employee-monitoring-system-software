@@ -40,6 +40,23 @@ public sealed class UpsertWebsiteWorkRequest
     public DateOnly? DueDate { get; init; }
 }
 
+public sealed class WebsiteWorkReviewRequest
+{
+    [StringLength(1000)]
+    public string? Comment { get; init; }
+}
+
+public sealed record WebsiteWorkSubmissionResponse(
+    Guid TaskId,
+    Guid ProjectId,
+    string ProjectName,
+    Guid EmployeeId,
+    string EmployeeCode,
+    string EmployeeName,
+    string TaskTitle,
+    DateTime SubmittedAtUtc,
+    string Message);
+
 public sealed record WebsiteWorkCompletionResponse(
     Guid TaskId,
     Guid ProjectId,
