@@ -40,7 +40,9 @@ public abstract class WebsiteWorkControllerBase : ControllerBase
 [ApiController]
 [Authorize(Policy = PermissionCatalog.TasksRead)]
 [Route("api/website-work")]
-public sealed class WebsiteWorkController(IWebsiteWorkService websiteWorkService) : WebsiteWorkControllerBase
+public sealed class WebsiteWorkController(
+    IWebsiteWorkService websiteWorkService,
+    IWebsiteWorkProgressService websiteWorkProgressService) : WebsiteWorkControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResponse<WebsiteWorkResponse>>> GetAll(
@@ -58,6 +60,12 @@ public sealed class WebsiteWorkController(IWebsiteWorkService websiteWorkService
         int pageSize = 20,
         CancellationToken cancellationToken = default)
         => Ok(await websiteWorkService.GetRecentCompletionsAsync(page, pageSize, cancellationToken));
+
+    [HttpGet("progress")]
+    public async Task<ActionResult<WebsiteWorkProgressResponse>> GetProgress(
+        int utcOffsetMinutes = 0,
+        CancellationToken cancellationToken = default)
+        => Ok(await websiteWorkProgressService.GetAsync(utcOffsetMinutes, cancellationToken));
 
     [HttpPost]
     [Authorize(Policy = PermissionCatalog.TasksManage)]
