@@ -89,6 +89,10 @@ volumes:
   loki_data:
   grafana_data:
 
+# This network is intentionally a normal bridge rather than Docker `internal`.
+# Docker internal networks cannot publish host ports, while operators need
+# loopback-only health/UI access. Every published observability port is bound
+# explicitly to OBSERVABILITY_BIND (127.0.0.1 by default), and Caddy is not
+# attached to this network.
 networks:
-  observability:
-    internal: true
+  observability: {}
