@@ -42,7 +42,8 @@ public abstract class WebsiteWorkControllerBase : ControllerBase
 [Route("api/website-work")]
 public sealed class WebsiteWorkController(
     IWebsiteWorkService websiteWorkService,
-    IWebsiteWorkProgressService websiteWorkProgressService) : WebsiteWorkControllerBase
+    IWebsiteWorkProgressService websiteWorkProgressService,
+    IWebsiteWorkReviewService websiteWorkReviewService) : WebsiteWorkControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResponse<WebsiteWorkResponse>>> GetAll(
@@ -81,12 +82,30 @@ public sealed class WebsiteWorkController(
         UpsertWebsiteWorkRequest request,
         CancellationToken cancellationToken)
         => ToActionResult(await websiteWorkService.UpdateAsync(id, request, Actor(), cancellationToken));
+
+    [HttpPost("{id:guid}/approve")]
+    [Authorize(Policy = PermissionCatalog.TasksManage)]
+    public async Task<ActionResult<WebsiteWorkResponse>> Approve(
+        Guid id,
+        WebsiteWorkReviewRequest request,
+        CancellationToken cancellationToken)
+        => ToActionResult(await websiteWorkReviewService.ApproveAsync(id, request, Actor(), cancellationToken));
+
+    [HttpPost("{id:guid}/reopen")]
+    [Authorize(Policy = PermissionCatalog.TasksManage)]
+    public async Task<ActionResult<WebsiteWorkResponse>> Reopen(
+        Guid id,
+        WebsiteWorkReviewRequest request,
+        CancellationToken cancellationToken)
+        => ToActionResult(await websiteWorkReviewService.ReopenAsync(id, request, Actor(), cancellationToken));
 }
 
 [ApiController]
 [Authorize]
 [Route("api/me/website-work")]
-public sealed class MyWebsiteWorkController(IWebsiteWorkService websiteWorkService) : WebsiteWorkControllerBase
+public sealed class MyWebsiteWorkController(
+    IWebsiteWorkService websiteWorkService,
+    IWebsiteWorkReviewService websiteWorkReviewService) : WebsiteWorkControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<WebsiteWorkResponse>>> GetMine(
@@ -98,7 +117,11 @@ public sealed class MyWebsiteWorkController(IWebsiteWorkService websiteWorkServi
     public async Task<ActionResult<WebsiteWorkResponse>> Start(Guid id, CancellationToken cancellationToken)
         => ToActionResult(await websiteWorkService.StartAsync(id, Actor(), cancellationToken));
 
+    [HttpPost("{id:guid}/submit")]
+    public async Task<ActionResult<WebsiteWorkResponse>> Submit(Guid id, CancellationToken cancellationToken)
+        => ToActionResult(await websiteWorkReviewService.SubmitAsync(id, Actor(), cancellationToken));
+
     [HttpPost("{id:guid}/complete")]
-    public async Task<ActionResult<WebsiteWorkResponse>> Complete(Guid id, CancellationToken cancellationToken)
-        => ToActionResult(await websiteWorkService.CompleteAsync(id, Actor(), cancellationToken));
+    public async Task<ActionResult<WebsiteWorkResponse>> CompleteCompatibility(Guid id, CancellationToken cancellationToken)
+        => ToActionResult(await websiteWorkReviewService.SubmitAsync(id, Actor(), cancellationToken));
 }
