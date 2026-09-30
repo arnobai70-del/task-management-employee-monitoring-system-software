@@ -157,6 +157,7 @@ function Invoke-RestMethod {
 [Environment]::SetEnvironmentVariable('TM_CENTRAL_TEST_TARGET_VERSION', $(ConvertTo-SingleQuotedLiteral $UpdaterTargetVersion))
 [Environment]::SetEnvironmentVariable('TM_CENTRAL_TEST_EXIT_CODE', '$UpdaterExitCode')
 & $(ConvertTo-SingleQuotedLiteral ((Resolve-Path $RunnerPath).Path)) -ProgramDataRoot $(ConvertTo-SingleQuotedLiteral $scenarioRoot)
+exit `$LASTEXITCODE
 "@
     Set-Content -LiteralPath $harnessPath -Value $harness -Encoding UTF8
 
