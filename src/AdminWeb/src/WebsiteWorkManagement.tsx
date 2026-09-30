@@ -31,6 +31,38 @@ interface WebsiteWork {
   updatedAtUtc: string;
 }
 
+interface WebsiteWorkActiveProgress {
+  taskId: string;
+  projectId: string;
+  projectName: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  taskTitle: string;
+  startedAtUtc: string;
+  elapsedSeconds: number;
+  dueDate: string | null;
+  isOverdue: boolean;
+}
+
+interface WebsiteWorkEmployeeToday {
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  workingNow: number;
+  completedToday: number;
+  lastCompletedAtUtc: string | null;
+}
+
+interface WebsiteWorkProgress {
+  generatedAtUtc: string;
+  utcOffsetMinutes: number;
+  workingNow: number;
+  completedToday: number;
+  activeWork: WebsiteWorkActiveProgress[];
+  employees: WebsiteWorkEmployeeToday[];
+}
+
 interface WorkDraft {
   projectId: string;
   employeeId: string;
@@ -65,6 +97,19 @@ function formatDateTime(value: string | null): string {
   return Number.isNaN(parsed.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(parsed);
 }
 
+function formatWorkingDuration(startedAtUtc: string, nowMs: number): string {
+  const startedMs = new Date(startedAtUtc).getTime();
+  if (Number.isNaN(startedMs)) return '—';
+  const totalSeconds = Math.max(0, Math.floor((nowMs - startedMs) / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  return `${minutes}m ${seconds}s`;
+}
+
 export default function WebsiteWorkManagementPage() {
   const { can } = useAuth();
   const mayManage = can('tasks.manage');
@@ -72,19 +117,30 @@ export default function WebsiteWorkManagementPage() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [members, setMembers] = useState<EmployeeOption[]>([]);
   const [completions, setCompletions] = useState<WebsiteWorkCompletion[]>([]);
+  const [progress, setProgress] = useState<WebsiteWorkProgress | null>(null);
   const [draft, setDraft] = useState<WorkDraft>(emptyDraft);
   const [editing, setEditing] = useState<WebsiteWork | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [progressLoading, setProgressLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [progressError, setProgressError] = useState('');
   const [version, setVersion] = useState(0);
+  const [progressVersion, setProgressVersion] = useState(0);
+  const [clockNow, setClockNow] = useState(() => Date.now());
 
-  const workingCount = useMemo(() => items.filter(item => item.status === 'InProgress').length, [items]);
   const readyCount = useMemo(() => items.filter(item => item.status === 'ToDo').length, [items]);
+  const workingCount = progress?.workingNow ?? items.filter(item => item.status === 'InProgress').length;
+  const completedToday = progress?.completedToday ?? 0;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +169,33 @@ export default function WebsiteWorkManagementPage() {
   }, [search, version]);
 
   useEffect(() => {
+    let cancelled = false;
+    const utcOffsetMinutes = -new Date().getTimezoneOffset();
+
+    const loadProgress = async (showLoading: boolean) => {
+      if (showLoading) setProgressLoading(true);
+      try {
+        const snapshot = await apiFetch<WebsiteWorkProgress>(`/api/website-work/progress?utcOffsetMinutes=${utcOffsetMinutes}`);
+        if (!cancelled) {
+          setProgress(snapshot);
+          setProgressError('');
+        }
+      } catch (caught) {
+        if (!cancelled) setProgressError(caught instanceof Error ? caught.message : 'Unable to load live work progress.');
+      } finally {
+        if (!cancelled && showLoading) setProgressLoading(false);
+      }
+    };
+
+    void loadProgress(true);
+    const timer = window.setInterval(() => void loadProgress(false), 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [progressVersion]);
+
+  useEffect(() => {
     if (!draft.projectId) {
       setMembers([]);
       return;
@@ -131,10 +214,16 @@ export default function WebsiteWorkManagementPage() {
       setCompletions(current => [completion, ...current.filter(item => item.taskId !== completion.taskId)].slice(0, 20));
       setNotice(completion.message);
       setVersion(value => value + 1);
+      setProgressVersion(value => value + 1);
     };
     window.addEventListener(websiteWorkCompletedEvent, handler);
     return () => window.removeEventListener(websiteWorkCompletedEvent, handler);
   }, []);
+
+  function refreshAll() {
+    setVersion(value => value + 1);
+    setProgressVersion(value => value + 1);
+  }
 
   function newWork() {
     setEditing(null);
@@ -183,7 +272,7 @@ export default function WebsiteWorkManagementPage() {
       setNotice(`Website work ${editing ? 'updated' : 'assigned'}.`);
       setShowForm(false);
       setEditing(null);
-      setVersion(value => value + 1);
+      refreshAll();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to save website work.');
     } finally {
@@ -198,7 +287,7 @@ export default function WebsiteWorkManagementPage() {
     try {
       await apiFetch(`/api/tasks/${item.id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'Cancelled' }) });
       setNotice('Website work cancelled.');
-      setVersion(value => value + 1);
+      refreshAll();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to cancel website work.');
     } finally {
@@ -212,7 +301,7 @@ export default function WebsiteWorkManagementPage() {
         <div>
           <p className="eyebrow">Target work administration</p>
           <h1>Website Work</h1>
-          <p className="muted">Assign a website plus a concrete target. Opening the link moves the employee to Working; the employee marks completion manually when the target is finished.</p>
+          <p className="muted">Assign website targets and watch who is working, how long they have been working, and how many targets each worker completed today.</p>
         </div>
         <div className="header-actions">
           <form className="inline-search" onSubmit={event => { event.preventDefault(); setSearch(searchDraft.trim()); }}>
@@ -225,12 +314,58 @@ export default function WebsiteWorkManagementPage() {
 
       <div className="metric-grid compact-metrics">
         <article className="metric-card"><span>Ready</span><strong>{readyCount}</strong><small>Waiting to be opened</small></article>
-        <article className="metric-card"><span>Working</span><strong>{workingCount}</strong><small>Link opened / target in progress</small></article>
-        <article className="metric-card"><span>Completed shown</span><strong>{completions.length}</strong><small>Recent durable completions</small></article>
+        <article className="metric-card"><span>Working now</span><strong>{workingCount}</strong><small>Live target activity</small></article>
+        <article className="metric-card"><span>Completed today</span><strong>{completedToday}</strong><small>Browser-local day</small></article>
       </div>
 
       {notice && <div className="success-banner">{notice}</div>}
       {error && <div className="error-banner">{error}</div>}
+      {progressError && <div className="error-banner">Live progress delayed: {progressError}</div>}
+
+      <section className="dashboard-grid website-work-live-grid">
+        <article className="panel table-panel">
+          <div className="panel-heading">
+            <div><h2>Live work progress</h2><p>Auto-refresh every 5 seconds · duration updates every second</p></div>
+            <button className="ghost-button" onClick={refreshAll}>Refresh now</button>
+          </div>
+          {progressLoading && !progress ? <div className="loading-block">Loading live progress…</div> : (
+            <div className="table-wrap"><table>
+              <thead><tr><th>Worker</th><th>Current target</th><th>Project</th><th>Working for</th><th>Started</th><th>Due</th></tr></thead>
+              <tbody>
+                {(progress?.activeWork || []).map(item => (
+                  <tr key={item.taskId}>
+                    <td><strong>{item.employeeName}</strong><small>{item.employeeCode}</small></td>
+                    <td><strong>{item.taskTitle}</strong><small><span className="status-badge status-working">Working</span></small></td>
+                    <td>{item.projectName}</td>
+                    <td><strong className="live-duration">{formatWorkingDuration(item.startedAtUtc, clockNow)}</strong></td>
+                    <td>{formatDateTime(item.startedAtUtc)}</td>
+                    <td>{item.dueDate || '—'}{item.isOverdue && <small><span className="status-badge status-urgent">Overdue</span></small>}</td>
+                  </tr>
+                ))}
+                {!progress?.activeWork.length && <tr><td colSpan={6} className="empty-cell">No worker is currently on Website Work.</td></tr>}
+              </tbody>
+            </table></div>
+          )}
+        </article>
+
+        <article className="panel table-panel">
+          <div className="panel-heading"><div><h2>Today by worker</h2><p>Current browser timezone · {completedToday} completed total</p></div></div>
+          <div className="table-wrap"><table>
+            <thead><tr><th>Worker</th><th>Working now</th><th>Completed today</th><th>Last completed</th></tr></thead>
+            <tbody>
+              {(progress?.employees || []).map(item => (
+                <tr key={item.employeeId}>
+                  <td><strong>{item.employeeName}</strong><small>{item.employeeCode}</small></td>
+                  <td>{item.workingNow}</td>
+                  <td><strong>{item.completedToday}</strong></td>
+                  <td>{formatDateTime(item.lastCompletedAtUtc)}</td>
+                </tr>
+              ))}
+              {!progress?.employees.length && <tr><td colSpan={4} className="empty-cell">No Website Work activity today.</td></tr>}
+            </tbody>
+          </table></div>
+        </article>
+      </section>
 
       {showForm && mayManage && (
         <article className="panel management-form-panel">
@@ -268,7 +403,7 @@ export default function WebsiteWorkManagementPage() {
       )}
 
       <article className="panel table-panel">
-        <div className="panel-heading"><div><h2>Website target register</h2><p>{items.length} loaded · {workingCount} currently working</p></div><button className="ghost-button" onClick={() => setVersion(value => value + 1)}>Refresh</button></div>
+        <div className="panel-heading"><div><h2>Website target register</h2><p>{items.length} loaded · {workingCount} currently working</p></div><button className="ghost-button" onClick={refreshAll}>Refresh</button></div>
         {loading ? <div className="loading-block">Loading website work…</div> : (
           <div className="table-wrap"><table>
             <thead><tr><th>Target</th><th>Worker</th><th>Project</th><th>Website</th><th>Due</th><th>Status</th>{mayManage && <th>Actions</th>}</tr></thead>
