@@ -24,11 +24,11 @@ public sealed class OperationsIncidentServiceTests
 
         await service.ScanAsync(cancellationToken);
         var firstCount = await db.AuditLogs.CountAsync(x => x.TargetType == OperationsIncidentService.TargetType, cancellationToken);
-        Assert.Equal(5, firstCount);
+        Assert.Equal(6, firstCount);
         var summary = await service.GetSummaryAsync(cancellationToken);
-        Assert.Equal(5, summary.Open);
+        Assert.Equal(6, summary.Open);
         Assert.Equal(3, summary.OpenCritical);
-        Assert.Equal(2, summary.OpenWarning);
+        Assert.Equal(3, summary.OpenWarning);
 
         await service.ScanAsync(cancellationToken);
         Assert.Equal(firstCount, await db.AuditLogs.CountAsync(x => x.TargetType == OperationsIncidentService.TargetType, cancellationToken));
@@ -37,9 +37,9 @@ public sealed class OperationsIncidentServiceTests
         await service.ScanAsync(cancellationToken);
         summary = await service.GetSummaryAsync(cancellationToken);
         Assert.Equal(0, summary.Open);
-        Assert.Equal(5, summary.ResolvedToday);
-        Assert.Equal(10, await db.AuditLogs.CountAsync(x => x.TargetType == OperationsIncidentService.TargetType, cancellationToken));
-        Assert.Equal(10, realtime.Events.Count);
+        Assert.Equal(6, summary.ResolvedToday);
+        Assert.Equal(12, await db.AuditLogs.CountAsync(x => x.TargetType == OperationsIncidentService.TargetType, cancellationToken));
+        Assert.Equal(12, realtime.Events.Count);
     }
 
     [Fact]
