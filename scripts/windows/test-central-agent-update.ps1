@@ -11,40 +11,54 @@ if (-not (Test-Path $RunnerPath -PathType Leaf)) {
 }
 
 New-Item -ItemType Directory -Force -Path $WorkingRoot | Out-Null
-$fakeUpdaterSource = Join-Path $WorkingRoot 'FakeUpdater.cs'
-$fakeUpdaterExe = Join-Path $WorkingRoot 'FakeUpdater.exe'
+$fakeProjectRoot = Join-Path $WorkingRoot 'fake-updater-project'
+$fakePublishRoot = Join-Path $WorkingRoot 'fake-updater-publish'
+New-Item -ItemType Directory -Force -Path $fakeProjectRoot, $fakePublishRoot | Out-Null
 
 @'
-using System;
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>TaskMonitoring.EmployeeUpdater</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>
+'@ | Set-Content -LiteralPath (Join-Path $fakeProjectRoot 'FakeUpdater.csproj') -Encoding UTF8
+
+@'
 using System.Globalization;
-using System.IO;
 
-public static class FakeUpdater
+var marker = Environment.GetEnvironmentVariable("TM_CENTRAL_TEST_MARKER");
+if (!string.IsNullOrWhiteSpace(marker))
 {
-    public static int Main(string[] args)
-    {
-        var marker = Environment.GetEnvironmentVariable("TM_CENTRAL_TEST_MARKER");
-        if (!string.IsNullOrWhiteSpace(marker))
-        {
-            File.AppendAllText(marker, "invoked" + Environment.NewLine);
-        }
-
-        var statePath = Environment.GetEnvironmentVariable("TM_CENTRAL_TEST_STATE_PATH");
-        var targetVersion = Environment.GetEnvironmentVariable("TM_CENTRAL_TEST_TARGET_VERSION");
-        if (!string.IsNullOrWhiteSpace(statePath) && !string.IsNullOrWhiteSpace(targetVersion))
-        {
-            File.WriteAllText(statePath, "{\"version\":\"" + targetVersion + "\"}");
-        }
-
-        var exitText = Environment.GetEnvironmentVariable("TM_CENTRAL_TEST_EXIT_CODE");
-        return int.TryParse(exitText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var exitCode) ? exitCode : 0;
-    }
+    File.AppendAllText(marker, "invoked" + Environment.NewLine);
 }
-'@ | Set-Content -LiteralPath $fakeUpdaterSource -Encoding UTF8
 
-Add-Type -Path $fakeUpdaterSource -OutputAssembly $fakeUpdaterExe -OutputType ConsoleApplication
+var statePath = Environment.GetEnvironmentVariable("TM_CENTRAL_TEST_STATE_PATH");
+var targetVersion = Environment.GetEnvironmentVariable("TM_CENTRAL_TEST_TARGET_VERSION");
+if (!string.IsNullOrWhiteSpace(statePath) && !string.IsNullOrWhiteSpace(targetVersion))
+{
+    File.WriteAllText(statePath, "{\"version\":\"" + targetVersion + "\"}");
+}
+
+var exitText = Environment.GetEnvironmentVariable("TM_CENTRAL_TEST_EXIT_CODE");
+return int.TryParse(exitText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var exitCode) ? exitCode : 0;
+'@ | Set-Content -LiteralPath (Join-Path $fakeProjectRoot 'Program.cs') -Encoding UTF8
+
+dotnet publish (Join-Path $fakeProjectRoot 'FakeUpdater.csproj') `
+    --configuration Release `
+    --runtime win-x64 `
+    --self-contained false `
+    --output $fakePublishRoot `
+    -p:UseAppHost=true
+if ($LASTEXITCODE -ne 0) {
+    throw 'Failed to publish the fake updater executable used by central runner acceptance.'
+}
+$fakeUpdaterExe = Join-Path $fakePublishRoot 'TaskMonitoring.EmployeeUpdater.exe'
 if (-not (Test-Path $fakeUpdaterExe -PathType Leaf)) {
-    throw 'Failed to compile the fake updater executable used by central runner acceptance.'
+    throw 'Fake updater publish did not produce TaskMonitoring.EmployeeUpdater.exe.'
 }
 
 function ConvertTo-SingleQuotedLiteral([string]$Value) {
@@ -90,21 +104,20 @@ function Invoke-CentralScenario {
         serverUrl = 'https://central.acceptance.invalid'
     } | ConvertTo-Json | Set-Content -LiteralPath $devicePath -Encoding UTF8
 
-    @{
-        manifestUrl = 'https://updates.acceptance.invalid/stable/release.json'
-    } | ConvertTo-Json | Set-Content -LiteralPath $settingsPath -Encoding UTF8
-
+    @{ manifestUrl = 'https://updates.acceptance.invalid/stable/release.json' } |
+        ConvertTo-Json | Set-Content -LiteralPath $settingsPath -Encoding UTF8
     @{ version = '1.0.0' } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
-    Copy-Item -LiteralPath $fakeUpdaterExe -Destination (Join-Path $updaterRoot 'TaskMonitoring.EmployeeUpdater.exe') -Force
+    Copy-Item -Path (Join-Path $fakePublishRoot '*') -Destination $updaterRoot -Recurse -Force
 
     $planRolloutId = if ($IncludeRollout) { $rolloutId.ToString('D') } else { '' }
     $planRolloutIdLiteral = if ($IncludeRollout) { "[Guid]'$planRolloutId'" } else { '$null' }
+    $eligibleLiteral = if ($EligibleNow) { '$true' } else { '$false' }
     $harness = @"
 `$ErrorActionPreference = 'Stop'
 `$plan = [pscustomobject]@{
     deviceId = [Guid]'$($deviceId.ToString('D'))'
     isManaged = `$true
-    eligibleNow = `$$($EligibleNow.ToString().ToLowerInvariant())
+    eligibleNow = $eligibleLiteral
     rolloutId = $planRolloutIdLiteral
     rolloutName = 'Acceptance rollout'
     targetVersion = '2.0.0'
