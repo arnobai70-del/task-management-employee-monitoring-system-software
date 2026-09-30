@@ -51,7 +51,11 @@ public sealed class WebsiteWorkReviewService(
         var ids = items.Select(x => x.Id).Distinct().ToArray();
         var activities = await dbContext.TaskActivities
             .AsNoTracking()
-            .Where(x => ids.Contains(x.ProjectTaskId) && IsReviewAction(x.Action))
+            .Where(x =>
+                ids.Contains(x.ProjectTaskId) &&
+                (x.Action == WebsiteWorkService.CompletedAction ||
+                 x.Action == ApprovedAction ||
+                 x.Action == ReopenedAction))
             .OrderBy(x => x.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
