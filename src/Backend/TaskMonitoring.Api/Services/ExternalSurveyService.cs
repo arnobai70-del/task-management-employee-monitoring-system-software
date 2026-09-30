@@ -91,7 +91,7 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
             .ToListAsync(cancellationToken);
 
         return new PagedResponse<ExternalSurveyAssignmentResponse>(
-            rows.Select(ToResponse).ToArray(),
+            rows.Select(x => ToResponse(x, x.Employee)).ToArray(),
             page,
             pageSize,
             total);
@@ -121,7 +121,6 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
         var assignment = new WebsiteAssignment
         {
             EmployeeId = request.EmployeeId,
-            Employee = validation.Employee!,
             Name = request.Title.Trim(),
             Url = validation.Url!,
             UsernameReference = null,
@@ -138,7 +137,7 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
         dbContext.Set<WebsiteAssignment>().Add(assignment);
         AddAudit(actor, "survey_link.created", assignment, validation.Host);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return OperationResult<ExternalSurveyAssignmentResponse>.Success(ToResponse(assignment));
+        return OperationResult<ExternalSurveyAssignmentResponse>.Success(ToResponse(assignment, validation.Employee!));
     }
 
     public async Task<OperationResult<ExternalSurveyAssignmentResponse>> UpdateAsync(
@@ -148,7 +147,6 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
         CancellationToken cancellationToken)
     {
         var assignment = await dbContext.Set<WebsiteAssignment>()
-            .Include(x => x.Employee)
             .SingleOrDefaultAsync(x => x.Id == id && x.AccessLevel == WebsiteAccessLevel.Survey, cancellationToken);
         if (assignment is null)
         {
@@ -162,7 +160,6 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
         }
 
         assignment.EmployeeId = request.EmployeeId;
-        assignment.Employee = validation.Employee!;
         assignment.Name = request.Title.Trim();
         assignment.Url = validation.Url!;
         assignment.UsernameReference = null;
@@ -175,7 +172,7 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
 
         AddAudit(actor, "survey_link.updated", assignment, validation.Host);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return OperationResult<ExternalSurveyAssignmentResponse>.Success(ToResponse(assignment));
+        return OperationResult<ExternalSurveyAssignmentResponse>.Success(ToResponse(assignment, validation.Employee!));
     }
 
     public async Task<OperationResult<IReadOnlyCollection<ExternalSurveyAssignmentResponse>>> GetMineAsync(
@@ -206,12 +203,8 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
             .ThenBy(x => x.Name)
             .ToListAsync(cancellationToken);
 
-        foreach (var row in rows)
-        {
-            row.Employee = employee;
-        }
-
-        return OperationResult<IReadOnlyCollection<ExternalSurveyAssignmentResponse>>.Success(rows.Select(ToResponse).ToArray());
+        return OperationResult<IReadOnlyCollection<ExternalSurveyAssignmentResponse>>.Success(
+            rows.Select(x => ToResponse(x, employee)).ToArray());
     }
 
     public async Task<OperationResult<ExternalSurveyAssignmentResponse>> RecordOpenAsync(
@@ -255,7 +248,6 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
             return OperationResult<ExternalSurveyAssignmentResponse>.Invalid("survey_link_invalid", "This survey website URL is invalid.");
         }
 
-        assignment.Employee = employee;
         dbContext.AuditLogs.Add(new AuditLog
         {
             ActorUserId = actor.UserId,
@@ -267,7 +259,7 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
                 assignment.EmployeeId,
                 assignment.Name,
                 Host = uri.IdnHost.ToLowerInvariant(),
-                assignment.ExpiresOn
+                DueDate = assignment.ExpiresOn
             }),
             IpAddress = actor.IpAddress,
             UserAgent = Truncate(actor.UserAgent, 512),
@@ -275,7 +267,7 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
         });
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return OperationResult<ExternalSurveyAssignmentResponse>.Success(ToResponse(assignment));
+        return OperationResult<ExternalSurveyAssignmentResponse>.Success(ToResponse(assignment, employee));
     }
 
     private async Task<(Employee? Employee, string? Url, string? Host, ApiOperationError? Error)> ValidateAsync(
@@ -354,12 +346,12 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
                 cancellationToken);
     }
 
-    private static ExternalSurveyAssignmentResponse ToResponse(WebsiteAssignment assignment)
+    private static ExternalSurveyAssignmentResponse ToResponse(WebsiteAssignment assignment, Employee employee)
         => new(
             assignment.Id,
             assignment.EmployeeId,
-            assignment.Employee.EmployeeCode,
-            assignment.Employee.FullName,
+            employee.EmployeeCode,
+            employee.FullName,
             assignment.Name,
             assignment.Url,
             assignment.StartsOn,
