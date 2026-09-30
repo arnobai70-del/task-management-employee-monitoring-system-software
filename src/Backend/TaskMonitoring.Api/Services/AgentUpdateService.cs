@@ -705,6 +705,7 @@ public sealed class AgentUpdateService(
                     var latest = statuses
                         .Where(x => x.DeviceId == device.Id && x.Status.RolloutId == rollout.Id)
                         .OrderByDescending(x => x.Status.AtUtc)
+                        .ThenByDescending(x => x.DeviceRevision)
                         .FirstOrDefault();
                     status = latest is null ? AgentUpdateAssignmentStatus.Pending : latest.Status.Status;
                     statusAt = latest?.Status.AtUtc;
@@ -932,7 +933,7 @@ public sealed class AgentUpdateService(
                 var parsed = ParseDeviceEvent(log.MetadataJson);
                 return parsed?.Status is null || !Guid.TryParse(log.TargetId, out var deviceId)
                     ? null
-                    : new StatusEventState(deviceId, parsed.Status);
+                    : new StatusEventState(deviceId, parsed.State.Revision, parsed.Status);
             })
             .Where(x => x is not null)
             .Select(x => x!)
@@ -1145,6 +1146,6 @@ public sealed class AgentUpdateService(
 
     private sealed record StoredDeviceEvent(DeviceState State, StoredDeviceStatus? Status, string? ActorEmail);
     private sealed record StoredRolloutEvent(RolloutState State, string? Note, string? ActorEmail);
-    private sealed record StatusEventState(Guid DeviceId, StoredDeviceStatus Status);
+    private sealed record StatusEventState(Guid DeviceId, int DeviceRevision, StoredDeviceStatus Status);
     private sealed record EmployeeInfo(string EmployeeCode, string FullName, string? DepartmentName);
 }
