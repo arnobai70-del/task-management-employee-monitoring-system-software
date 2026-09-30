@@ -3,6 +3,7 @@ set -eu
 
 source_dir=/run/secrets
 target_dir=/run/taskmonitoring-secrets
+operations_dir=/var/lib/taskmonitoring/operations
 
 if [ ! -d "$source_dir" ]; then
   echo "Required Docker secret directory is missing: $source_dir" >&2
@@ -10,6 +11,7 @@ if [ ! -d "$source_dir" ]; then
 fi
 
 install -d -o app -g app -m 0700 "$target_dir"
+install -d -o app -g app -m 0750 "$operations_dir"
 for key in ConnectionStrings__DefaultConnection Jwt__SigningKey; do
   source_path="$source_dir/$key"
   target_path="$target_dir/$key"
