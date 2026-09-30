@@ -53,10 +53,12 @@ public sealed class ReportsController(
     public async Task<ActionResult<WebsiteWorkAttentionResponse>> GetWebsiteWorkAttention(
         int utcOffsetMinutes = 0,
         int limit = 20,
+        bool includeSuppressed = false,
         CancellationToken cancellationToken = default)
         => ToActionResult(await websiteWorkAttentionService.GetAsync(
             utcOffsetMinutes,
             limit,
+            includeSuppressed,
             cancellationToken));
 
     [HttpGet("website-work/productivity")]
