@@ -47,7 +47,7 @@ public sealed class WebsiteWorkProgressServiceTests
 
         Assert.Contains(snapshot.ActiveWork, item =>
             item.EmployeeId == jihad.Id && item.TaskTitle == "Current target" && item.ElapsedSeconds == 5_400L);
-        var reopened = Assert.Single(snapshot.ActiveWork.Where(item => item.TaskTitle == "Reopened correction"));
+        var reopened = Assert.Single(snapshot.ActiveWork, item => item.TaskTitle == "Reopened correction");
         Assert.Equal(new DateTime(2026, 9, 29, 18, 40, 0, DateTimeKind.Utc), reopened.StartedAtUtc);
 
         Assert.Collection(snapshot.Employees,
