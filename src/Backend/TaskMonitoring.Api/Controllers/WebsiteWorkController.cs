@@ -132,6 +132,33 @@ public sealed class WebsiteWorkController(
 }
 
 [ApiController]
+[Authorize(Policy = PermissionCatalog.TasksManage)]
+[Route("api/website-work/follow-ups")]
+public sealed class WebsiteWorkFollowUpController(
+    IWebsiteWorkAttentionActionService websiteWorkAttentionActionService) : WebsiteWorkControllerBase
+{
+    [HttpGet("mine")]
+    public async Task<ActionResult<WebsiteWorkFollowUpInboxResponse>> GetMine(
+        bool includeResolved = false,
+        CancellationToken cancellationToken = default)
+        => ToActionResult(await websiteWorkAttentionActionService.GetMyFollowUpsAsync(
+            Actor(),
+            includeResolved,
+            cancellationToken));
+
+    [HttpPost("{taskId:guid}/resolve")]
+    public async Task<ActionResult<WebsiteWorkAttentionActionResponse>> Resolve(
+        Guid taskId,
+        WebsiteWorkAttentionResolveFollowUpRequest request,
+        CancellationToken cancellationToken)
+        => ToActionResult(await websiteWorkAttentionActionService.ResolveFollowUpAsync(
+            taskId,
+            request,
+            Actor(),
+            cancellationToken));
+}
+
+[ApiController]
 [Authorize]
 [Route("api/me/website-work")]
 public sealed class MyWebsiteWorkController(
