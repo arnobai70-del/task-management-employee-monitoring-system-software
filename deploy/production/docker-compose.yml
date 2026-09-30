@@ -112,7 +112,7 @@ secrets:
   jwt_signing_key:
     file: ${JWT_SIGNING_KEY_SECRET_FILE:?JWT_SIGNING_KEY_SECRET_FILE must be set}
   agent_update_enrollment_key:
-    file: ${AGENT_UPDATE_ENROLLMENT_KEY_SECRET_FILE:?AGENT_UPDATE_ENROLLMENT_KEY_SECRET_FILE must be set}
+    file: ${AGENT_UPDATE_ENROLLMENT_KEY_SECRET_FILE:-./secrets/agent_update_enrollment_key}
 
 volumes:
   postgres_data:
