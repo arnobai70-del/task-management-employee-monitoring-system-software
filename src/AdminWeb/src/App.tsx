@@ -7,6 +7,8 @@ import AuditLogsPage from './AuditLogs';
 import { DepartmentManagementPage, EmployeeManagementPage } from './EmployeeDepartmentManagement';
 import PresencePanel from './PresencePanel';
 import SurveyManagementPage from './SurveyManagement';
+import WebsiteWorkManagementPage from './WebsiteWorkManagement';
+import WebsiteWorkRealtimeNotice from './WebsiteWorkRealtimeNotice';
 import { ProjectManagementPage, ShiftManagementPage, TaskManagementPage } from './WorkManagement';
 import type {
   AttendanceDailyMetric,
@@ -35,6 +37,7 @@ const navItems: NavItem[] = [
   { path: '/attendance', label: 'Attendance', short: 'AT', permission: 'attendance.read' },
   { path: '/projects', label: 'Projects', short: 'PR', permission: 'projects.read' },
   { path: '/tasks', label: 'Tasks', short: 'TK', permission: 'tasks.read' },
+  { path: '/website-work', label: 'Website Work', short: 'WW', permission: 'tasks.read' },
   { path: '/surveys', label: 'Surveys', short: 'SV', permission: 'surveys.read' },
   { path: '/access/rdp', label: 'RDP Assign', short: 'RD', permission: 'access.assignments.read' },
   { path: '/access/ip', label: 'IP Assign', short: 'IP', permission: 'access.assignments.read' },
@@ -142,6 +145,7 @@ function AppShell({ children }: { children: ReactNode }) {
         </header>
         <main className="content">{children}</main>
       </div>
+      <WebsiteWorkRealtimeNotice />
     </div>
   );
 }
@@ -350,6 +354,7 @@ export default function App() {
       <Route path="/attendance" element={<ProtectedPage permission="attendance.read"><AttendancePage /></ProtectedPage>} />
       <Route path="/projects" element={<ProtectedPage permission="projects.read"><ProjectManagementPage /></ProtectedPage>} />
       <Route path="/tasks" element={<ProtectedPage permission="tasks.read"><TaskManagementPage /></ProtectedPage>} />
+      <Route path="/website-work" element={<ProtectedPage permission="tasks.read"><WebsiteWorkManagementPage /></ProtectedPage>} />
       <Route path="/surveys" element={<ProtectedPage permission="surveys.read"><SurveyManagementPage /></ProtectedPage>} />
       <Route path="/access/rdp" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="rdp" /></ProtectedPage>} />
       <Route path="/access/ip" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="ip" /></ProtectedPage>} />
