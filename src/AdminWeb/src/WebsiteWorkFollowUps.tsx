@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { NavLink } from 'react-router-dom';
+import AdminNotificationsPage from './AdminNotifications';
 import { apiFetch } from './api';
 import {
   websiteWorkFollowUpChangedEvent,
@@ -171,6 +172,7 @@ export default function WebsiteWorkFollowUpsPage() {
           <p className="muted">Follow-up actions assigned to your manager account. Realtime changes refresh this inbox automatically; overdue state is also rechecked every 20 seconds.</p>
         </div>
         <div className="header-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <a className="text-link" href="#notifications">Notifications ↓</a>
           <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
             <input type="checkbox" checked={includeResolved} onChange={event => setIncludeResolved(event.target.checked)} /> Show resolved
           </label>
@@ -240,6 +242,8 @@ export default function WebsiteWorkFollowUpsPage() {
           <button className="primary-button" type="submit" disabled={busy}>{busy ? 'Resolving…' : 'Mark follow-up resolved'}</button>
         </form>
       </article>}
+
+      <AdminNotificationsPage embedded />
     </>
   );
 }
