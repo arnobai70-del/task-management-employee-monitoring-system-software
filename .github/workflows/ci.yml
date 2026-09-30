@@ -78,7 +78,7 @@ jobs:
         run: npm run build
 
   production-environment:
-    name: Production environment and backup/restore acceptance
+    name: Production environment, backup/restore and observability acceptance
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -112,11 +112,20 @@ jobs:
           POSTGRES_PASSWORD_SECRET_FILE=./secrets/postgres_password
           DATABASE_CONNECTION_SECRET_FILE=./secrets/database_connection
           JWT_SIGNING_KEY_SECRET_FILE=./secrets/jwt_signing_key
+          GRAFANA_ADMIN_PASSWORD_SECRET_FILE=./secrets/grafana_admin_password
           UPDATE_HOST_ROOT=./updates
           BACKUP_ROOT=./backups
+          OBSERVABILITY_BIND=127.0.0.1
+          GRAFANA_PORT=13000
+          PROMETHEUS_PORT=19090
+          LOKI_PORT=13100
+          OTEL_HEALTH_PORT=13133
+          PROMETHEUS_RETENTION=1d
+          OTEL_METRIC_EXPORT_INTERVAL=5000
           EOF
           bash scripts/production/init-production-secrets.sh deploy/production/production.ci.env
           docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml config >/dev/null
+          docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml config >/dev/null
 
       - name: Deploy production stack through guarded deployment path
         shell: bash
@@ -157,15 +166,21 @@ jobs:
           bash scripts/production/publish-windows-release.sh --env deploy/production/production.ci.env --bundle "$bundle"
           bash scripts/production/acceptance-server.sh --env deploy/production/production.ci.env --channel stable
 
+      - name: Start and verify private observability stack
+        shell: bash
+        run: |
+          bash scripts/production/observability-up.sh deploy/production/production.ci.env
+          bash scripts/production/acceptance-observability.sh deploy/production/production.ci.env
+
       - name: Production stack diagnostics
         if: failure()
         shell: bash
-        run: docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml logs --no-color || true
+        run: docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml logs --no-color || true
 
       - name: Tear down production stack
         if: always()
         shell: bash
-        run: docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml down -v --remove-orphans || true
+        run: docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml down -v --remove-orphans || true
 
   employee-windows:
     name: Employee Windows client, release and lifecycle acceptance
