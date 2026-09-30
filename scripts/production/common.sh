@@ -74,13 +74,20 @@ require_production_variables() {
 wait_for_postgres() {
   local attempts="${1:-60}"
   for ((i = 1; i <= attempts; i++)); do
-    if compose exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+    # pg_isready can return success while the server is accepting connections but
+    # the configured application database is still being created. Requiring a
+    # real query prevents pre-deployment backups/migrations from racing initdb.
+    if compose exec -T postgres psql \
+      -U "$POSTGRES_USER" \
+      -d "$POSTGRES_DB" \
+      -v ON_ERROR_STOP=1 \
+      -tAc 'SELECT 1;' >/dev/null 2>&1; then
       return 0
     fi
     sleep 2
   done
 
-  echo "PostgreSQL did not become ready." >&2
+  echo "PostgreSQL application database did not become ready." >&2
   return 1
 }
 
