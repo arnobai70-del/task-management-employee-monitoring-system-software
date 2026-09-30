@@ -6,7 +6,7 @@ import './management.css';
 
 type IncidentSeverity = 'Info' | 'Warning' | 'Critical';
 type IncidentStatus = 'Open' | 'Acknowledged' | 'Resolved';
-type IncidentKind = 'AgentOffline' | 'ServiceStopped' | 'OutdatedRuntime' | 'RollbackDetected' | 'BackupStale' | 'DatabaseDegraded';
+type IncidentKind = 'AgentOffline' | 'ServiceStopped' | 'OutdatedRuntime' | 'RollbackDetected' | 'BackupStale' | 'DatabaseDegraded' | 'UpdateFailed';
 
 interface IncidentEvent {
   action: string;
@@ -84,7 +84,8 @@ function kindLabel(value: IncidentKind): string {
     OutdatedRuntime: 'Outdated runtime',
     RollbackDetected: 'Rollback detected',
     BackupStale: 'Backup stale/missing',
-    DatabaseDegraded: 'Database degraded'
+    DatabaseDegraded: 'Database degraded',
+    UpdateFailed: 'Central agent update failed'
   };
   return labels[value];
 }
@@ -215,7 +216,7 @@ export default function OperationsIncidentsPage() {
       <div className="panel" style={{ marginBottom: 16 }}>
         <strong>Signal scope</strong>
         <p className="muted" style={{ marginBottom: 0 }}>
-          Incidents use TaskMonitoring operational health only: long-offline agents, stopped service, outdated runtime, rollback state, stale/missing database backup and degraded database latency. They do not inspect employee screen content, keystrokes, passwords, cookies, external website fields, balances, earnings or browsing history.
+          Incidents use TaskMonitoring operational health only: long-offline agents, stopped service, outdated runtime, rollback state, centralized update failures, stale/missing database backup and degraded database latency. They do not inspect employee screen content, keystrokes, passwords, cookies, external website fields, balances, earnings or browsing history.
         </p>
       </div>
 
