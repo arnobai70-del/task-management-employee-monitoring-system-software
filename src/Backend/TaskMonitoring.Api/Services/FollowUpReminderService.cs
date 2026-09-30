@@ -79,7 +79,6 @@ public sealed class FollowUpReminderService(
 
             if (!kind.HasValue ||
                 task.Activities.Any(activity =>
-                    activity.Action == AdminNotificationService.NotificationAction &&
                     AdminNotificationService.MatchesSource(
                         activity,
                         followUp.OwnerUserId,
