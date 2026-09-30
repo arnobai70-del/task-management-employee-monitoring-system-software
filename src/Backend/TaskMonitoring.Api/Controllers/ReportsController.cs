@@ -12,7 +12,8 @@ namespace TaskMonitoring.Api.Controllers;
 public sealed class ReportsController(
     IReportingDashboardService reportingDashboardService,
     IWebsiteWorkProductivityReportService websiteWorkProductivityReportService,
-    IWebsiteWorkTimelineService websiteWorkTimelineService) : ControllerBase
+    IWebsiteWorkTimelineService websiteWorkTimelineService,
+    IWebsiteWorkAttentionService websiteWorkAttentionService) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<ActionResult<DashboardOverviewResponse>> GetDashboard(
@@ -47,6 +48,16 @@ public sealed class ReportsController(
         Guid? projectId,
         CancellationToken cancellationToken)
         => ToActionResult(await reportingDashboardService.GetSurveyProgressAsync(projectId, cancellationToken));
+
+    [HttpGet("website-work/attention")]
+    public async Task<ActionResult<WebsiteWorkAttentionResponse>> GetWebsiteWorkAttention(
+        int utcOffsetMinutes = 0,
+        int limit = 20,
+        CancellationToken cancellationToken = default)
+        => ToActionResult(await websiteWorkAttentionService.GetAsync(
+            utcOffsetMinutes,
+            limit,
+            cancellationToken));
 
     [HttpGet("website-work/productivity")]
     public async Task<ActionResult<WebsiteWorkProductivityReportResponse>> GetWebsiteWorkProductivity(
