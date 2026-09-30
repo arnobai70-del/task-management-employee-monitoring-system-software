@@ -13,7 +13,8 @@ public sealed class ReportsController(
     IReportingDashboardService reportingDashboardService,
     IWebsiteWorkProductivityReportService websiteWorkProductivityReportService,
     IWebsiteWorkTimelineService websiteWorkTimelineService,
-    IWebsiteWorkAttentionService websiteWorkAttentionService) : ControllerBase
+    IWebsiteWorkAttentionService websiteWorkAttentionService,
+    IFollowUpSlaAnalyticsService followUpSlaAnalyticsService) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<ActionResult<DashboardOverviewResponse>> GetDashboard(
@@ -87,6 +88,20 @@ public sealed class ReportsController(
             from,
             to,
             utcOffsetMinutes,
+            cancellationToken));
+
+    [HttpGet("website-work/follow-up-sla")]
+    public async Task<ActionResult<FollowUpSlaAnalyticsResponse>> GetFollowUpSlaAnalytics(
+        DateOnly? from,
+        DateOnly? to,
+        int utcOffsetMinutes = 0,
+        FollowUpSlaGrouping grouping = FollowUpSlaGrouping.Week,
+        CancellationToken cancellationToken = default)
+        => ToActionResult(await followUpSlaAnalyticsService.GetAsync(
+            from,
+            to,
+            utcOffsetMinutes,
+            grouping,
             cancellationToken));
 
     private ActionResult<T> ToActionResult<T>(OperationResult<T> result)
