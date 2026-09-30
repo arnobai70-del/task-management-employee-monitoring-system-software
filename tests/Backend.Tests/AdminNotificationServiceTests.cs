@@ -86,7 +86,7 @@ public sealed class AdminNotificationServiceTests
 
         Assert.Equal(1, await reminder.ScanAsync(cancellationToken));
         Assert.Equal(0, await reminder.ScanAsync(cancellationToken));
-        var dueSoon = Assert.Single(db.TaskActivities.Where(AdminNotificationService.IsNotificationAction));
+        var dueSoon = Assert.Single(db.TaskActivities.Where(activity => AdminNotificationService.IsNotificationAction(activity.Action)));
         var dueSoonResponse = AdminNotificationService.ToResponse(dueSoon);
         Assert.Equal(AdminNotificationKind.FollowUpDueSoon, dueSoonResponse!.Kind);
 
@@ -95,7 +95,8 @@ public sealed class AdminNotificationServiceTests
         Assert.Equal(0, await reminder.ScanAsync(cancellationToken));
 
         var notifications = db.TaskActivities
-            .Where(AdminNotificationService.IsNotificationAction)
+            .Where(activity => AdminNotificationService.IsNotificationAction(activity.Action))
+            .AsEnumerable()
             .Select(AdminNotificationService.ToResponse)
             .Where(item => item is not null)
             .Select(item => item!)
