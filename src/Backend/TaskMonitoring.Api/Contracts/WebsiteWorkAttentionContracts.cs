@@ -22,7 +22,15 @@ public enum WebsiteWorkAttentionDisposition
     Active = 1,
     Acknowledged = 2,
     Snoozed = 3,
-    FollowUp = 4
+    FollowUp = 4,
+    Resolved = 5
+}
+
+public enum WebsiteWorkFollowUpState
+{
+    Pending = 1,
+    Overdue = 2,
+    Resolved = 3
 }
 
 public sealed record WebsiteWorkAttentionThresholdsResponse(
@@ -76,6 +84,8 @@ public sealed record WebsiteWorkAttentionResponse(
     int Total,
     int ActiveTotal,
     int ManagedTotal,
+    int PendingFollowUpTotal,
+    int OverdueFollowUpTotal,
     int Critical,
     int High,
     int Medium,
@@ -90,6 +100,8 @@ public sealed record WebsiteWorkAttentionFollowUpRequest(
     DateTime DueAtUtc,
     string Note);
 
+public sealed record WebsiteWorkAttentionResolveFollowUpRequest(string? Note);
+
 public sealed record WebsiteWorkAttentionActionResponse(
     Guid TaskId,
     WebsiteWorkAttentionDisposition Disposition,
@@ -100,3 +112,33 @@ public sealed record WebsiteWorkAttentionFollowUpOwnerResponse(
     Guid UserId,
     string Email,
     string? FullName);
+
+public sealed record WebsiteWorkFollowUpInboxItemResponse(
+    Guid TaskId,
+    Guid ProjectId,
+    string ProjectCode,
+    string ProjectName,
+    Guid EmployeeId,
+    string EmployeeCode,
+    string EmployeeName,
+    string Title,
+    ProjectTaskStatus TaskStatus,
+    DateOnly? TaskDueDate,
+    WebsiteWorkFollowUpState State,
+    DateTime AssignedAtUtc,
+    Guid? AssignedByUserId,
+    string? AssignedByEmail,
+    string AssignmentNote,
+    DateTime DueAtUtc,
+    DateTime? ResolvedAtUtc,
+    Guid? ResolvedByUserId,
+    string? ResolvedByEmail,
+    string? ResolutionNote);
+
+public sealed record WebsiteWorkFollowUpInboxResponse(
+    DateTime GeneratedAtUtc,
+    int Pending,
+    int Overdue,
+    int Resolved,
+    int TotalCount,
+    IReadOnlyCollection<WebsiteWorkFollowUpInboxItemResponse> Items);
