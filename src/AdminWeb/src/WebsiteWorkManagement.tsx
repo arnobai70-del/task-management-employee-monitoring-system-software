@@ -10,6 +10,7 @@ interface EmployeeOption { id: string; employeeCode: string; fullName: string; }
 
 type WorkStatus = 'ToDo' | 'InProgress' | 'Blocked' | 'Done' | 'Cancelled';
 type WorkPriority = 'Low' | 'Normal' | 'High' | 'Urgent';
+type ReviewState = 'NotSubmitted' | 'PendingReview' | 'Approved' | 'CorrectionRequired';
 
 interface WebsiteWork {
   id: string;
@@ -29,6 +30,10 @@ interface WebsiteWork {
   completedAtUtc: string | null;
   createdAtUtc: string;
   updatedAtUtc: string;
+  reviewState: ReviewState;
+  reviewComment: string | null;
+  submittedAtUtc: string | null;
+  reviewedAtUtc: string | null;
 }
 
 interface WebsiteWorkActiveProgress {
@@ -50,15 +55,22 @@ interface WebsiteWorkEmployeeToday {
   employeeCode: string;
   employeeName: string;
   workingNow: number;
-  completedToday: number;
-  lastCompletedAtUtc: string | null;
+  pendingReview: number;
+  submittedToday: number;
+  approvedToday: number;
+  reopenedToday: number;
+  lastSubmittedAtUtc: string | null;
+  lastApprovedAtUtc: string | null;
 }
 
 interface WebsiteWorkProgress {
   generatedAtUtc: string;
   utcOffsetMinutes: number;
   workingNow: number;
-  completedToday: number;
+  pendingReview: number;
+  submittedToday: number;
+  approvedToday: number;
+  reopenedToday: number;
   activeWork: WebsiteWorkActiveProgress[];
   employees: WebsiteWorkEmployeeToday[];
 }
@@ -83,8 +95,11 @@ const emptyDraft: WorkDraft = {
   dueDate: ''
 };
 
-function statusLabel(status: WorkStatus): string {
-  return status === 'ToDo' ? 'Ready' : status === 'InProgress' ? 'Working' : status === 'Done' ? 'Completed' : status;
+function workStatusLabel(item: WebsiteWork): string {
+  if (item.reviewState === 'PendingReview') return 'Pending Review';
+  if (item.reviewState === 'Approved') return 'Approved';
+  if (item.reviewState === 'CorrectionRequired') return 'Correction Required';
+  return item.status === 'ToDo' ? 'Ready' : item.status === 'InProgress' ? 'Working' : item.status === 'Done' ? 'Completed' : item.status;
 }
 
 function statusClass(value: string): string {
@@ -135,7 +150,8 @@ export default function WebsiteWorkManagementPage() {
 
   const readyCount = useMemo(() => items.filter(item => item.status === 'ToDo').length, [items]);
   const workingCount = progress?.workingNow ?? items.filter(item => item.status === 'InProgress').length;
-  const completedToday = progress?.completedToday ?? 0;
+  const pendingReview = progress?.pendingReview ?? items.filter(item => item.reviewState === 'PendingReview').length;
+  const approvedToday = progress?.approvedToday ?? 0;
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
@@ -295,13 +311,56 @@ export default function WebsiteWorkManagementPage() {
     }
   }
 
+  async function approveWork(item: WebsiteWork) {
+    if (!mayManage || item.reviewState !== 'PendingReview') return;
+    const comment = window.prompt('Optional approval note:', '')?.trim() || null;
+    setBusy(true);
+    setError('');
+    try {
+      await apiFetch(`/api/website-work/${item.id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ comment })
+      });
+      setNotice(`${item.employeeName || 'Worker'} approved: ${item.title}`);
+      refreshAll();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to approve website work.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reopenWork(item: WebsiteWork) {
+    if (!mayManage || item.reviewState !== 'PendingReview') return;
+    const comment = window.prompt('What must the worker correct before resubmitting?')?.trim();
+    if (!comment) return;
+    if (comment.length < 3) {
+      setError('Correction comment must contain at least 3 characters.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await apiFetch(`/api/website-work/${item.id}/reopen`, {
+        method: 'POST',
+        body: JSON.stringify({ comment })
+      });
+      setNotice(`${item.employeeName || 'Worker'} was asked to correct: ${item.title}`);
+      refreshAll();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to reopen website work.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="page-header">
         <div>
           <p className="eyebrow">Target work administration</p>
           <h1>Website Work</h1>
-          <p className="muted">Assign website targets and watch who is working, how long they have been working, and how many targets each worker completed today.</p>
+          <p className="muted">Assign website targets, watch live work, and review worker completion submissions before they become final.</p>
         </div>
         <div className="header-actions">
           <form className="inline-search" onSubmit={event => { event.preventDefault(); setSearch(searchDraft.trim()); }}>
@@ -315,7 +374,8 @@ export default function WebsiteWorkManagementPage() {
       <div className="metric-grid compact-metrics">
         <article className="metric-card"><span>Ready</span><strong>{readyCount}</strong><small>Waiting to be opened</small></article>
         <article className="metric-card"><span>Working now</span><strong>{workingCount}</strong><small>Live target activity</small></article>
-        <article className="metric-card"><span>Completed today</span><strong>{completedToday}</strong><small>Browser-local day</small></article>
+        <article className="metric-card"><span>Pending review</span><strong>{pendingReview}</strong><small>Worker completion submissions</small></article>
+        <article className="metric-card"><span>Approved today</span><strong>{approvedToday}</strong><small>Browser-local day</small></article>
       </div>
 
       {notice && <div className="success-banner">{notice}</div>}
@@ -349,19 +409,22 @@ export default function WebsiteWorkManagementPage() {
         </article>
 
         <article className="panel table-panel">
-          <div className="panel-heading"><div><h2>Today by worker</h2><p>Current browser timezone · {completedToday} completed total</p></div></div>
+          <div className="panel-heading"><div><h2>Today by worker</h2><p>Current browser timezone · submitted / approved / reopened review activity</p></div></div>
           <div className="table-wrap"><table>
-            <thead><tr><th>Worker</th><th>Working now</th><th>Completed today</th><th>Last completed</th></tr></thead>
+            <thead><tr><th>Worker</th><th>Working</th><th>Pending</th><th>Submitted</th><th>Approved</th><th>Reopened</th><th>Last approved</th></tr></thead>
             <tbody>
               {(progress?.employees || []).map(item => (
                 <tr key={item.employeeId}>
                   <td><strong>{item.employeeName}</strong><small>{item.employeeCode}</small></td>
                   <td>{item.workingNow}</td>
-                  <td><strong>{item.completedToday}</strong></td>
-                  <td>{formatDateTime(item.lastCompletedAtUtc)}</td>
+                  <td><strong>{item.pendingReview}</strong></td>
+                  <td>{item.submittedToday}</td>
+                  <td><strong>{item.approvedToday}</strong></td>
+                  <td>{item.reopenedToday}</td>
+                  <td>{formatDateTime(item.lastApprovedAtUtc)}</td>
                 </tr>
               ))}
-              {!progress?.employees.length && <tr><td colSpan={4} className="empty-cell">No Website Work activity today.</td></tr>}
+              {!progress?.employees.length && <tr><td colSpan={7} className="empty-cell">No Website Work activity today.</td></tr>}
             </tbody>
           </table></div>
         </article>
@@ -403,22 +466,37 @@ export default function WebsiteWorkManagementPage() {
       )}
 
       <article className="panel table-panel">
-        <div className="panel-heading"><div><h2>Website target register</h2><p>{items.length} loaded · {workingCount} currently working</p></div><button className="ghost-button" onClick={refreshAll}>Refresh</button></div>
+        <div className="panel-heading"><div><h2>Website target register</h2><p>{items.length} loaded · {workingCount} working · {pendingReview} pending review</p></div><button className="ghost-button" onClick={refreshAll}>Refresh</button></div>
         {loading ? <div className="loading-block">Loading website work…</div> : (
           <div className="table-wrap"><table>
-            <thead><tr><th>Target</th><th>Worker</th><th>Project</th><th>Website</th><th>Due</th><th>Status</th>{mayManage && <th>Actions</th>}</tr></thead>
+            <thead><tr><th>Target</th><th>Worker</th><th>Project</th><th>Website</th><th>Due</th><th>Status / review</th>{mayManage && <th>Actions</th>}</tr></thead>
             <tbody>
-              {items.map(item => (
-                <tr key={item.id}>
-                  <td><strong>{item.title}</strong><small>{item.instructions || 'No extra instructions'}</small></td>
-                  <td>{item.employeeName || 'Unassigned'}<small>{item.employeeCode || '—'}</small></td>
-                  <td>{item.projectName}<small>{item.projectCode}</small></td>
-                  <td><span title={item.url}>{new URL(item.url).hostname}</span></td>
-                  <td>{item.dueDate || '—'}</td>
-                  <td><span className={`status-badge status-${statusClass(statusLabel(item.status))}`}>{statusLabel(item.status)}</span>{item.startedAtUtc && item.status === 'InProgress' && <small>Since {formatDateTime(item.startedAtUtc)}</small>}</td>
-                  {mayManage && <td className="action-cell"><button className="text-button" disabled={item.status === 'Done' || item.status === 'Cancelled'} onClick={() => editWork(item)}>Edit</button>{item.status !== 'Done' && item.status !== 'Cancelled' && <button className="text-button danger" disabled={busy} onClick={() => void cancelWork(item)}>Cancel</button>}</td>}
-                </tr>
-              ))}
+              {items.map(item => {
+                const label = workStatusLabel(item);
+                const reviewLocked = item.reviewState === 'PendingReview' || item.reviewState === 'Approved';
+                return (
+                  <tr key={item.id}>
+                    <td><strong>{item.title}</strong><small>{item.instructions || 'No extra instructions'}</small></td>
+                    <td>{item.employeeName || 'Unassigned'}<small>{item.employeeCode || '—'}</small></td>
+                    <td>{item.projectName}<small>{item.projectCode}</small></td>
+                    <td><span title={item.url}>{new URL(item.url).hostname}</span></td>
+                    <td>{item.dueDate || '—'}</td>
+                    <td>
+                      <span className={`status-badge status-${statusClass(label)}`}>{label}</span>
+                      {item.status === 'InProgress' && item.startedAtUtc && <small>Since {formatDateTime(item.startedAtUtc)}</small>}
+                      {item.submittedAtUtc && item.reviewState === 'PendingReview' && <small>Submitted {formatDateTime(item.submittedAtUtc)}</small>}
+                      {item.reviewComment && <small>Manager note: {item.reviewComment}</small>}
+                      {item.reviewState === 'Approved' && item.reviewedAtUtc && <small>Approved {formatDateTime(item.reviewedAtUtc)}</small>}
+                    </td>
+                    {mayManage && <td className="action-cell">
+                      {item.reviewState === 'PendingReview' && <button className="text-button" disabled={busy} onClick={() => void approveWork(item)}>Approve</button>}
+                      {item.reviewState === 'PendingReview' && <button className="text-button danger" disabled={busy} onClick={() => void reopenWork(item)}>Reopen</button>}
+                      <button className="text-button" disabled={reviewLocked || item.status === 'Done' || item.status === 'Cancelled'} onClick={() => editWork(item)}>Edit</button>
+                      {item.status !== 'Done' && item.status !== 'Cancelled' && <button className="text-button danger" disabled={busy} onClick={() => void cancelWork(item)}>Cancel</button>}
+                    </td>}
+                  </tr>
+                );
+              })}
               {!items.length && <tr><td colSpan={mayManage ? 7 : 6} className="empty-cell">No website work assignments found.</td></tr>}
             </tbody>
           </table></div>
@@ -426,12 +504,12 @@ export default function WebsiteWorkManagementPage() {
       </article>
 
       <article className="panel table-panel">
-        <div className="panel-heading"><div><h2>Recent completion notifications</h2><p>Stored from employee completion actions, not just realtime popups.</p></div></div>
+        <div className="panel-heading"><div><h2>Recent completion submissions</h2><p>Durable worker submissions waiting for or already processed by manager review.</p></div></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>Completed</th><th>Worker</th><th>Work</th><th>Project</th></tr></thead>
+          <thead><tr><th>Submitted</th><th>Worker</th><th>Work</th><th>Project</th></tr></thead>
           <tbody>
             {completions.map(item => <tr key={`${item.taskId}-${item.completedAtUtc}`}><td>{formatDateTime(item.completedAtUtc)}</td><td><strong>{item.employeeName}</strong><small>{item.employeeCode}</small></td><td>{item.taskTitle}</td><td>{item.projectName}</td></tr>)}
-            {!completions.length && <tr><td colSpan={4} className="empty-cell">No website work has been completed yet.</td></tr>}
+            {!completions.length && <tr><td colSpan={4} className="empty-cell">No website work completion has been submitted yet.</td></tr>}
           </tbody>
         </table></div>
       </article>
