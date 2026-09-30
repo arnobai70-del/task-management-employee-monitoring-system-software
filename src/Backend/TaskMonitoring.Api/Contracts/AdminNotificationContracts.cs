@@ -7,7 +7,8 @@ public enum AdminNotificationKind
     FollowUpRemoved = 3,
     FollowUpResolved = 4,
     FollowUpDueSoon = 5,
-    FollowUpOverdue = 6
+    FollowUpOverdue = 6,
+    FollowUpEscalated = 7
 }
 
 public sealed record AdminNotificationResponse(

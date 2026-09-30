@@ -75,6 +75,11 @@ builder.Services.AddOptions<WebsiteWorkAttentionOptions>()
 builder.Services.AddOptions<FollowUpReminderOptions>()
     .Bind(builder.Configuration.GetSection(FollowUpReminderOptions.SectionName))
     .Validate(options => options.DueSoonMinutes is >= 5 and <= 1440, "FollowUpReminders:DueSoonMinutes must be between 5 and 1440.")
+    .Validate(options => options.EscalationAfterMinutes is >= 5 and <= 10080, "FollowUpReminders:EscalationAfterMinutes must be between 5 minutes and 7 days.")
+    .Validate(options =>
+        options.EscalationFallbackRoles is { Length: > 0 } &&
+        options.EscalationFallbackRoles.All(role => !string.IsNullOrWhiteSpace(role)),
+        "FollowUpReminders:EscalationFallbackRoles must contain at least one non-empty role name.")
     .Validate(options => options.ScanIntervalSeconds is >= 30 and <= 3600, "FollowUpReminders:ScanIntervalSeconds must be between 30 and 3600.")
     .ValidateOnStart();
 builder.Services.AddScoped<TaskNotificationInterceptor>();

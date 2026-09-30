@@ -9,7 +9,8 @@ type AdminNotificationKind =
   | 'FollowUpRemoved'
   | 'FollowUpResolved'
   | 'FollowUpDueSoon'
-  | 'FollowUpOverdue';
+  | 'FollowUpOverdue'
+  | 'FollowUpEscalated';
 
 interface AdminNotification {
   id: string;
@@ -49,6 +50,7 @@ function formatDateTime(value: string | null): string {
 function kindLabel(kind: AdminNotificationKind): string {
   if (kind === 'FollowUpDueSoon') return 'Due soon';
   if (kind === 'FollowUpOverdue') return 'Overdue';
+  if (kind === 'FollowUpEscalated') return 'Escalated';
   if (kind === 'FollowUpAssigned') return 'Assigned';
   if (kind === 'FollowUpUpdated') return 'Updated';
   if (kind === 'FollowUpResolved') return 'Resolved';
@@ -130,7 +132,7 @@ export default function AdminNotificationsPage({ embedded = false }: { embedded?
         <div className="panel-heading" style={{ marginBottom: 14 }}>
           <div>
             <h2>Notification Center</h2>
-            <p>Durable manager alerts remain available even if realtime delivery was missed while you were offline.</p>
+            <p>Durable manager alerts and escalations remain available even if realtime delivery was missed while you were offline.</p>
           </div>
         </div>
       ) : (
@@ -138,7 +140,7 @@ export default function AdminNotificationsPage({ embedded = false }: { embedded?
           <div>
             <p className="eyebrow">Administration</p>
             <h1>Notifications</h1>
-            <p className="muted">Durable manager alerts stay here even when you were offline when the realtime event occurred.</p>
+            <p className="muted">Durable manager alerts and escalations stay here even when you were offline when the realtime event occurred.</p>
           </div>
         </div>
       )}
@@ -166,7 +168,7 @@ export default function AdminNotificationsPage({ embedded = false }: { embedded?
 
       <article className="panel table-panel">
         <div className="panel-heading">
-          <div><h2>{unreadOnly ? 'Unread notifications' : 'Notification history'}</h2><p>Follow-up assignment, due and overdue alerts</p></div>
+          <div><h2>{unreadOnly ? 'Unread notifications' : 'Notification history'}</h2><p>Follow-up assignment, due, overdue and escalation alerts</p></div>
           <span>Page {page} of {pageCount}</span>
         </div>
         {loading && !data ? <div className="loading-block">Loading notifications…</div> : (
@@ -177,7 +179,7 @@ export default function AdminNotificationsPage({ embedded = false }: { embedded?
                 {(data?.items || []).map(item => (
                   <tr key={item.id} style={{ opacity: item.readAtUtc ? .72 : 1 }}>
                     <td>
-                      <span className={`status-badge status-${item.kind === 'FollowUpOverdue' ? 'overdue' : item.readAtUtc ? 'resolved' : 'active'}`}>
+                      <span className={`status-badge status-${item.kind === 'FollowUpOverdue' || item.kind === 'FollowUpEscalated' ? 'overdue' : item.readAtUtc ? 'resolved' : 'active'}`}>
                         {item.readAtUtc ? 'Read' : kindLabel(item.kind)}
                       </span>
                     </td>
@@ -190,7 +192,7 @@ export default function AdminNotificationsPage({ embedded = false }: { embedded?
                       {item.readAtUtc && <small>Read {formatDateTime(item.readAtUtc)}</small>}
                     </td>
                     <td>
-                      <NavLink className="text-link" to={item.actionUrl}>Open follow-up →</NavLink>
+                      <NavLink className="text-link" to={item.actionUrl}>{item.kind === 'FollowUpEscalated' ? 'Open Website Work →' : 'Open follow-up →'}</NavLink>
                       {!item.readAtUtc && (
                         <button
                           className="ghost-button"

@@ -5,6 +5,7 @@ using TaskMonitoring.Api.Configuration;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -18,12 +19,14 @@ public sealed class FollowUpReminderService(
     TimeProvider timeProvider,
     IOptions<FollowUpReminderOptions> options) : IFollowUpReminderService
 {
+    private const string WebsiteWorkActionUrl = "/website-work";
     private readonly FollowUpReminderOptions _options = options.Value;
 
     public async Task<int> ScanAsync(CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var dueSoonCutoff = now.AddMinutes(_options.DueSoonMinutes);
+        var escalationCutoff = now.AddMinutes(-_options.EscalationAfterMinutes);
         var tasks = await dbContext.ProjectTasks
             .Include(task => task.Project)
             .Include(task => task.AssigneeEmployee)
@@ -51,53 +54,81 @@ public sealed class FollowUpReminderService(
                 .ToArrayAsync(cancellationToken))
             .ToHashSet();
 
+        EscalationDirectory? escalationDirectory = null;
+        if (snapshots.Any(item => item.FollowUp!.DueAtUtc <= escalationCutoff))
+        {
+            escalationDirectory = await LoadEscalationDirectoryAsync(cancellationToken);
+        }
+
         var created = 0;
         foreach (var item in snapshots)
         {
             var task = item.Task;
             var followUp = item.FollowUp!;
-            if (!activeOwners.Contains(followUp.OwnerUserId))
-            {
-                continue;
-            }
 
-            AdminNotificationKind? kind = null;
-            string? title = null;
-            string? message = null;
-            if (followUp.DueAtUtc <= now)
+            if (activeOwners.Contains(followUp.OwnerUserId))
             {
-                kind = AdminNotificationKind.FollowUpOverdue;
-                title = "Follow-up overdue";
-                message = $"{task.AssigneeEmployee?.FullName ?? "Worker"}: {task.Title} is overdue.";
-            }
-            else if (followUp.DueAtUtc <= dueSoonCutoff)
-            {
-                kind = AdminNotificationKind.FollowUpDueSoon;
-                title = "Follow-up due soon";
-                message = $"{task.AssigneeEmployee?.FullName ?? "Worker"}: {task.Title} is due soon.";
-            }
+                AdminNotificationKind? kind = null;
+                string? title = null;
+                string? message = null;
+                if (followUp.DueAtUtc <= now)
+                {
+                    kind = AdminNotificationKind.FollowUpOverdue;
+                    title = "Follow-up overdue";
+                    message = $"{task.AssigneeEmployee?.FullName ?? "Worker"}: {task.Title} is overdue.";
+                }
+                else if (followUp.DueAtUtc <= dueSoonCutoff)
+                {
+                    kind = AdminNotificationKind.FollowUpDueSoon;
+                    title = "Follow-up due soon";
+                    message = $"{task.AssigneeEmployee?.FullName ?? "Worker"}: {task.Title} is due soon.";
+                }
 
-            if (!kind.HasValue ||
-                task.Activities.Any(activity =>
-                    AdminNotificationService.MatchesSource(
-                        activity,
+                if (kind.HasValue &&
+                    !HasNotification(task, followUp.OwnerUserId, followUp.SourceActivityId, kind.Value))
+                {
+                    dbContext.TaskActivities.Add(AdminNotificationService.CreateActivity(
+                        task,
                         followUp.OwnerUserId,
+                        kind.Value,
+                        title!,
+                        message!,
                         followUp.SourceActivityId,
-                        kind.Value)))
+                        now,
+                        followUp.DueAtUtc));
+                    created++;
+                }
+            }
+
+            if (escalationDirectory is null || followUp.DueAtUtc > escalationCutoff)
             {
                 continue;
             }
 
-            var notification = AdminNotificationService.CreateActivity(
+            var escalationRecipient = escalationDirectory.Resolve(followUp.OwnerUserId, _options.EscalationFallbackRoles);
+            if (escalationRecipient is null ||
+                HasNotification(
+                    task,
+                    escalationRecipient.UserId,
+                    followUp.SourceActivityId,
+                    AdminNotificationKind.FollowUpEscalated))
+            {
+                continue;
+            }
+
+            var overdueMinutes = Math.Max(0, (int)Math.Floor((now - followUp.DueAtUtc).TotalMinutes));
+            var ownerDisplay = followUp.OwnerName ?? followUp.OwnerEmail ?? "Assigned manager";
+            var workerDisplay = task.AssigneeEmployee?.FullName ?? "Worker";
+            dbContext.TaskActivities.Add(AdminNotificationService.CreateActivity(
                 task,
-                followUp.OwnerUserId,
-                kind.Value,
-                title!,
-                message!,
+                escalationRecipient.UserId,
+                AdminNotificationKind.FollowUpEscalated,
+                "Follow-up escalated",
+                $"{ownerDisplay} has not resolved the follow-up for {workerDisplay}: {task.Title}. It is {overdueMinutes} minutes overdue.",
                 followUp.SourceActivityId,
                 now,
-                followUp.DueAtUtc);
-            dbContext.TaskActivities.Add(notification);
+                followUp.DueAtUtc,
+                WebsiteWorkActionUrl));
             created++;
         }
 
@@ -108,6 +139,60 @@ public sealed class FollowUpReminderService(
 
         return created;
     }
+
+    private async Task<EscalationDirectory> LoadEscalationDirectoryAsync(CancellationToken cancellationToken)
+    {
+        var eligibleUsers = await dbContext.Users
+            .AsNoTracking()
+            .Include(user => user.Employee)
+            .Include(user => user.UserRoles)
+                .ThenInclude(userRole => userRole.Role)
+            .Where(user =>
+                user.IsActive &&
+                user.UserRoles.Any(userRole =>
+                    userRole.Role.IsActive &&
+                    userRole.Role.RolePermissions.Any(rolePermission =>
+                        rolePermission.Permission.Code == PermissionCatalog.TasksManage)) &&
+                user.UserRoles.Any(userRole =>
+                    userRole.Role.IsActive &&
+                    userRole.Role.RolePermissions.Any(rolePermission =>
+                        rolePermission.Permission.Code == PermissionCatalog.TasksRead)))
+            .ToArrayAsync(cancellationToken);
+
+        var recipients = eligibleUsers
+            .Select(user => new EscalationRecipient(
+                user.Id,
+                user.Email,
+                user.Employee?.FullName,
+                user.UserRoles
+                    .Where(userRole => userRole.Role.IsActive)
+                    .Select(userRole => userRole.Role.Name)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()))
+            .ToArray();
+
+        var reportingLines = await dbContext.Employees
+            .AsNoTracking()
+            .Select(employee => new ReportingLine(
+                employee.Id,
+                employee.UserId,
+                employee.SupervisorEmployeeId))
+            .ToArrayAsync(cancellationToken);
+
+        return new EscalationDirectory(recipients, reportingLines);
+    }
+
+    private static bool HasNotification(
+        ProjectTask task,
+        Guid recipientUserId,
+        Guid sourceActivityId,
+        AdminNotificationKind kind)
+        => task.Activities.Any(activity =>
+            AdminNotificationService.MatchesSource(
+                activity,
+                recipientUserId,
+                sourceActivityId,
+                kind));
 
     private static FollowUpSnapshot? FindCurrentFollowUp(IEnumerable<TaskActivity> activities)
     {
@@ -132,7 +217,12 @@ public sealed class FollowUpReminderService(
         var ownerUserId = ReadGuid(details, "followUpOwnerUserId");
         var dueAtUtc = ReadDateTime(details, "followUpDueAtUtc");
         return ownerUserId.HasValue && dueAtUtc.HasValue
-            ? new FollowUpSnapshot(management.Id, ownerUserId.Value, dueAtUtc.Value)
+            ? new FollowUpSnapshot(
+                management.Id,
+                ownerUserId.Value,
+                ReadString(details, "followUpOwnerEmail"),
+                ReadString(details, "followUpOwnerName"),
+                dueAtUtc.Value)
             : null;
     }
 
@@ -172,7 +262,8 @@ public sealed class FollowUpReminderService(
             return null;
         }
 
-        return value.GetString();
+        var text = value.GetString()?.Trim();
+        return string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
     private static Guid? ReadGuid(JsonElement? details, string propertyName)
@@ -193,7 +284,73 @@ public sealed class FollowUpReminderService(
     private sealed record FollowUpSnapshot(
         Guid SourceActivityId,
         Guid OwnerUserId,
+        string? OwnerEmail,
+        string? OwnerName,
         DateTime DueAtUtc);
+
+    private sealed record EscalationRecipient(
+        Guid UserId,
+        string Email,
+        string? Name,
+        IReadOnlyCollection<string> Roles);
+
+    private sealed record ReportingLine(
+        Guid EmployeeId,
+        Guid UserId,
+        Guid? SupervisorEmployeeId);
+
+    private sealed class EscalationDirectory(
+        IReadOnlyCollection<EscalationRecipient> recipients,
+        IReadOnlyCollection<ReportingLine> reportingLines)
+    {
+        private readonly IReadOnlyDictionary<Guid, EscalationRecipient> _recipientsByUserId =
+            recipients.ToDictionary(recipient => recipient.UserId);
+        private readonly IReadOnlyDictionary<Guid, ReportingLine> _reportingByEmployeeId =
+            reportingLines.ToDictionary(line => line.EmployeeId);
+        private readonly IReadOnlyDictionary<Guid, ReportingLine> _reportingByUserId =
+            reportingLines.ToDictionary(line => line.UserId);
+        private readonly IReadOnlyCollection<EscalationRecipient> _recipients = recipients;
+
+        public EscalationRecipient? Resolve(Guid ownerUserId, IReadOnlyCollection<string> fallbackRoles)
+        {
+            if (_reportingByUserId.TryGetValue(ownerUserId, out var ownerLine))
+            {
+                var supervisorEmployeeId = ownerLine.SupervisorEmployeeId;
+                var visited = new HashSet<Guid>();
+                while (supervisorEmployeeId.HasValue && visited.Add(supervisorEmployeeId.Value))
+                {
+                    if (!_reportingByEmployeeId.TryGetValue(supervisorEmployeeId.Value, out var supervisorLine))
+                    {
+                        break;
+                    }
+
+                    if (supervisorLine.UserId != ownerUserId &&
+                        _recipientsByUserId.TryGetValue(supervisorLine.UserId, out var supervisorRecipient))
+                    {
+                        return supervisorRecipient;
+                    }
+
+                    supervisorEmployeeId = supervisorLine.SupervisorEmployeeId;
+                }
+            }
+
+            foreach (var roleName in fallbackRoles)
+            {
+                var fallback = _recipients
+                    .Where(recipient => recipient.UserId != ownerUserId)
+                    .Where(recipient => recipient.Roles.Any(role =>
+                        string.Equals(role, roleName, StringComparison.OrdinalIgnoreCase)))
+                    .OrderBy(recipient => recipient.Email, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault();
+                if (fallback is not null)
+                {
+                    return fallback;
+                }
+            }
+
+            return null;
+        }
+    }
 }
 
 public sealed class FollowUpReminderHostedService(
