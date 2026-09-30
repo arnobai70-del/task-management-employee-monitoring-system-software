@@ -109,7 +109,7 @@ public sealed class EmployeeWorkspaceService(AppDbContext dbContext) : IEmployee
 
         var websiteQuery = dbContext.Set<WebsiteAssignment>()
             .AsNoTracking()
-            .Where(x => x.EmployeeId == employee.Id);
+            .Where(x => x.EmployeeId == employee.Id && x.AccessLevel != WebsiteAccessLevel.Survey);
         if (!includeInactive)
         {
             websiteQuery = websiteQuery.Where(x => x.IsActive);
