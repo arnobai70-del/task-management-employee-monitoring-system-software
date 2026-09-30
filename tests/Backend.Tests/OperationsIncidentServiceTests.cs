@@ -164,9 +164,31 @@ public sealed class OperationsIncidentServiceTests
 
     private static User AddOperationsManager(AppDbContext db, string email, string name)
     {
-        var permission = new Permission { Code = PermissionCatalog.OperationsManage, Description = "Manage operations incidents." };
+        var managePermission = new Permission
+        {
+            Code = PermissionCatalog.OperationsManage,
+            Description = "Manage operations incidents."
+        };
+        var reportsPermission = new Permission
+        {
+            Code = PermissionCatalog.ReportsRead,
+            Description = "View operational reports."
+        };
         var role = new Role { Name = $"Ops-{Guid.NewGuid():N}", IsActive = true };
-        role.RolePermissions.Add(new RolePermission { Role = role, RoleId = role.Id, Permission = permission, PermissionId = permission.Id });
+        role.RolePermissions.Add(new RolePermission
+        {
+            Role = role,
+            RoleId = role.Id,
+            Permission = managePermission,
+            PermissionId = managePermission.Id
+        });
+        role.RolePermissions.Add(new RolePermission
+        {
+            Role = role,
+            RoleId = role.Id,
+            Permission = reportsPermission,
+            PermissionId = reportsPermission.Id
+        });
         var user = new User
         {
             Email = email,
@@ -187,7 +209,7 @@ public sealed class OperationsIncidentServiceTests
             IsActive = true
         };
         user.Employee = employee;
-        db.Permissions.Add(permission);
+        db.Permissions.AddRange(managePermission, reportsPermission);
         db.Roles.Add(role);
         db.Users.Add(user);
         db.Employees.Add(employee);
