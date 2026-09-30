@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { apiFetch } from './api';
+import OperationsIncidentsPage from './OperationsIncidents';
 import './management.css';
 
 interface ServerHealth {
@@ -253,6 +254,10 @@ export default function OperationsDashboardPage() {
           </article>
         </>
       )}
+
+      <div style={{ marginTop: 32 }}>
+        <OperationsIncidentsPage />
+      </div>
     </>
   );
 }

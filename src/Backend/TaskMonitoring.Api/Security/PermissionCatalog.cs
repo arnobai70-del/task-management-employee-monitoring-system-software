@@ -25,6 +25,7 @@ public static class PermissionCatalog
     public const string SurveySubmit = "survey.submit";
     public const string SurveyReview = "survey.review";
     public const string ReportsRead = "reports.read";
+    public const string OperationsManage = "operations.manage";
     public const string PresenceRead = "presence.read";
     public const string MonitoringRead = "monitoring.read";
     public const string MonitoringManage = "monitoring.manage";
@@ -57,6 +58,7 @@ public static class PermissionCatalog
         [SurveySubmit] = "Open assigned external survey work from the employee workspace.",
         [SurveyReview] = "Legacy compatibility permission; externally hosted survey answers are not reviewed or stored by this system.",
         [ReportsRead] = "View organization-wide dashboard metrics and operational reports.",
+        [OperationsManage] = "Acknowledge, assign, and resolve production operations incidents.",
         [PresenceRead] = "View current employee online/offline, working, break, and last-seen presence state.",
         [MonitoringRead] = "View approved employee application/business-domain activity and the active monitoring policy.",
         [MonitoringManage] = "Manage transparent monitoring policy, retention, approved applications, and approved business domains.",
