@@ -64,6 +64,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - type: bind
+        source: ${UPDATE_HOST_ROOT:?UPDATE_HOST_ROOT must be set}
+        target: /srv/updates
+        read_only: true
+      - operations_status:/var/lib/taskmonitoring/operations
     networks:
       - backend
     expose:
@@ -106,6 +112,7 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  operations_status:
 
 networks:
   edge:
