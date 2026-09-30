@@ -114,6 +114,51 @@ public sealed class RealtimeWorkspaceServiceTests
         Assert.Equal(3, publisher.Notifications.Count);
     }
 
+    [Fact]
+    public async Task Survey_interceptor_creates_durable_assign_update_and_reassignment_notifications()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var now = new DateTime(2026, 9, 30, 10, 0, 0, DateTimeKind.Utc);
+        var publisher = new CapturePublisher();
+        var interceptor = new SurveyNotificationInterceptor(new FixedTimeProvider(now), publisher, NullLogger<SurveyNotificationInterceptor>.Instance);
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"survey-realtime-interceptor-{Guid.NewGuid():N}")
+            .AddInterceptors(interceptor)
+            .Options;
+        await using var db = new AppDbContext(options);
+        var first = AddEmployee(db, "S-001", "First Surveyor");
+        var second = AddEmployee(db, "S-002", "Second Surveyor");
+        await db.SaveChangesAsync(cancellationToken);
+
+        var survey = new WebsiteAssignment
+        {
+            EmployeeId = first.Id,
+            Employee = first,
+            Name = "Customer survey",
+            Url = "https://survey.example.com/form/1",
+            AccessLevel = WebsiteAccessLevel.Survey,
+            IsActive = true,
+            ExpiresOn = new DateOnly(2026, 10, 5)
+        };
+        db.Set<WebsiteAssignment>().Add(survey);
+        await db.SaveChangesAsync(cancellationToken);
+
+        survey.ExpiresOn = new DateOnly(2026, 10, 7);
+        await db.SaveChangesAsync(cancellationToken);
+
+        survey.EmployeeId = second.Id;
+        survey.Employee = second;
+        await db.SaveChangesAsync(cancellationToken);
+
+        var notifications = await db.EmployeeNotifications.ToListAsync(cancellationToken);
+        Assert.Equal(4, notifications.Count);
+        Assert.Contains(notifications, x => x.EmployeeId == first.Id && x.Kind == EmployeeNotificationKind.SurveyAssigned && x.EntityType == "SurveyLink");
+        Assert.Contains(notifications, x => x.EmployeeId == first.Id && x.Kind == EmployeeNotificationKind.SurveyUpdated && x.EntityId == survey.Id);
+        Assert.Contains(notifications, x => x.EmployeeId == first.Id && x.Kind == EmployeeNotificationKind.SurveyUnassigned);
+        Assert.Contains(notifications, x => x.EmployeeId == second.Id && x.Kind == EmployeeNotificationKind.SurveyAssigned);
+        Assert.Equal(4, publisher.Notifications.Count);
+    }
+
     private static AppDbContext CreateDb()
         => new(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase($"realtime-{Guid.NewGuid():N}").Options);
 
