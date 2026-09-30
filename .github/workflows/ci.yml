@@ -166,16 +166,20 @@ jobs:
           bash scripts/production/publish-windows-release.sh --env deploy/production/production.ci.env --bundle "$bundle"
           bash scripts/production/acceptance-server.sh --env deploy/production/production.ci.env --channel stable
 
-      - name: Start and verify private observability stack
+      - name: Start private observability stack
         shell: bash
-        run: |
-          bash scripts/production/observability-up.sh deploy/production/production.ci.env
-          bash scripts/production/acceptance-observability.sh deploy/production/production.ci.env
+        run: bash scripts/production/observability-up.sh deploy/production/production.ci.env
+
+      - name: Verify observability telemetry acceptance
+        shell: bash
+        run: bash scripts/production/acceptance-observability.sh deploy/production/production.ci.env
 
       - name: Production stack diagnostics
         if: failure()
         shell: bash
-        run: docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml logs --no-color || true
+        run: |
+          docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml ps || true
+          docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml logs --no-color || true
 
       - name: Tear down production stack
         if: always()
