@@ -11,6 +11,11 @@ public interface IWebsiteWorkAttentionActionService
 {
     Task<IReadOnlyCollection<WebsiteWorkAttentionFollowUpOwnerResponse>> GetFollowUpOwnersAsync(CancellationToken cancellationToken);
 
+    Task<OperationResult<WebsiteWorkFollowUpInboxResponse>> GetMyFollowUpsAsync(
+        RequestActor actor,
+        bool includeResolved,
+        CancellationToken cancellationToken);
+
     Task<OperationResult<WebsiteWorkAttentionActionResponse>> AcknowledgeAsync(
         Guid taskId,
         WebsiteWorkAttentionAcknowledgeRequest request,
@@ -28,6 +33,12 @@ public interface IWebsiteWorkAttentionActionService
         WebsiteWorkAttentionFollowUpRequest request,
         RequestActor actor,
         CancellationToken cancellationToken);
+
+    Task<OperationResult<WebsiteWorkAttentionActionResponse>> ResolveFollowUpAsync(
+        Guid taskId,
+        WebsiteWorkAttentionResolveFollowUpRequest request,
+        RequestActor actor,
+        CancellationToken cancellationToken);
 }
 
 public sealed class WebsiteWorkAttentionActionService(
@@ -37,6 +48,7 @@ public sealed class WebsiteWorkAttentionActionService(
     public const string AcknowledgedAction = "website-work.attention.acknowledged";
     public const string SnoozedAction = "website-work.attention.snoozed";
     public const string FollowUpAssignedAction = "website-work.attention.follow-up-assigned";
+    public const string FollowUpResolvedAction = "website-work.attention.follow-up-resolved";
 
     public async Task<IReadOnlyCollection<WebsiteWorkAttentionFollowUpOwnerResponse>> GetFollowUpOwnersAsync(
         CancellationToken cancellationToken)
@@ -55,6 +67,58 @@ public sealed class WebsiteWorkAttentionActionService(
                 user.Email,
                 user.Employee != null ? user.Employee.FullName : null))
             .ToArrayAsync(cancellationToken);
+
+    public async Task<OperationResult<WebsiteWorkFollowUpInboxResponse>> GetMyFollowUpsAsync(
+        RequestActor actor,
+        bool includeResolved,
+        CancellationToken cancellationToken)
+    {
+        var actorResult = await ResolveActorAsync(actor, cancellationToken);
+        if (actorResult.Error is not null)
+        {
+            return OperationResult<WebsiteWorkFollowUpInboxResponse>.Invalid(
+                actorResult.Error.Code,
+                actorResult.Error.Message);
+        }
+
+        var now = UtcNow();
+        var tasks = await dbContext.ProjectTasks
+            .AsNoTracking()
+            .Include(task => task.Project)
+            .Include(task => task.AssigneeEmployee)
+            .Include(task => task.Activities)
+            .Where(task =>
+                task.Status != ProjectTaskStatus.Done &&
+                task.Status != ProjectTaskStatus.Cancelled &&
+                task.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction) &&
+                task.Activities.Any(activity =>
+                    activity.Action == FollowUpAssignedAction ||
+                    activity.Action == FollowUpResolvedAction))
+            .ToArrayAsync(cancellationToken);
+
+        var allForActor = tasks
+            .Select(task => BuildFollowUpInboxItem(task, actorResult.User!.Id, now))
+            .Where(item => item is not null)
+            .Select(item => item!)
+            .ToArray();
+
+        var visible = allForActor
+            .Where(item => includeResolved || item.State != WebsiteWorkFollowUpState.Resolved)
+            .OrderBy(item => item.State == WebsiteWorkFollowUpState.Overdue ? 0 : item.State == WebsiteWorkFollowUpState.Pending ? 1 : 2)
+            .ThenBy(item => item.State == WebsiteWorkFollowUpState.Resolved ? DateTime.MaxValue : item.DueAtUtc)
+            .ThenByDescending(item => item.ResolvedAtUtc)
+            .ThenBy(item => item.EmployeeName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return OperationResult<WebsiteWorkFollowUpInboxResponse>.Success(
+            new WebsiteWorkFollowUpInboxResponse(
+                now,
+                allForActor.Count(item => item.State == WebsiteWorkFollowUpState.Pending),
+                allForActor.Count(item => item.State == WebsiteWorkFollowUpState.Overdue),
+                allForActor.Count(item => item.State == WebsiteWorkFollowUpState.Resolved),
+                visible.Length,
+                visible));
+    }
 
     public async Task<OperationResult<WebsiteWorkAttentionActionResponse>> AcknowledgeAsync(
         Guid taskId,
@@ -236,26 +300,113 @@ public sealed class WebsiteWorkAttentionActionService(
                 $"Follow-up assigned to {owner.Employee?.FullName ?? owner.Email} until {dueAtUtc:O}."));
     }
 
-    private async Task<(ProjectTask? Task, User? ActorUser, OperationResult<WebsiteWorkAttentionActionResponse>? Error)> ResolveContextAsync(
+    public async Task<OperationResult<WebsiteWorkAttentionActionResponse>> ResolveFollowUpAsync(
         Guid taskId,
+        WebsiteWorkAttentionResolveFollowUpRequest request,
+        RequestActor actor,
+        CancellationToken cancellationToken)
+    {
+        var context = await ResolveContextAsync(taskId, actor, cancellationToken);
+        if (context.Error is not null)
+        {
+            return context.Error;
+        }
+
+        var noteResult = NormalizeOptionalNote(request.Note, 1000);
+        if (noteResult.Error is not null)
+        {
+            return OperationResult<WebsiteWorkAttentionActionResponse>.Invalid(noteResult.Error.Code, noteResult.Error.Message);
+        }
+
+        var currentManagement = FindCurrentManagementAction(context.Task!.Activities);
+        if (currentManagement is null || currentManagement.Action != FollowUpAssignedAction)
+        {
+            return OperationResult<WebsiteWorkAttentionActionResponse>.Conflict(
+                "follow_up_not_current",
+                "This Website Work target does not have a current unresolved follow-up assignment.");
+        }
+
+        var assignmentDetails = ParseDetails(currentManagement.DetailsJson);
+        var ownerUserId = ReadGuid(assignmentDetails, "followUpOwnerUserId");
+        if (!ownerUserId.HasValue || ownerUserId.Value != context.ActorUser!.Id)
+        {
+            return OperationResult<WebsiteWorkAttentionActionResponse>.Conflict(
+                "follow_up_not_owned",
+                "Only the manager currently assigned to this follow-up can resolve it.");
+        }
+
+        var dueAtUtc = ReadDateTime(assignmentDetails, "followUpDueAtUtc");
+        if (!dueAtUtc.HasValue)
+        {
+            return OperationResult<WebsiteWorkAttentionActionResponse>.Conflict(
+                "follow_up_invalid",
+                "The current follow-up assignment is missing its due time and cannot be resolved safely.");
+        }
+
+        var now = UtcNow();
+        var assignmentNote = ReadString(assignmentDetails, "note") ?? string.Empty;
+        var ownerEmail = ReadString(assignmentDetails, "followUpOwnerEmail") ?? context.ActorUser.Email;
+        var ownerName = ReadString(assignmentDetails, "followUpOwnerName");
+        AddManagementActivity(context.Task, context.ActorUser, FollowUpResolvedAction, new
+        {
+            actorUserId = context.ActorUser.Id,
+            actorEmail = context.ActorUser.Email,
+            note = noteResult.Value,
+            followUpOwnerUserId = context.ActorUser.Id,
+            followUpOwnerEmail = ownerEmail,
+            followUpOwnerName = ownerName,
+            followUpAssignedAtUtc = currentManagement.CreatedAtUtc,
+            followUpAssignmentNote = assignmentNote,
+            followUpDueAtUtc = dueAtUtc.Value,
+            resolvedAtUtc = now
+        }, now);
+        AddAudit(actor, "website-work.attention.follow-up-resolved", taskId, new
+        {
+            context.Task.ProjectId,
+            context.Task.AssigneeEmployeeId,
+            context.Task.Title,
+            followUpOwnerUserId = context.ActorUser.Id,
+            followUpDueAtUtc = dueAtUtc.Value,
+            resolutionNote = noteResult.Value
+        }, now);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return OperationResult<WebsiteWorkAttentionActionResponse>.Success(
+            new WebsiteWorkAttentionActionResponse(
+                taskId,
+                WebsiteWorkAttentionDisposition.Resolved,
+                now,
+                "Follow-up resolved. The current attention signal stays managed until the Website Work lifecycle changes."));
+    }
+
+    private async Task<(User? User, ApiOperationError? Error)> ResolveActorAsync(
         RequestActor actor,
         CancellationToken cancellationToken)
     {
         if (!actor.UserId.HasValue)
         {
-            return (null, null, OperationResult<WebsiteWorkAttentionActionResponse>.Invalid(
-                "actor_required",
-                "A valid authenticated manager is required."));
+            return (null, new ApiOperationError("actor_required", "A valid authenticated manager is required."));
         }
 
         var actorUser = await dbContext.Users
             .AsNoTracking()
             .SingleOrDefaultAsync(user => user.Id == actor.UserId.Value && user.IsActive, cancellationToken);
-        if (actorUser is null)
+        return actorUser is null
+            ? (null, new ApiOperationError("actor_invalid", "The authenticated manager account is inactive or unavailable."))
+            : (actorUser, null);
+    }
+
+    private async Task<(ProjectTask? Task, User? ActorUser, OperationResult<WebsiteWorkAttentionActionResponse>? Error)> ResolveContextAsync(
+        Guid taskId,
+        RequestActor actor,
+        CancellationToken cancellationToken)
+    {
+        var actorResult = await ResolveActorAsync(actor, cancellationToken);
+        if (actorResult.Error is not null)
         {
             return (null, null, OperationResult<WebsiteWorkAttentionActionResponse>.Invalid(
-                "actor_invalid",
-                "The authenticated manager account is inactive or unavailable."));
+                actorResult.Error.Code,
+                actorResult.Error.Message));
         }
 
         var task = await dbContext.ProjectTasks
@@ -280,8 +431,122 @@ public sealed class WebsiteWorkAttentionActionService(
                 "Closed Website Work does not need an attention action."));
         }
 
-        return (task, actorUser, null);
+        return (task, actorResult.User, null);
     }
+
+    private static WebsiteWorkFollowUpInboxItemResponse? BuildFollowUpInboxItem(
+        ProjectTask task,
+        Guid actorUserId,
+        DateTime now)
+    {
+        if (task.AssigneeEmployee is null)
+        {
+            return null;
+        }
+
+        var current = FindCurrentManagementAction(task.Activities);
+        if (current is null ||
+            current.Action is not (FollowUpAssignedAction or FollowUpResolvedAction))
+        {
+            return null;
+        }
+
+        if (current.Action == FollowUpAssignedAction)
+        {
+            var details = ParseDetails(current.DetailsJson);
+            var ownerUserId = ReadGuid(details, "followUpOwnerUserId");
+            var dueAtUtc = ReadDateTime(details, "followUpDueAtUtc");
+            if (ownerUserId != actorUserId || !dueAtUtc.HasValue)
+            {
+                return null;
+            }
+
+            return new WebsiteWorkFollowUpInboxItemResponse(
+                task.Id,
+                task.ProjectId,
+                task.Project.Code,
+                task.Project.Name,
+                task.AssigneeEmployee.Id,
+                task.AssigneeEmployee.EmployeeCode,
+                task.AssigneeEmployee.FullName,
+                task.Title,
+                task.Status,
+                task.DueDate,
+                dueAtUtc.Value <= now ? WebsiteWorkFollowUpState.Overdue : WebsiteWorkFollowUpState.Pending,
+                current.CreatedAtUtc,
+                ReadGuid(details, "actorUserId") ?? current.ActorUserId,
+                ReadString(details, "actorEmail"),
+                ReadString(details, "note") ?? string.Empty,
+                dueAtUtc.Value,
+                null,
+                null,
+                null,
+                null);
+        }
+
+        var resolutionDetails = ParseDetails(current.DetailsJson);
+        var resolvedOwnerUserId = ReadGuid(resolutionDetails, "followUpOwnerUserId");
+        var resolvedDueAtUtc = ReadDateTime(resolutionDetails, "followUpDueAtUtc");
+        if (resolvedOwnerUserId != actorUserId || !resolvedDueAtUtc.HasValue)
+        {
+            return null;
+        }
+
+        return new WebsiteWorkFollowUpInboxItemResponse(
+            task.Id,
+            task.ProjectId,
+            task.Project.Code,
+            task.Project.Name,
+            task.AssigneeEmployee.Id,
+            task.AssigneeEmployee.EmployeeCode,
+            task.AssigneeEmployee.FullName,
+            task.Title,
+            task.Status,
+            task.DueDate,
+            WebsiteWorkFollowUpState.Resolved,
+            ReadDateTime(resolutionDetails, "followUpAssignedAtUtc") ?? current.CreatedAtUtc,
+            null,
+            null,
+            ReadString(resolutionDetails, "followUpAssignmentNote") ?? string.Empty,
+            resolvedDueAtUtc.Value,
+            ReadDateTime(resolutionDetails, "resolvedAtUtc") ?? current.CreatedAtUtc,
+            ReadGuid(resolutionDetails, "actorUserId") ?? current.ActorUserId,
+            ReadString(resolutionDetails, "actorEmail"),
+            ReadString(resolutionDetails, "note"));
+    }
+
+    private static TaskActivity? FindCurrentManagementAction(IEnumerable<TaskActivity> activities)
+    {
+        var ordered = activities
+            .OrderBy(activity => activity.CreatedAtUtc)
+            .ThenBy(activity => activity.Id)
+            .ToArray();
+        var lifecycleAtUtc = ordered
+            .Where(activity => IsLifecycleAction(activity.Action))
+            .Select(activity => (DateTime?)activity.CreatedAtUtc)
+            .Max();
+
+        return ordered
+            .Where(activity => IsManagementAction(activity.Action))
+            .Where(activity => !lifecycleAtUtc.HasValue || activity.CreatedAtUtc > lifecycleAtUtc.Value)
+            .OrderByDescending(activity => activity.CreatedAtUtc)
+            .ThenByDescending(activity => activity.Id)
+            .FirstOrDefault();
+    }
+
+    private static bool IsLifecycleAction(string action)
+        => action == WebsiteWorkService.ConfiguredAction ||
+           action == WebsiteWorkService.StartedAction ||
+           action == WebsiteWorkReviewService.SubmittedAction ||
+           action == WebsiteWorkReviewService.ReopenedAction ||
+           action == WebsiteWorkReviewService.ApprovedAction ||
+           action == WebsiteWorkService.CompletedAction;
+
+    private static bool IsManagementAction(string action)
+        => action == AcknowledgedAction ||
+           action == SnoozedAction ||
+           action == FollowUpAssignedAction ||
+           action == FollowUpResolvedAction;
 
     private static (string? Value, ApiOperationError? Error) NormalizeOptionalNote(string? value, int maximumLength)
     {
@@ -294,6 +559,52 @@ public sealed class WebsiteWorkAttentionActionService(
         }
 
         return (note, null);
+    }
+
+    private static JsonElement? ParseDetails(string detailsJson)
+    {
+        if (string.IsNullOrWhiteSpace(detailsJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(detailsJson);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadString(JsonElement? details, string propertyName)
+    {
+        if (!details.HasValue ||
+            !details.Value.TryGetProperty(propertyName, out var value) ||
+            value.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var text = value.GetString()?.Trim();
+        return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
+    private static Guid? ReadGuid(JsonElement? details, string propertyName)
+        => Guid.TryParse(ReadString(details, propertyName), out var value) ? value : null;
+
+    private static DateTime? ReadDateTime(JsonElement? details, string propertyName)
+    {
+        if (!details.HasValue || !details.Value.TryGetProperty(propertyName, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind == JsonValueKind.String && value.TryGetDateTime(out var parsed)
+            ? DateTime.SpecifyKind(parsed, DateTimeKind.Utc)
+            : null;
     }
 
     private void AddManagementActivity(ProjectTask task, User actorUser, string action, object details, DateTime now)
