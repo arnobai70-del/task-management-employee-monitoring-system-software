@@ -1,5 +1,6 @@
 import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { apiFetch, apiUrl, getValidAccessToken } from './api';
 import { useAuth } from './auth';
 
@@ -27,6 +28,49 @@ interface WebsiteWorkSubmission {
   message: string;
 }
 
+type WebsiteWorkFollowUpRealtimeAction = 'Assigned' | 'Updated' | 'Removed' | 'Resolved';
+type FollowUpState = 'Pending' | 'Overdue' | 'Resolved';
+
+interface WebsiteWorkFollowUpRealtime {
+  action: WebsiteWorkFollowUpRealtimeAction;
+  taskId: string;
+  projectId: string;
+  projectName: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  title: string;
+  ownerUserId: string;
+  ownerEmail: string;
+  ownerName: string | null;
+  dueAtUtc: string;
+  occurredAtUtc: string;
+  message: string;
+}
+
+interface FollowUpItem {
+  taskId: string;
+  projectName: string;
+  employeeName: string;
+  title: string;
+  state: FollowUpState;
+  dueAtUtc: string;
+}
+
+interface FollowUpInboxResponse {
+  generatedAtUtc: string;
+  pending: number;
+  overdue: number;
+  resolved: number;
+  totalCount: number;
+  items: FollowUpItem[];
+}
+
+export interface WebsiteWorkFollowUpSummary {
+  pending: number;
+  overdue: number;
+}
+
 interface PendingWebsiteWork {
   id: string;
   projectName: string;
@@ -51,16 +95,27 @@ interface Notice {
 }
 
 export const websiteWorkCompletedEvent = 'taskmonitoring:website-work-completed';
+export const websiteWorkFollowUpChangedEvent = 'taskmonitoring:website-work-follow-up-changed';
+export const websiteWorkFollowUpSummaryEvent = 'taskmonitoring:website-work-follow-up-summary';
+
+function followUpNoticeTitle(action: WebsiteWorkFollowUpRealtimeAction): string {
+  if (action === 'Assigned') return 'New follow-up assigned';
+  if (action === 'Updated') return 'Follow-up updated';
+  if (action === 'Resolved') return 'Follow-up resolved';
+  return 'Follow-up changed';
+}
 
 export default function WebsiteWorkRealtimeNotice() {
   const { can } = useAuth();
-  const allowed = can('tasks.read');
   const mayManage = can('tasks.manage');
+  const allowed = can('tasks.read') || mayManage;
   const [latest, setLatest] = useState<Notice | null>(null);
   const [pending, setPending] = useState<PendingWebsiteWork[]>([]);
+  const [followUpSummary, setFollowUpSummary] = useState<WebsiteWorkFollowUpSummary>({ pending: 0, overdue: 0 });
   const [reviewError, setReviewError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const dismissTimer = useRef<number | null>(null);
+  const overdueFollowUpIds = useRef<Set<string> | null>(null);
 
   const showNotice = useCallback((notice: Notice) => {
     setLatest(notice);
@@ -69,7 +124,7 @@ export default function WebsiteWorkRealtimeNotice() {
   }, []);
 
   const loadPending = useCallback(async () => {
-    if (!mayManage) {
+    if (!mayManage || !can('tasks.read')) {
       setPending([]);
       return;
     }
@@ -81,7 +136,43 @@ export default function WebsiteWorkRealtimeNotice() {
     } catch (caught) {
       setReviewError(caught instanceof Error ? caught.message : 'Unable to load pending website work reviews.');
     }
-  }, [mayManage]);
+  }, [can, mayManage]);
+
+  const publishFollowUpSummary = useCallback((summary: WebsiteWorkFollowUpSummary) => {
+    setFollowUpSummary(summary);
+    window.dispatchEvent(new CustomEvent<WebsiteWorkFollowUpSummary>(websiteWorkFollowUpSummaryEvent, { detail: summary }));
+  }, []);
+
+  const loadFollowUps = useCallback(async (announceOverdue: boolean) => {
+    if (!mayManage) {
+      overdueFollowUpIds.current = null;
+      publishFollowUpSummary({ pending: 0, overdue: 0 });
+      return;
+    }
+
+    try {
+      const response = await apiFetch<FollowUpInboxResponse>('/api/website-work/follow-ups/mine?includeResolved=false');
+      publishFollowUpSummary({ pending: response.pending, overdue: response.overdue });
+
+      const nextOverdue = new Set(response.items.filter(item => item.state === 'Overdue').map(item => item.taskId));
+      if (announceOverdue && overdueFollowUpIds.current !== null) {
+        const newlyOverdue = response.items.filter(item => item.state === 'Overdue' && !overdueFollowUpIds.current!.has(item.taskId));
+        if (newlyOverdue.length > 0) {
+          const first = newlyOverdue[0];
+          showNotice({
+            title: 'Follow-up overdue',
+            message: `${first.employeeName}: ${first.title}`,
+            detail: newlyOverdue.length > 1
+              ? `${first.projectName} · ${newlyOverdue.length} follow-ups are now overdue`
+              : `${first.projectName} · due ${new Date(first.dueAtUtc).toLocaleString()}`
+          });
+        }
+      }
+      overdueFollowUpIds.current = nextOverdue;
+    } catch {
+      // The durable follow-up inbox stays authoritative; polling will retry without replacing other Admin Web errors.
+    }
+  }, [mayManage, publishFollowUpSummary, showNotice]);
 
   useEffect(() => {
     if (!mayManage) return;
@@ -89,6 +180,13 @@ export default function WebsiteWorkRealtimeNotice() {
     const timer = window.setInterval(() => void loadPending(), 5_000);
     return () => window.clearInterval(timer);
   }, [loadPending, mayManage]);
+
+  useEffect(() => {
+    if (!mayManage) return;
+    void loadFollowUps(false);
+    const timer = window.setInterval(() => void loadFollowUps(true), 15_000);
+    return () => window.clearInterval(timer);
+  }, [loadFollowUps, mayManage]);
 
   useEffect(() => {
     if (!allowed) return;
@@ -117,15 +215,25 @@ export default function WebsiteWorkRealtimeNotice() {
       window.dispatchEvent(new CustomEvent<WebsiteWorkCompletion>(websiteWorkCompletedEvent, { detail: completion }));
     });
 
+    connection.on('websiteWorkFollowUpChanged', (followUp: WebsiteWorkFollowUpRealtime) => {
+      showNotice({
+        title: followUpNoticeTitle(followUp.action),
+        message: followUp.message,
+        detail: `${followUp.projectName} · due ${new Date(followUp.dueAtUtc).toLocaleString()}`
+      });
+      window.dispatchEvent(new CustomEvent<WebsiteWorkFollowUpRealtime>(websiteWorkFollowUpChangedEvent, { detail: followUp }));
+      void loadFollowUps(false);
+    });
+
     void connection.start().catch(() => {
-      // Pending review polling and durable completion history remain available if realtime reconnects later.
+      // Pending review/follow-up polling and durable server data remain available if realtime reconnects later.
     });
 
     return () => {
       if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current);
       void connection.stop();
     };
-  }, [allowed, loadPending, showNotice]);
+  }, [allowed, loadFollowUps, loadPending, showNotice]);
 
   async function approve(item: PendingWebsiteWork) {
     if (!mayManage || !window.confirm(`Approve completion for "${item.title}" by ${item.employeeName || 'this worker'}?`)) return;
@@ -179,6 +287,8 @@ export default function WebsiteWorkRealtimeNotice() {
     }
   }
 
+  const followUpCount = followUpSummary.pending + followUpSummary.overdue;
+
   return (
     <>
       {latest && (
@@ -190,6 +300,25 @@ export default function WebsiteWorkRealtimeNotice() {
           </div>
           <button type="button" aria-label="Dismiss notification" onClick={() => setLatest(null)}>×</button>
         </aside>
+      )}
+
+      {mayManage && followUpCount > 0 && (
+        <NavLink
+          to="/follow-ups"
+          className={`status-badge status-${followUpSummary.overdue > 0 ? 'overdue' : 'active'}`}
+          aria-label={`${followUpCount} follow-ups, ${followUpSummary.overdue} overdue`}
+          style={{
+            position: 'fixed',
+            right: 20,
+            top: 76,
+            zIndex: 30,
+            textDecoration: 'none',
+            padding: '8px 12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,.16)'
+          }}
+        >
+          Follow-ups {followUpCount}{followUpSummary.overdue > 0 ? ` · ${followUpSummary.overdue} overdue` : ''}
+        </NavLink>
       )}
 
       {mayManage && (pending.length > 0 || reviewError) && (

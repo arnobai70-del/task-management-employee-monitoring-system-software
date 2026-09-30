@@ -28,6 +28,8 @@ public sealed class RealtimeHub(AppDbContext dbContext) : Hub
         var subject = Context.User?.FindFirstValue(JwtRegisteredClaimNames.Sub);
         if (Guid.TryParse(subject, out var userId))
         {
+            await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.User(userId));
+
             var employeeId = await dbContext.Employees
                 .AsNoTracking()
                 .Where(x => x.UserId == userId && x.IsActive && x.User.IsActive)
@@ -50,4 +52,5 @@ public static class RealtimeGroups
     public const string TaskManagers = "task-managers";
 
     public static string Employee(Guid employeeId) => $"employee:{employeeId:N}";
+    public static string User(Guid userId) => $"user:{userId:N}";
 }

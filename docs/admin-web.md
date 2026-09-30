@@ -8,7 +8,7 @@ Implemented areas include:
 
 - Dashboard — reporting metrics plus permission-gated live workforce presence and Website Work Needs Attention signals.
 - Employee Productivity — daily/weekly Website Work productivity with assignment/start/review/approval metrics, working-time reconstruction and CSV export.
-- My Follow-ups — manager-specific pending/overdue Website Work attention follow-ups with owner-only resolution.
+- My Follow-ups — manager-specific pending/overdue Website Work attention follow-ups with owner-only resolution, realtime refresh and a global count badge.
 - Employees and departments — directory plus management workflows.
 - Attendance and shifts — work-session visibility and shift administration.
 - Projects and tasks — project/task management workflows.
@@ -25,7 +25,7 @@ Backend business rules must not be duplicated or weakened in the browser.
 - TypeScript with strict type checking
 - Vite
 - React Router
-- `@microsoft/signalr` for live workforce and Website Work review updates
+- `@microsoft/signalr` for live workforce, Website Work review and manager follow-up updates
 - Native CSS for the responsive application shell and data visualization
 
 ## Authentication and authorization
@@ -91,9 +91,11 @@ Employee rows are grouped by the currently assigned employee. The page can filte
 
 `/follow-ups` requires `tasks.manage` and calls `GET /api/website-work/follow-ups/mine` for the authenticated manager. It displays only current follow-ups assigned to that account after the latest Website Work lifecycle event.
 
-The page separates pending and overdue follow-ups, can optionally show resolved items, auto-refreshes every 20 seconds, and lets the current owner mark a follow-up resolved with an optional resolution note. Resolution is server-authorized and audit logged; a manager cannot resolve another manager's current follow-up.
+The page separates pending and overdue follow-ups, can optionally show resolved items, and lets the current owner mark a follow-up resolved with an optional resolution note. Resolution is server-authorized and audit logged; a manager cannot resolve another manager's current follow-up.
 
-Dashboard Needs Attention separately reports pending and overdue follow-up totals and links managers to the inbox. A resolved follow-up remains managed until the Website Work lifecycle changes, preventing the same warning from immediately reappearing after it has been handled.
+Follow-up assignment, reassignment, resolution and invalidation are pushed over the existing SignalR hub to a user-specific group for the affected manager account. The Admin Web displays a short toast, refreshes **My Follow-ups** immediately, and maintains a global Follow-ups badge showing the manager's pending + overdue count. A periodic 15/20-second refresh remains enabled as a resilient fallback and to detect a due-time transition from Pending to Overdue when no database write occurs; a newly overdue item raises an overdue toast.
+
+Dashboard Needs Attention separately reports pending and overdue follow-up totals and links managers to the inbox. A resolved follow-up remains managed until the Website Work lifecycle changes, preventing the same warning from immediately reappearing after it has been handled. The durable `TaskActivity`-derived inbox remains authoritative if a realtime delivery is missed.
 
 ## Local development
 

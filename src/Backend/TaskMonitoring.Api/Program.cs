@@ -74,10 +74,12 @@ builder.Services.AddOptions<WebsiteWorkAttentionOptions>()
     .ValidateOnStart();
 builder.Services.AddScoped<TaskNotificationInterceptor>();
 builder.Services.AddScoped<SurveyNotificationInterceptor>();
+builder.Services.AddScoped<WebsiteWorkFollowUpRealtimeInterceptor>();
 builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
     options.UseNpgsql(connectionString).AddInterceptors(
         serviceProvider.GetRequiredService<TaskNotificationInterceptor>(),
-        serviceProvider.GetRequiredService<SurveyNotificationInterceptor>()));
+        serviceProvider.GetRequiredService<SurveyNotificationInterceptor>(),
+        serviceProvider.GetRequiredService<WebsiteWorkFollowUpRealtimeInterceptor>()));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ITokenService, TokenService>();
