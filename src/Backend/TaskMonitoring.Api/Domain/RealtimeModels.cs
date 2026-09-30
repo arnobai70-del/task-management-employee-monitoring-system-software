@@ -8,7 +8,11 @@ public enum EmployeeNotificationKind
     TaskStatusChanged = 4,
     SurveyAssigned = 5,
     SurveyUpdated = 6,
-    SurveyUnassigned = 7
+    SurveyUnassigned = 7,
+    FollowUpAssigned = 8,
+    FollowUpUpdated = 9,
+    FollowUpRemoved = 10,
+    FollowUpResolved = 11
 }
 
 public sealed class EmployeePresence
