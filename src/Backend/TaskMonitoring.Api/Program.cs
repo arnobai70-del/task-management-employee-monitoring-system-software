@@ -93,6 +93,15 @@ builder.Services.AddOptions<OperationsOptions>()
     .Validate(options => !string.IsNullOrWhiteSpace(options.StableReleaseManifestPath), "Operations:StableReleaseManifestPath is required.")
     .Validate(options => !string.IsNullOrWhiteSpace(options.BackupStatusPath), "Operations:BackupStatusPath is required.")
     .ValidateOnStart();
+builder.Services.AddOptions<AgentUpdateOptions>()
+    .Bind(builder.Configuration.GetSection(AgentUpdateOptions.SectionName))
+    .Validate(options => string.IsNullOrWhiteSpace(options.EnrollmentKey) || Encoding.UTF8.GetByteCount(options.EnrollmentKey) >= 32,
+        "AgentUpdates:EnrollmentKey must contain at least 32 bytes when configured.")
+    .Validate(options => options.DeviceTokenBytes is >= 24 and <= 64,
+        "AgentUpdates:DeviceTokenBytes must be between 24 and 64.")
+    .Validate(options => options.MaxRolloutWindowHours is >= 1 and <= 720,
+        "AgentUpdates:MaxRolloutWindowHours must be between 1 and 720.")
+    .ValidateOnStart();
 builder.Services.AddScoped<TaskNotificationInterceptor>();
 builder.Services.AddScoped<SurveyNotificationInterceptor>();
 builder.Services.AddScoped<WebsiteWorkFollowUpRealtimeInterceptor>();
@@ -130,6 +139,7 @@ builder.Services.AddScoped<IRealtimeWorkspaceService, RealtimeWorkspaceService>(
 builder.Services.AddScoped<IMonitoringTelemetryService, MonitoringTelemetryService>();
 builder.Services.AddScoped<IOperationsHealthService, OperationsHealthService>();
 builder.Services.AddScoped<IOperationsIncidentService, OperationsIncidentService>();
+builder.Services.AddScoped<IAgentUpdateService, AgentUpdateService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddSingleton<IRealtimeEventPublisher, SignalRRealtimeEventPublisher>();
 builder.Services.AddSingleton<IWebsiteWorkRealtimePublisher, SignalRWebsiteWorkRealtimePublisher>();
