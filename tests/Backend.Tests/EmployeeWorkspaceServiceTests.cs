@@ -71,7 +71,7 @@ public sealed class EmployeeWorkspaceServiceTests
     }
 
     [Fact]
-    public async Task My_access_is_scoped_and_hides_inactive_or_released_assignments_by_default()
+    public async Task My_access_is_scoped_hides_inactive_and_keeps_survey_links_out_of_website_access()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var db = CreateDbContext();
@@ -86,7 +86,8 @@ public sealed class EmployeeWorkspaceServiceTests
         var releasedIp = new IpAssignment { EmployeeId = first.Id, Employee = first, IpAddress = "192.168.50.11", DeviceName = "OLD-PC", Status = IpAssignmentStatus.Released };
         var activeWebsite = new WebsiteAssignment { EmployeeId = first.Id, Employee = first, Name = "CRM", Url = "https://crm.example.com", AccessLevel = WebsiteAccessLevel.Work, IsActive = true };
         var inactiveWebsite = new WebsiteAssignment { EmployeeId = first.Id, Employee = first, Name = "Legacy", Url = "https://legacy.example.com", AccessLevel = WebsiteAccessLevel.View, IsActive = false };
-        db.AddRange(activeRdp, inactiveRdp, otherRdp, activeIp, releasedIp, activeWebsite, inactiveWebsite);
+        var surveyWebsite = new WebsiteAssignment { EmployeeId = first.Id, Employee = first, Name = "Customer survey", Url = "https://survey.example.com/form", AccessLevel = WebsiteAccessLevel.Survey, IsActive = true };
+        db.AddRange(activeRdp, inactiveRdp, otherRdp, activeIp, releasedIp, activeWebsite, inactiveWebsite, surveyWebsite);
         await db.SaveChangesAsync(cancellationToken);
 
         var service = new EmployeeWorkspaceService(db);
@@ -99,12 +100,14 @@ public sealed class EmployeeWorkspaceServiceTests
         Assert.Equal(activeIp.Id, current.Value.IpAssignments.Single().Id);
         Assert.Single(current.Value.WebsiteAssignments);
         Assert.Equal(activeWebsite.Id, current.Value.WebsiteAssignments.Single().Id);
+        Assert.DoesNotContain(current.Value.WebsiteAssignments, x => x.Id == surveyWebsite.Id);
 
         var history = await service.GetMyAccessAsync(new RequestActor(first.UserId, null, "tests"), true, cancellationToken);
         Assert.Equal(2, history.Value!.RdpAssignments.Count);
         Assert.Equal(2, history.Value.IpAssignments.Count);
         Assert.Equal(2, history.Value.WebsiteAssignments.Count);
         Assert.DoesNotContain(history.Value.RdpAssignments, x => x.Id == otherRdp.Id);
+        Assert.DoesNotContain(history.Value.WebsiteAssignments, x => x.Id == surveyWebsite.Id);
     }
 
     [Fact]
