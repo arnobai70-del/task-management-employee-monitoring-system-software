@@ -1,0 +1,16 @@
+.git
+.github
+.vs
+.vscode
+**/bin
+**/obj
+**/node_modules
+**/dist
+artifacts
+TestResults
+coverage
+.env
+deploy/production/production.env
+deploy/production/secrets
+deploy/production/backups
+deploy/production/updates

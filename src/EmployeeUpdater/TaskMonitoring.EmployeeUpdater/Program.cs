@@ -18,7 +18,7 @@ internal static partial class Program
         WriteIndented = true
     };
 
-    public static async Task<int> Main(string[] args)
+    public static int Main(string[] args)
     {
         var settingsPath = GetArgument(args, "--settings") ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
@@ -45,7 +45,7 @@ internal static partial class Program
 
             try
             {
-                return await RunAsync(settingsPath, force, dryRun, logger);
+                return RunAsync(settingsPath, force, dryRun, logger).GetAwaiter().GetResult();
             }
             finally
             {
@@ -211,15 +211,15 @@ internal static partial class Program
         {
             if (Directory.Exists(desktopRoot))
             {
-                Directory.Move(desktopRoot, backupDesktop);
+                MoveDirectory(desktopRoot, backupDesktop);
             }
             if (Directory.Exists(serviceRoot))
             {
-                Directory.Move(serviceRoot, backupService);
+                MoveDirectory(serviceRoot, backupService);
             }
 
-            Directory.Move(stagedDesktop, desktopRoot);
-            Directory.Move(stagedService, serviceRoot);
+            MoveDirectory(stagedDesktop, desktopRoot);
+            MoveDirectory(stagedService, serviceRoot);
             replacementStarted = true;
 
             WriteOptionalFile(Path.Combine(desktopRoot, "desktop-settings.json"), desktopConfig);
@@ -257,11 +257,11 @@ internal static partial class Program
 
             if (Directory.Exists(backupDesktop))
             {
-                Directory.Move(backupDesktop, desktopRoot);
+                MoveDirectory(backupDesktop, desktopRoot);
             }
             if (Directory.Exists(backupService))
             {
-                Directory.Move(backupService, serviceRoot);
+                MoveDirectory(backupService, serviceRoot);
             }
 
             try
@@ -546,6 +546,44 @@ internal static partial class Program
                      .Skip(retention))
         {
             TryDeleteDirectory(directory.FullName, logger);
+        }
+    }
+
+    private static void MoveDirectory(string source, string destination)
+    {
+        try
+        {
+            Directory.Move(source, destination);
+            return;
+        }
+        catch (IOException)
+        {
+            if (Directory.Exists(destination))
+            {
+                throw;
+            }
+        }
+
+        CopyDirectory(source, destination);
+        Directory.Delete(source, recursive: true);
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        var sourceInfo = new DirectoryInfo(source);
+        if (!sourceInfo.Exists)
+        {
+            throw new DirectoryNotFoundException($"Directory was not found: {source}");
+        }
+
+        Directory.CreateDirectory(destination);
+        foreach (var file in sourceInfo.EnumerateFiles())
+        {
+            file.CopyTo(Path.Combine(destination, file.Name), overwrite: false);
+        }
+        foreach (var directory in sourceInfo.EnumerateDirectories())
+        {
+            CopyDirectory(directory.FullName, Path.Combine(destination, directory.Name));
         }
     }
 

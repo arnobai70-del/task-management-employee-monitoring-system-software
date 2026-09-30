@@ -11,3 +11,9 @@ artifacts/
 *.local.json
 node_modules/
 dist/
+
+deploy/production/production.env
+deploy/production/secrets/
+deploy/production/backups/
+deploy/production/updates/
+deploy/production/*.ci.env

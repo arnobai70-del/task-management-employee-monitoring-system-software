@@ -1,0 +1,113 @@
+name: taskmonitoring-production
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-task_monitoring}
+      POSTGRES_USER: ${POSTGRES_USER:-task_monitoring}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-task_monitoring} -d ${POSTGRES_DB:-task_monitoring}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  migrator:
+    build:
+      context: ../..
+      dockerfile: deploy/production/Dockerfile.api
+    profiles: ["tools"]
+    command: ["--migrate-only"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      TASKMONITORING_KEY_PER_FILE_DIRECTORY: /run/secrets
+      Database__AutoMigrate: "false"
+      Jwt__Issuer: ${JWT_ISSUER:-TaskMonitoring.Api}
+      Jwt__Audience: ${JWT_AUDIENCE:-TaskMonitoring.Clients}
+    secrets:
+      - source: database_connection
+        target: ConnectionStrings__DefaultConnection
+      - source: jwt_signing_key
+        target: Jwt__SigningKey
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/production/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      TASKMONITORING_KEY_PER_FILE_DIRECTORY: /run/secrets
+      Database__AutoMigrate: "false"
+      ReverseProxy__TrustForwardedHeaders: "true"
+      Jwt__Issuer: ${JWT_ISSUER:-TaskMonitoring.Api}
+      Jwt__Audience: ${JWT_AUDIENCE:-TaskMonitoring.Clients}
+    secrets:
+      - source: database_connection
+        target: ConnectionStrings__DefaultConnection
+      - source: jwt_signing_key
+        target: Jwt__SigningKey
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    expose:
+      - "8080"
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/production/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      APP_SITE_ADDRESS: ${APP_SITE_ADDRESS:?APP_SITE_ADDRESS must be set}
+      UPDATE_SITE_ADDRESS: ${UPDATE_SITE_ADDRESS:?UPDATE_SITE_ADDRESS must be set}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL must be set}
+    depends_on:
+      - api
+    volumes:
+      - type: bind
+        source: ${UPDATE_HOST_ROOT:?UPDATE_HOST_ROOT must be set}
+        target: /srv/updates
+        read_only: true
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "${PRODUCTION_HTTP_BIND:-0.0.0.0}:${PRODUCTION_HTTP_PORT:-80}:80"
+      - "${PRODUCTION_HTTPS_BIND:-0.0.0.0}:${PRODUCTION_HTTPS_PORT:-443}:443"
+    networks:
+      - edge
+      - backend
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_SECRET_FILE:?POSTGRES_PASSWORD_SECRET_FILE must be set}
+  database_connection:
+    file: ${DATABASE_CONNECTION_SECRET_FILE:?DATABASE_CONNECTION_SECRET_FILE must be set}
+  jwt_signing_key:
+    file: ${JWT_SIGNING_KEY_SECRET_FILE:?JWT_SIGNING_KEY_SECRET_FILE must be set}
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  edge:
+  backend:
+    internal: true

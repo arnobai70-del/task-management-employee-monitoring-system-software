@@ -20,8 +20,11 @@ if ((Get-Item $packagePath).Length -ne [long]$manifest.package.sizeBytes) {
 }
 
 $updaterExe = Join-Path $releaseRoot 'updater\TaskMonitoring.EmployeeUpdater.exe'
-if (-not (Test-Path $updaterExe -PathType Leaf)) {
-    throw 'Release bundle does not contain TaskMonitoring.EmployeeUpdater.exe.'
+$rollbackScript = Join-Path $releaseRoot 'rollback-employee-windows.ps1'
+foreach ($requiredBundleFile in @($updaterExe, $rollbackScript)) {
+    if (-not (Test-Path $requiredBundleFile -PathType Leaf)) {
+        throw "Release bundle is missing required file: $requiredBundleFile"
+    }
 }
 
 $tempRoot = Join-Path $env:TEMP ('TaskMonitoring-release-test-' + [Guid]::NewGuid().ToString('N'))
@@ -56,6 +59,7 @@ try {
             $updaterExe,
             (Join-Path $releaseRoot 'install-employee-windows.ps1'),
             (Join-Path $releaseRoot 'uninstall-employee-windows.ps1'),
+            $rollbackScript,
             (Join-Path $releaseRoot 'deployment-common.ps1')
         )) {
             if (-not (Test-Path $signedFile -PathType Leaf)) {

@@ -77,8 +77,98 @@ jobs:
       - name: Type-check and build
         run: npm run build
 
+  production-environment:
+    name: Production environment and backup/restore acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate production shell scripts
+        shell: bash
+        run: |
+          for script in scripts/production/*.sh; do
+            bash -n "$script"
+          done
+
+      - name: Prepare isolated production environment
+        shell: bash
+        run: |
+          sudo sh -c 'printf "127.0.0.1 app.localhost updates.localhost\n" >> /etc/hosts'
+          cat > deploy/production/production.ci.env <<'EOF'
+          APP_SITE_ADDRESS=http://app.localhost
+          UPDATE_SITE_ADDRESS=http://updates.localhost
+          ACME_EMAIL=ci@example.invalid
+          APP_PUBLIC_URL=http://app.localhost:18080
+          UPDATE_PUBLIC_URL=http://updates.localhost:18080
+          PRODUCTION_HTTP_BIND=127.0.0.1
+          PRODUCTION_HTTP_PORT=18080
+          PRODUCTION_HTTPS_BIND=127.0.0.1
+          PRODUCTION_HTTPS_PORT=18443
+          POSTGRES_DB=task_monitoring
+          POSTGRES_USER=task_monitoring
+          JWT_ISSUER=TaskMonitoring.Api
+          JWT_AUDIENCE=TaskMonitoring.Clients
+          POSTGRES_PASSWORD_SECRET_FILE=./secrets/postgres_password
+          DATABASE_CONNECTION_SECRET_FILE=./secrets/database_connection
+          JWT_SIGNING_KEY_SECRET_FILE=./secrets/jwt_signing_key
+          UPDATE_HOST_ROOT=./updates
+          BACKUP_ROOT=./backups
+          EOF
+          bash scripts/production/init-production-secrets.sh deploy/production/production.ci.env
+          docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml config >/dev/null
+
+      - name: Deploy production stack through guarded deployment path
+        shell: bash
+        run: bash scripts/production/deploy.sh deploy/production/production.ci.env
+
+      - name: Verify PostgreSQL backup and restore actually restores data
+        shell: bash
+        run: |
+          compose=(docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml)
+          "${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -v ON_ERROR_STOP=1 -c 'CREATE TABLE ci_restore_probe(id integer primary key, value text not null); INSERT INTO ci_restore_probe VALUES (1, '\''before-backup'\'');'
+          backup_path="$(bash scripts/production/backup-postgres.sh deploy/production/production.ci.env restore-probe)"
+          "${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -v ON_ERROR_STOP=1 -c 'DELETE FROM ci_restore_probe;'
+          bash scripts/production/restore-postgres.sh --env deploy/production/production.ci.env --backup "$backup_path" --confirm-restore
+          for attempt in {1..60}; do
+            if curl --fail --silent --max-time 5 http://app.localhost:18080/health/ready >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          count="$("${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -tAc 'SELECT count(*) FROM ci_restore_probe WHERE id=1 AND value='\''before-backup'\'';' | tr -d '[:space:]')"
+          test "$count" = "1"
+          "${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -v ON_ERROR_STOP=1 -c 'DROP TABLE ci_restore_probe;'
+
+      - name: Verify atomic update publication and public acceptance
+        shell: bash
+        run: |
+          bundle="${{ runner.temp }}/synthetic-signed-bundle"
+          mkdir -p "$bundle"
+          package='TaskMonitoring.EmployeeRuntime-9.9.9-win-x64.zip'
+          printf 'ci-release-package' > "$bundle/$package"
+          size="$(wc -c < "$bundle/$package" | tr -d ' ')"
+          sha="$(sha256sum "$bundle/$package" | awk '{print toupper($1)}')"
+          cat > "$bundle/release.json" <<EOF
+          {"schemaVersion":1,"channel":"stable","version":"9.9.9","publishedAtUtc":"2026-01-01T00:00:00Z","minimumUpdaterVersion":"1.0.0","package":{"file":"$package","url":"http://updates.localhost:18080/stable/$package","sha256":"$sha","sizeBytes":$size}}
+          EOF
+          printf '%064d' 0 | tr '0' 'A' > "$bundle/publisher-certificate-sha256.txt"
+          printf 'synthetic-ci-certificate' > "$bundle/publisher-certificate.cer"
+          bash scripts/production/publish-windows-release.sh --env deploy/production/production.ci.env --bundle "$bundle"
+          bash scripts/production/acceptance-server.sh --env deploy/production/production.ci.env --channel stable
+
+      - name: Production stack diagnostics
+        if: failure()
+        shell: bash
+        run: docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml logs --no-color || true
+
+      - name: Tear down production stack
+        if: always()
+        shell: bash
+        run: docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml down -v --remove-orphans || true
+
   employee-windows:
-    name: Employee Windows client, service, updater and release bundle
+    name: Employee Windows client, release and lifecycle acceptance
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -118,7 +208,9 @@ jobs:
             'scripts/windows/build-employee-release.ps1',
             'scripts/windows/install-employee-windows.ps1',
             'scripts/windows/uninstall-employee-windows.ps1',
-            'scripts/windows/test-employee-release.ps1'
+            'scripts/windows/rollback-employee-windows.ps1',
+            'scripts/windows/test-employee-release.ps1',
+            'scripts/windows/test-install-update-rollback.ps1'
           )
           foreach ($script in $scripts) {
             [void][scriptblock]::Create((Get-Content $script -Raw))
@@ -135,3 +227,18 @@ jobs:
       - name: Validate CI release bundle
         shell: pwsh
         run: ./scripts/windows/test-employee-release.ps1 -ReleaseDirectory "${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-0.0.0-win-x64" -AllowUnsignedDevelopmentBuild
+
+      - name: Build lifecycle acceptance releases
+        shell: pwsh
+        run: |
+          ./scripts/windows/build-employee-release.ps1 -Version "1.0.0" -OutputRoot "${{ runner.temp }}\employee-acceptance-initial" -AllowUnsignedDevelopmentBuild
+          ./scripts/windows/build-employee-release.ps1 -Version "1.0.1" -OutputRoot "${{ runner.temp }}\employee-acceptance-update" -AllowUnsignedDevelopmentBuild
+
+      - name: Run install update rollback uninstall acceptance
+        shell: pwsh
+        run: |
+          ./scripts/windows/test-install-update-rollback.ps1 `
+            -InitialReleaseDirectory "${{ runner.temp }}\employee-acceptance-initial\TaskMonitoring.EmployeeRelease-1.0.0-win-x64" `
+            -UpdateReleaseDirectory "${{ runner.temp }}\employee-acceptance-update\TaskMonitoring.EmployeeRelease-1.0.1-win-x64" `
+            -InstallRoot "${{ runner.temp }}\TaskMonitoringInstall" `
+            -ProgramDataRoot "${{ runner.temp }}\TaskMonitoringProgramData"

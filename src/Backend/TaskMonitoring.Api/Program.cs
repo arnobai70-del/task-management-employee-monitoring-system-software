@@ -4,6 +4,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -16,6 +17,17 @@ using TaskMonitoring.Api.Security;
 using TaskMonitoring.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var keyPerFileDirectory = Environment.GetEnvironmentVariable("TASKMONITORING_KEY_PER_FILE_DIRECTORY")?.Trim();
+if (!string.IsNullOrWhiteSpace(keyPerFileDirectory))
+{
+    if (!Directory.Exists(keyPerFileDirectory))
+    {
+        throw new InvalidOperationException($"Configured key-per-file directory does not exist: {keyPerFileDirectory}");
+    }
+
+    builder.Configuration.AddKeyPerFile(keyPerFileDirectory, optional: false);
+}
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -38,6 +50,18 @@ var presenceOptions = builder.Configuration.GetSection(PresenceOptions.SectionNa
 if (presenceOptions.OnlineThresholdSeconds is < 30 or > 600)
 {
     throw new InvalidOperationException("Presence:OnlineThresholdSeconds must be between 30 and 600 seconds.");
+}
+
+var trustForwardedHeaders = builder.Configuration.GetValue<bool>("ReverseProxy:TrustForwardedHeaders");
+if (trustForwardedHeaders)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+        options.ForwardLimit = 1;
+    });
 }
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
@@ -129,7 +153,20 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+if (args.Any(argument => string.Equals(argument, "--migrate-only", StringComparison.OrdinalIgnoreCase)))
+{
+    await using var migrationScope = app.Services.CreateAsyncScope();
+    var migrationInitializer = migrationScope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
+    await migrationInitializer.MigrateAsync();
+    await migrationInitializer.SeedFoundationAsync();
+    return;
+}
+
 app.UseExceptionHandler();
+if (trustForwardedHeaders)
+{
+    app.UseForwardedHeaders();
+}
 app.UseHttpsRedirection();
 app.UseRateLimiter();
 app.UseAuthentication();

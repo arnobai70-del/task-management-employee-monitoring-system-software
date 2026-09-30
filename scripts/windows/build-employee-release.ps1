@@ -170,6 +170,7 @@ $json = $manifest | ConvertTo-Json -Depth 8
 $bundleFiles = @(
     'install-employee-windows.ps1',
     'uninstall-employee-windows.ps1',
+    'rollback-employee-windows.ps1',
     'deployment-common.ps1'
 )
 foreach ($file in $bundleFiles) {
