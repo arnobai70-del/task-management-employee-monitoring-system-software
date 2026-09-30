@@ -41,22 +41,41 @@ public sealed class WebsiteWorkProgressService(
             .ThenBy(x => x.NormalizedTitle)
             .ToListAsync(cancellationToken);
 
-        var completionActivities = await dbContext.TaskActivities
+        var pendingCandidates = await dbContext.ProjectTasks
+            .AsNoTracking()
+            .Include(x => x.AssigneeEmployee)
+            .Include(x => x.Activities)
+            .Where(x =>
+                x.Status == ProjectTaskStatus.Blocked &&
+                x.AssigneeEmployeeId != null &&
+                x.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction))
+            .ToListAsync(cancellationToken);
+        var pendingTasks = pendingCandidates
+            .Where(x => WebsiteWorkReviewService.ResolveState(x.Activities) == WebsiteWorkReviewStates.PendingReview)
+            .ToArray();
+
+        var activityToday = await dbContext.TaskActivities
             .AsNoTracking()
             .Include(x => x.ProjectTask)
                 .ThenInclude(x => x.AssigneeEmployee)
             .Where(x =>
-                x.Action == WebsiteWorkService.CompletedAction &&
+                (x.Action == WebsiteWorkService.CompletedAction ||
+                 x.Action == WebsiteWorkReviewService.ApprovedAction ||
+                 x.Action == WebsiteWorkReviewService.ReopenedAction) &&
                 x.CreatedAtUtc >= startUtc &&
                 x.CreatedAtUtc < endUtc)
             .OrderByDescending(x => x.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
+        var submittedToday = activityToday.Where(x => x.Action == WebsiteWorkService.CompletedAction).ToArray();
+        var approvedToday = activityToday.Where(x => x.Action == WebsiteWorkReviewService.ApprovedAction).ToArray();
+        var reopenedToday = activityToday.Where(x => x.Action == WebsiteWorkReviewService.ReopenedAction).ToArray();
+
         var active = activeTasks
             .Select(task =>
             {
                 var startedAt = task.Activities
-                    .Where(x => x.Action == WebsiteWorkService.StartedAction)
+                    .Where(x => x.Action == WebsiteWorkService.StartedAction || x.Action == WebsiteWorkReviewService.ReopenedAction)
                     .OrderByDescending(x => x.CreatedAtUtc)
                     .Select(x => (DateTime?)x.CreatedAtUtc)
                     .FirstOrDefault() ?? task.UpdatedAtUtc;
@@ -81,7 +100,8 @@ public sealed class WebsiteWorkProgressService(
         var employeeIds = activeTasks
             .Where(x => x.AssigneeEmployeeId.HasValue)
             .Select(x => x.AssigneeEmployeeId!.Value)
-            .Concat(completionActivities
+            .Concat(pendingTasks.Select(x => x.AssigneeEmployeeId!.Value))
+            .Concat(activityToday
                 .Where(x => x.ProjectTask.AssigneeEmployeeId.HasValue)
                 .Select(x => x.ProjectTask.AssigneeEmployeeId!.Value))
             .Distinct()
@@ -91,34 +111,44 @@ public sealed class WebsiteWorkProgressService(
         foreach (var employeeId in employeeIds)
         {
             var activeTask = activeTasks.FirstOrDefault(x => x.AssigneeEmployeeId == employeeId);
-            var completion = completionActivities.FirstOrDefault(x => x.ProjectTask.AssigneeEmployeeId == employeeId);
-            var employee = activeTask?.AssigneeEmployee ?? completion?.ProjectTask.AssigneeEmployee;
+            var pendingTask = pendingTasks.FirstOrDefault(x => x.AssigneeEmployeeId == employeeId);
+            var activity = activityToday.FirstOrDefault(x => x.ProjectTask.AssigneeEmployeeId == employeeId);
+            var employee = activeTask?.AssigneeEmployee ?? pendingTask?.AssigneeEmployee ?? activity?.ProjectTask.AssigneeEmployee;
             if (employee is null)
             {
                 continue;
             }
 
-            var employeeCompletions = completionActivities
-                .Where(x => x.ProjectTask.AssigneeEmployeeId == employeeId)
-                .ToArray();
+            var employeeSubmitted = submittedToday.Where(x => x.ProjectTask.AssigneeEmployeeId == employeeId).ToArray();
+            var employeeApproved = approvedToday.Where(x => x.ProjectTask.AssigneeEmployeeId == employeeId).ToArray();
+            var employeeReopened = reopenedToday.Where(x => x.ProjectTask.AssigneeEmployeeId == employeeId).ToArray();
 
             employees.Add(new WebsiteWorkEmployeeTodayResponse(
                 employeeId,
                 employee.EmployeeCode,
                 employee.FullName,
                 activeTasks.Count(x => x.AssigneeEmployeeId == employeeId),
-                employeeCompletions.Length,
-                employeeCompletions.Length == 0 ? null : employeeCompletions.Max(x => x.CreatedAtUtc)));
+                pendingTasks.Count(x => x.AssigneeEmployeeId == employeeId),
+                employeeSubmitted.Length,
+                employeeApproved.Length,
+                employeeReopened.Length,
+                employeeSubmitted.Length == 0 ? null : employeeSubmitted.Max(x => x.CreatedAtUtc),
+                employeeApproved.Length == 0 ? null : employeeApproved.Max(x => x.CreatedAtUtc)));
         }
 
         return new WebsiteWorkProgressResponse(
             now,
             utcOffsetMinutes,
             active.Length,
-            completionActivities.Count,
+            pendingTasks.Length,
+            submittedToday.Length,
+            approvedToday.Length,
+            reopenedToday.Length,
             active,
             employees
-                .OrderByDescending(x => x.CompletedToday)
+                .OrderByDescending(x => x.ApprovedToday)
+                .ThenByDescending(x => x.SubmittedToday)
+                .ThenByDescending(x => x.PendingReview)
                 .ThenByDescending(x => x.WorkingNow)
                 .ThenBy(x => x.EmployeeName)
                 .ToArray());
