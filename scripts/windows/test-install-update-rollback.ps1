@@ -131,9 +131,19 @@ finally {
     if ($null -ne $server -and -not $server.HasExited) {
         Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
     }
-    try { Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue } catch { }
-    & sc.exe delete $serviceName 2>$null | Out-Null
-    & schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
+
+    $remainingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($null -ne $remainingService) {
+        try { Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue } catch { }
+        & sc.exe delete $serviceName 2>$null | Out-Null
+    }
+
+    $remainingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($null -ne $remainingTask) {
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+
     Remove-Item -Recurse -Force $InstallRoot, $ProgramDataRoot, $testRoot -ErrorAction SilentlyContinue
     Remove-Item -Path $uninstallKey -Recurse -Force -ErrorAction SilentlyContinue
+    $global:LASTEXITCODE = 0
 }
