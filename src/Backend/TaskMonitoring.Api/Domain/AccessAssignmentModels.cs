@@ -15,7 +15,8 @@ public enum WebsiteAccessLevel
 {
     View = 1,
     Work = 2,
-    Admin = 3
+    Admin = 3,
+    Survey = 4
 }
 
 [Table("rdp_assignments")]
