@@ -1,0 +1,142 @@
+name: Observability Diagnostics
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  observability-startup:
+    name: Observability service startup diagnostics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Prepare isolated production environment
+        shell: bash
+        run: |
+          sudo sh -c 'printf "127.0.0.1 app.localhost updates.localhost\n" >> /etc/hosts'
+          cat > deploy/production/production.ci.env <<'EOF'
+          APP_SITE_ADDRESS=http://app.localhost
+          UPDATE_SITE_ADDRESS=http://updates.localhost
+          ACME_EMAIL=ci@example.invalid
+          APP_PUBLIC_URL=http://app.localhost:18080
+          UPDATE_PUBLIC_URL=http://updates.localhost:18080
+          PRODUCTION_HTTP_BIND=127.0.0.1
+          PRODUCTION_HTTP_PORT=18080
+          PRODUCTION_HTTPS_BIND=127.0.0.1
+          PRODUCTION_HTTPS_PORT=18443
+          POSTGRES_DB=task_monitoring
+          POSTGRES_USER=task_monitoring
+          JWT_ISSUER=TaskMonitoring.Api
+          JWT_AUDIENCE=TaskMonitoring.Clients
+          POSTGRES_PASSWORD_SECRET_FILE=./secrets/postgres_password
+          DATABASE_CONNECTION_SECRET_FILE=./secrets/database_connection
+          JWT_SIGNING_KEY_SECRET_FILE=./secrets/jwt_signing_key
+          GRAFANA_ADMIN_PASSWORD_SECRET_FILE=./secrets/grafana_admin_password
+          UPDATE_HOST_ROOT=./updates
+          BACKUP_ROOT=./backups
+          OBSERVABILITY_BIND=127.0.0.1
+          GRAFANA_PORT=13000
+          PROMETHEUS_PORT=19090
+          LOKI_PORT=13100
+          OTEL_HEALTH_PORT=13133
+          PROMETHEUS_RETENTION=1d
+          OTEL_METRIC_EXPORT_INTERVAL=5000
+          EOF
+          bash scripts/production/init-production-secrets.sh deploy/production/production.ci.env
+          docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml config >/dev/null
+
+      - name: Deploy base production stack
+        shell: bash
+        run: bash scripts/production/deploy.sh deploy/production/production.ci.env
+
+      - name: Start OpenTelemetry Collector
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml)
+          "${compose[@]}" up -d otel-collector
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 3 http://127.0.0.1:13133/ >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          "${compose[@]}" ps otel-collector
+          "${compose[@]}" logs --no-color --tail=100 otel-collector
+          exit 1
+
+      - name: Start Loki
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml)
+          "${compose[@]}" up -d loki
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 3 http://127.0.0.1:13100/ready >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          "${compose[@]}" ps loki
+          "${compose[@]}" logs --no-color --tail=100 loki
+          exit 1
+
+      - name: Start Prometheus
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml)
+          "${compose[@]}" up -d prometheus
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 3 http://127.0.0.1:19090/-/ready >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          "${compose[@]}" ps prometheus
+          "${compose[@]}" logs --no-color --tail=100 prometheus
+          exit 1
+
+      - name: Start Grafana
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml)
+          "${compose[@]}" up -d grafana
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 3 http://127.0.0.1:13000/api/health >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          "${compose[@]}" ps grafana
+          "${compose[@]}" logs --no-color --tail=100 grafana
+          exit 1
+
+      - name: Recreate API with OTLP export
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml)
+          "${compose[@]}" up -d --no-deps --force-recreate api
+          for attempt in {1..60}; do
+            if curl --fail --silent --max-time 5 http://app.localhost:18080/health/ready >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          "${compose[@]}" ps api
+          "${compose[@]}" logs --no-color --tail=100 api
+          exit 1
+
+      - name: Verify telemetry round trip
+        shell: bash
+        run: bash scripts/production/acceptance-observability.sh deploy/production/production.ci.env
+
+      - name: Diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml ps || true
+          docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml logs --no-color --tail=200 || true
+
+      - name: Tear down
+        if: always()
+        shell: bash
+        run: docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml -f deploy/production/observability.compose.yml down -v --remove-orphans || true

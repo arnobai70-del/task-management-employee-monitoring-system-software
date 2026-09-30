@@ -19,8 +19,17 @@ require_production_variables
 postgres_password_path="$(resolve_env_path "$POSTGRES_PASSWORD_SECRET_FILE")"
 database_connection_path="$(resolve_env_path "$DATABASE_CONNECTION_SECRET_FILE")"
 jwt_signing_key_path="$(resolve_env_path "$JWT_SIGNING_KEY_SECRET_FILE")"
+grafana_admin_password_path=""
+if [[ -n "${GRAFANA_ADMIN_PASSWORD_SECRET_FILE:-}" ]]; then
+  grafana_admin_password_path="$(resolve_env_path "$GRAFANA_ADMIN_PASSWORD_SECRET_FILE")"
+fi
 
-for path in "$postgres_password_path" "$database_connection_path" "$jwt_signing_key_path"; do
+secret_paths=("$postgres_password_path" "$database_connection_path" "$jwt_signing_key_path")
+if [[ -n "$grafana_admin_password_path" ]]; then
+  secret_paths+=("$grafana_admin_password_path")
+fi
+
+for path in "${secret_paths[@]}"; do
   mkdir -p "$(dirname "$path")"
   chmod 700 "$(dirname "$path")"
 done
@@ -35,6 +44,13 @@ if [[ ! -e "$jwt_signing_key_path" ]]; then
   openssl rand -hex 64 > "$jwt_signing_key_path"
   chmod 600 "$jwt_signing_key_path"
   echo "Created JWT signing-key secret."
+fi
+
+if [[ -n "$grafana_admin_password_path" && ! -e "$grafana_admin_password_path" ]]; then
+  openssl rand -base64 36 | tr -d '\r\n' > "$grafana_admin_password_path"
+  printf '\n' >> "$grafana_admin_password_path"
+  chmod 600 "$grafana_admin_password_path"
+  echo "Created Grafana admin-password secret."
 fi
 
 postgres_password="$(tr -d '\r\n' < "$postgres_password_path")"
@@ -53,6 +69,9 @@ fi
 assert_secret_file "$postgres_password_path" "PostgreSQL password"
 assert_secret_file "$database_connection_path" "Database connection"
 assert_secret_file "$jwt_signing_key_path" "JWT signing key"
+if [[ -n "$grafana_admin_password_path" ]]; then
+  assert_secret_file "$grafana_admin_password_path" "Grafana admin password"
+fi
 
 jwt_bytes="$(tr -d '\r\n' < "$jwt_signing_key_path" | wc -c | tr -d ' ')"
 if [[ "$jwt_bytes" -lt 32 ]]; then

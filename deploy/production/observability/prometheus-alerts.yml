@@ -1,0 +1,44 @@
+groups:
+  - name: taskmonitoring-availability
+    rules:
+      - alert: TaskMonitoringApiTelemetryMissing
+        expr: absent(taskmonitoring_api_up)
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: TaskMonitoring API telemetry is missing
+          description: The observability collector has not received the TaskMonitoring API up metric for at least three minutes. Check API and collector health.
+
+      - alert: TaskMonitoringCollectorScrapeDown
+        expr: up{job="taskmonitoring-otel"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: OpenTelemetry collector metrics endpoint is unavailable
+          description: Prometheus cannot scrape the TaskMonitoring OpenTelemetry collector.
+
+      - alert: TaskMonitoringLokiScrapeDown
+        expr: up{job="loki"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Loki is unavailable to Prometheus
+          description: Prometheus cannot scrape Loki metrics. Centralized log storage may be unavailable.
+
+  - name: taskmonitoring-api-quality
+    rules:
+      - alert: TaskMonitoringApiHighServerErrorRate
+        expr: |
+          sum(rate(taskmonitoring_api_requests_total{status_class="5xx"}[5m]))
+          /
+          clamp_min(sum(rate(taskmonitoring_api_requests_total[5m])), 0.001)
+          > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: TaskMonitoring API server error rate is elevated
+          description: More than 5% of TaskMonitoring API requests have returned 5xx responses for ten minutes.
