@@ -23,19 +23,27 @@ The Admin Web now uses the existing backend authorization model for read and wri
 - Tasks: create/edit, assign only to active project members, and move through the backend-supported status transitions.
 - Completing/archiving projects remains blocked by the backend while open tasks remain.
 
-## Survey and field-operations administration
+## Survey website assignments
 
-The Surveys section now exposes the existing survey backend as a complete permission-aware Admin Web workflow rather than a read-only list.
+Surveys are **externally hosted work**. Administrators do not build questionnaires in this system, and employees do not enter survey answers into the Task Monitoring application.
 
-- `surveys.read` can view survey forms, questionnaire details and lifecycle state.
-- `surveys.manage` can create draft surveys, edit draft metadata, replace the ordered questionnaire, publish drafts, close published surveys and archive eligible drafts/closed surveys.
-- Question editing supports Text, LongText, Number, Boolean, Date, SingleChoice and MultipleChoice types, required flags, and choice options. Backend validation remains authoritative and questions lock after publication.
-- `survey.assignments.read` can view field assignments and their latest revision/submission state.
-- `survey.assignments.manage` can assign published surveys to active employees and cancel assignments that the backend still considers cancellable.
-- `survey.review` can open submitted revisions, review every captured answer, approve submissions or reject them with the backend-required rejection comment.
-- Survey status, assignment and review actions continue to produce the existing audit events; the Admin Web does not create a parallel workflow or bypass server-side rules.
+The boss/supervisor supplies the exact HTTP/HTTPS URL where the survey already exists and assigns that link to an employee. An assignment can include:
 
-Survey project/employee selectors use dedicated permission-gated admin lookup endpoints so survey operators do not need unrelated task-management screens merely to populate a form.
+- employee;
+- assignment title;
+- external survey website URL;
+- optional start date;
+- optional due date;
+- instructions;
+- active/inactive state.
+
+`surveys.read` can view these assignments and `surveys.manage` can create, edit, schedule or deactivate them. The backend validates that active assignments target active employee accounts, accepts only absolute HTTP/HTTPS URLs without embedded credentials, rejects invalid date ranges, and prevents duplicate active assignments for the same employee and URL.
+
+In the Windows Employee Workspace, the assigned survey is presented as company-provided web work. The employee selects it and opens the URL in the default browser, then completes the survey on the external site. The Task Monitoring system does **not** collect the external form fields, submitted answers, passwords, cookies or page contents.
+
+When the dedicated survey-link open endpoint is used, the audit trail records that the assigned link was opened and stores only operational metadata such as the assignment and hostname; it does not store the external URL path or query string.
+
+The earlier internal questionnaire/submission model remains database-compatible for existing installations, but it is not the Admin Web workflow for new survey work.
 
 ## RDP, IP and website assignments
 
