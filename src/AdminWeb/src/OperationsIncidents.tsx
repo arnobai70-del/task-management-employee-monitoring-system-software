@@ -123,20 +123,12 @@ export default function OperationsIncidentsPage() {
       setSummary(nextSummary);
       setItems(page.items);
       setError('');
-      if (selected) {
-        const stillPresent = page.items.find(item => item.id === selected.id);
-        if (stillPresent) {
-          const detail = await apiFetch<Incident>(`/api/operations/incidents/${selected.id}`);
-          setSelected(detail);
-          setOwnerUserId(detail.ownerUserId || '');
-        }
-      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to load incidents.');
     } finally {
       if (initial) setLoading(false);
     }
-  }, [listPath, selected]);
+  }, [listPath]);
 
   useEffect(() => {
     void load(true);
