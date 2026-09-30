@@ -85,6 +85,12 @@ public sealed class WebsiteWorkAttentionService(
         var activeAlerts = allAlerts.Where(item => !item.Management.IsSuppressed).ToArray();
         var resultSet = includeSuppressed ? allAlerts : activeAlerts;
         var visibleAlerts = resultSet.Take(limit).ToArray();
+        var pendingFollowUps = allAlerts.Count(item =>
+            item.Management.Disposition == WebsiteWorkAttentionDisposition.FollowUp &&
+            item.Management.IsSuppressed);
+        var overdueFollowUps = allAlerts.Count(item =>
+            item.Management.Disposition == WebsiteWorkAttentionDisposition.FollowUp &&
+            !item.Management.IsSuppressed);
 
         return OperationResult<WebsiteWorkAttentionResponse>.Success(
             new WebsiteWorkAttentionResponse(
@@ -98,6 +104,8 @@ public sealed class WebsiteWorkAttentionService(
                 allAlerts.Length,
                 activeAlerts.Length,
                 allAlerts.Length - activeAlerts.Length,
+                pendingFollowUps,
+                overdueFollowUps,
                 activeAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.Critical),
                 activeAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.High),
                 activeAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.Medium),
@@ -253,6 +261,22 @@ public sealed class WebsiteWorkAttentionService(
         }
 
         var followUpDueAtUtc = ReadDateTime(details, "followUpDueAtUtc");
+        if (action.Action == WebsiteWorkAttentionActionService.FollowUpResolvedAction)
+        {
+            return new WebsiteWorkAttentionManagementResponse(
+                WebsiteWorkAttentionDisposition.Resolved,
+                true,
+                action.CreatedAtUtc,
+                actorUserId,
+                actorEmail,
+                note,
+                null,
+                ReadGuid(details, "followUpOwnerUserId"),
+                ReadString(details, "followUpOwnerEmail"),
+                ReadString(details, "followUpOwnerName"),
+                followUpDueAtUtc);
+        }
+
         return new WebsiteWorkAttentionManagementResponse(
             WebsiteWorkAttentionDisposition.FollowUp,
             followUpDueAtUtc.HasValue && followUpDueAtUtc.Value > nowUtc,
@@ -292,7 +316,8 @@ public sealed class WebsiteWorkAttentionService(
     private static bool IsManagementAction(string action)
         => action == WebsiteWorkAttentionActionService.AcknowledgedAction ||
            action == WebsiteWorkAttentionActionService.SnoozedAction ||
-           action == WebsiteWorkAttentionActionService.FollowUpAssignedAction;
+           action == WebsiteWorkAttentionActionService.FollowUpAssignedAction ||
+           action == WebsiteWorkAttentionActionService.FollowUpResolvedAction;
 
     private static JsonElement? ParseDetails(string detailsJson)
     {
