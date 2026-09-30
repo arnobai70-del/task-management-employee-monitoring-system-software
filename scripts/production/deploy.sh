@@ -32,7 +32,7 @@ compose build api web
 compose up -d postgres
 wait_for_postgres 60
 
-backup_path="$($SCRIPT_DIR/backup-postgres.sh "$ENV_FILE" predeploy)"
+backup_path="$(bash "$SCRIPT_DIR/backup-postgres.sh" "$ENV_FILE" predeploy)"
 echo "Pre-deployment database backup: $backup_path"
 
 compose --profile tools run --rm migrator
