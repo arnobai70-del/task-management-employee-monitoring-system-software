@@ -59,4 +59,21 @@ mv "$temporary_path" "$backup_path"
 )
 chmod 600 "$backup_path" "$backup_path.sha256"
 
+completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+archive_file="$(basename "$backup_path")"
+size_bytes="$(wc -c < "$backup_path" | tr -d ' ')"
+status_json="$(printf '{"completedAtUtc":"%s","label":"%s","archiveFile":"%s","sizeBytes":%s}\n' \
+  "$completed_at" "$label" "$archive_file" "$size_bytes")"
+if ! printf '%s' "$status_json" | compose exec -T api sh -ec '
+  status=/var/lib/taskmonitoring/operations/backup-status.json
+  temporary="${status}.tmp"
+  umask 022
+  cat > "$temporary"
+  chown app:app "$temporary"
+  chmod 0644 "$temporary"
+  mv "$temporary" "$status"
+'; then
+  echo "Warning: database backup succeeded but operations backup status could not be published." >&2
+fi
+
 printf '%s\n' "$backup_path"
