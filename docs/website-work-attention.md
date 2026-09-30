@@ -66,6 +66,26 @@ The Admin Web exposes unread and total counts, an unread-only filter, **Mark rea
 
 No new database table or EF migration is required for this workflow because the existing `TaskActivity` persistence model already provides the task relationship, recipient user reference, JSON metadata and timestamps needed for the durable projection.
 
+## Escalation and SLA analytics
+
+`/sla-analytics` is a `reports.read` Admin Web view for measuring the internal manager follow-up workflow. The report is deadline-cohort based: a follow-up is counted when its due time falls inside the selected browser-local date range and that deadline has actually been reached by the report snapshot. A follow-up that is superseded or invalidated before its due time is not treated as an SLA obligation.
+
+The report includes:
+
+- due and resolved follow-up counts;
+- SLA-met and SLA-breached counts and SLA-met percentage;
+- durable escalation count and current open-overdue count;
+- average assignment-to-resolution time;
+- average lateness for follow-ups that were eventually resolved after their due time;
+- managers with two or more escalated follow-ups in the selected period;
+- manager-level rows ordered by escalation and breach pressure;
+- current employee-department hotspot aggregation; and
+- daily or weekly trend cohorts plus UTF-8 CSV export.
+
+A late follow-up remains an SLA breach even if it is later resolved or superseded after the deadline. Resolution before or at the due time is SLA-met. Department grouping intentionally uses the manager's **current** employee department because historical department membership is not stored on the follow-up event. The report does not reinterpret external website activity as productivity evidence.
+
+The report range is limited to 366 days, uses the browser UTC offset for local day boundaries, and reuses the same `FollowUpReminders:EscalationAfterMinutes` value shown by the escalation workflow. No new persistence table is needed; analytics reconstruct assignment lifecycles from existing Website Work management activities and durable escalation notifications.
+
 ## Realtime follow-up delivery
 
 Every authenticated SignalR connection joins a user-specific realtime group derived from the server-validated JWT subject. This allows manager follow-up events to target the assigned manager account even when that account is not linked to an employee profile.
@@ -96,6 +116,7 @@ Durable manager notifications are also `TaskActivity` projection records using `
 Read endpoints:
 
 - `GET /api/reports/website-work/attention?utcOffsetMinutes=...&limit=...&includeSuppressed=...` — `reports.read`
+- `GET /api/reports/website-work/follow-up-sla?from=...&to=...&utcOffsetMinutes=...&grouping=Day|Week` — `reports.read`
 - `GET /api/website-work/attention/follow-up-owners` — `tasks.manage` (and the Website Work controller's read policy)
 - `GET /api/website-work/follow-ups/mine?includeResolved=...` — `tasks.manage`
 - `GET /api/admin-notifications?unreadOnly=...&page=...&pageSize=...` — `tasks.manage`
@@ -114,4 +135,4 @@ Attention and admin-notification mutations require `tasks.manage`; the assign/ac
 
 ## Privacy boundary
 
-Needs Attention, My Follow-ups, durable notifications, due reminders and escalation use only internal task/lifecycle metadata and reporting relationships already stored by the Website Work and employee-management workflows. They do not capture external website page/form content, passwords, cookies, balances, earnings, browsing history or survey answers.
+Needs Attention, My Follow-ups, durable notifications, due reminders, escalation and SLA analytics use only internal task/lifecycle metadata and reporting relationships already stored by the Website Work and employee-management workflows. They do not capture external website page/form content, passwords, cookies, balances, earnings, browsing history or survey answers.
