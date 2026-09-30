@@ -6,8 +6,9 @@
 
 Implemented areas include:
 
-- Dashboard — reporting metrics plus permission-gated live workforce presence.
+- Dashboard — reporting metrics plus permission-gated live workforce presence and Website Work Needs Attention signals.
 - Employee Productivity — daily/weekly Website Work productivity with assignment/start/review/approval metrics, working-time reconstruction and CSV export.
+- My Follow-ups — manager-specific pending/overdue Website Work attention follow-ups with owner-only resolution.
 - Employees and departments — directory plus management workflows.
 - Attendance and shifts — work-session visibility and shift administration.
 - Projects and tasks — project/task management workflows.
@@ -86,6 +87,14 @@ The report includes:
 
 Employee rows are grouped by the currently assigned employee. The page can filter the returned rows locally by employee code/name/department and export the employee table as UTF-8 CSV. Export does not contain external website page content, passwords, cookies, balances or form data.
 
+## Manager follow-up inbox
+
+`/follow-ups` requires `tasks.manage` and calls `GET /api/website-work/follow-ups/mine` for the authenticated manager. It displays only current follow-ups assigned to that account after the latest Website Work lifecycle event.
+
+The page separates pending and overdue follow-ups, can optionally show resolved items, auto-refreshes every 20 seconds, and lets the current owner mark a follow-up resolved with an optional resolution note. Resolution is server-authorized and audit logged; a manager cannot resolve another manager's current follow-up.
+
+Dashboard Needs Attention separately reports pending and overdue follow-up totals and links managers to the inbox. A resolved follow-up remains managed until the Website Work lifecycle changes, preventing the same warning from immediately reappearing after it has been handled.
+
 ## Local development
 
 Install dependencies and run the Vite development server:
@@ -133,6 +142,7 @@ Important route/panel boundaries include:
 | `/tasks` | `tasks.read` |
 | `/website-work` | `tasks.read` |
 | Website Work assign/edit/review | `tasks.manage` |
+| `/follow-ups` | `tasks.manage` |
 | `/surveys` | `surveys.read` |
 | `/access/rdp`, `/access/ip`, `/access/websites` | `access.assignments.read` |
 | `/audit-logs` | `audit.read` |
