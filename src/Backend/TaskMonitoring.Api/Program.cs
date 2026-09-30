@@ -66,6 +66,12 @@ if (trustForwardedHeaders)
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<PresenceOptions>(builder.Configuration.GetSection(PresenceOptions.SectionName));
+builder.Services.AddOptions<WebsiteWorkAttentionOptions>()
+    .Bind(builder.Configuration.GetSection(WebsiteWorkAttentionOptions.SectionName))
+    .Validate(options => options.LongWorkingMinutes is >= 15 and <= 1440, "WebsiteWorkAttention:LongWorkingMinutes must be between 15 and 1440.")
+    .Validate(options => options.PendingReviewMinutes is >= 5 and <= 1440, "WebsiteWorkAttention:PendingReviewMinutes must be between 5 and 1440.")
+    .Validate(options => options.RepeatedCorrectionCount is >= 1 and <= 20, "WebsiteWorkAttention:RepeatedCorrectionCount must be between 1 and 20.")
+    .ValidateOnStart();
 builder.Services.AddScoped<TaskNotificationInterceptor>();
 builder.Services.AddScoped<SurveyNotificationInterceptor>();
 builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
@@ -84,6 +90,7 @@ builder.Services.AddScoped<IWebsiteWorkProgressService, WebsiteWorkProgressServi
 builder.Services.AddScoped<IWebsiteWorkReviewService, WebsiteWorkReviewService>();
 builder.Services.AddScoped<IWebsiteWorkProductivityReportService, WebsiteWorkProductivityReportService>();
 builder.Services.AddScoped<IWebsiteWorkTimelineService, WebsiteWorkTimelineService>();
+builder.Services.AddScoped<IWebsiteWorkAttentionService, WebsiteWorkAttentionService>();
 builder.Services.AddScoped<ISurveyCoreService, SurveyCoreService>();
 builder.Services.AddScoped<IExternalSurveyService, ExternalSurveyService>();
 builder.Services.AddScoped<IReportingDashboardService, ReportingDashboardService>();
