@@ -42,7 +42,8 @@ public abstract class WebsiteWorkControllerBase : ControllerBase
 [Route("api/website-work")]
 public sealed class WebsiteWorkController(
     IWebsiteWorkService websiteWorkService,
-    IWebsiteWorkProgressService websiteWorkProgressService) : WebsiteWorkControllerBase
+    IWebsiteWorkProgressService websiteWorkProgressService,
+    IWebsiteWorkReviewService websiteWorkReviewService) : WebsiteWorkControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResponse<WebsiteWorkResponse>>> GetAll(
@@ -52,7 +53,11 @@ public sealed class WebsiteWorkController(
         int page = 1,
         int pageSize = 50,
         CancellationToken cancellationToken = default)
-        => Ok(await websiteWorkService.GetAllAsync(search, status, employeeId, page, pageSize, cancellationToken));
+    {
+        var result = await websiteWorkService.GetAllAsync(search, status, employeeId, page, pageSize, cancellationToken);
+        var items = await websiteWorkReviewService.EnrichAsync(result.Items, cancellationToken);
+        return Ok(new PagedResponse<WebsiteWorkResponse>(items, result.Page, result.PageSize, result.TotalCount));
+    }
 
     [HttpGet("completions")]
     public async Task<ActionResult<PagedResponse<WebsiteWorkCompletionResponse>>> GetCompletions(
@@ -72,7 +77,7 @@ public sealed class WebsiteWorkController(
     public async Task<ActionResult<WebsiteWorkResponse>> Create(
         UpsertWebsiteWorkRequest request,
         CancellationToken cancellationToken)
-        => ToActionResult(await websiteWorkService.CreateAsync(request, Actor(), cancellationToken));
+        => await Enrich(await websiteWorkService.CreateAsync(request, Actor(), cancellationToken), cancellationToken);
 
     [HttpPut("{id:guid}")]
     [Authorize(Policy = PermissionCatalog.TasksManage)]
@@ -80,25 +85,73 @@ public sealed class WebsiteWorkController(
         Guid id,
         UpsertWebsiteWorkRequest request,
         CancellationToken cancellationToken)
-        => ToActionResult(await websiteWorkService.UpdateAsync(id, request, Actor(), cancellationToken));
+        => await Enrich(await websiteWorkService.UpdateAsync(id, request, Actor(), cancellationToken), cancellationToken);
+
+    [HttpPost("{id:guid}/approve")]
+    [Authorize(Policy = PermissionCatalog.TasksManage)]
+    public async Task<ActionResult<WebsiteWorkReviewResponse>> Approve(
+        Guid id,
+        ApproveWebsiteWorkRequest request,
+        CancellationToken cancellationToken)
+        => ToActionResult(await websiteWorkReviewService.ApproveAsync(id, request, Actor(), cancellationToken));
+
+    [HttpPost("{id:guid}/reopen")]
+    [Authorize(Policy = PermissionCatalog.TasksManage)]
+    public async Task<ActionResult<WebsiteWorkReviewResponse>> Reopen(
+        Guid id,
+        ReopenWebsiteWorkRequest request,
+        CancellationToken cancellationToken)
+        => ToActionResult(await websiteWorkReviewService.ReopenAsync(id, request, Actor(), cancellationToken));
+
+    private async Task<ActionResult<WebsiteWorkResponse>> Enrich(
+        OperationResult<WebsiteWorkResponse> result,
+        CancellationToken cancellationToken)
+    {
+        if (result.Status != OperationStatus.Success || result.Value is null)
+        {
+            return ToActionResult(result);
+        }
+
+        var enriched = await websiteWorkReviewService.EnrichAsync([result.Value], cancellationToken);
+        return Ok(enriched.Single());
+    }
 }
 
 [ApiController]
 [Authorize]
 [Route("api/me/website-work")]
-public sealed class MyWebsiteWorkController(IWebsiteWorkService websiteWorkService) : WebsiteWorkControllerBase
+public sealed class MyWebsiteWorkController(
+    IWebsiteWorkService websiteWorkService,
+    IWebsiteWorkReviewService websiteWorkReviewService) : WebsiteWorkControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<WebsiteWorkResponse>>> GetMine(
         bool includeClosed = false,
         CancellationToken cancellationToken = default)
-        => ToActionResult(await websiteWorkService.GetMineAsync(Actor(), includeClosed, cancellationToken));
+    {
+        var result = await websiteWorkService.GetMineAsync(Actor(), includeClosed, cancellationToken);
+        if (result.Status != OperationStatus.Success || result.Value is null)
+        {
+            return ToActionResult(result);
+        }
+
+        return Ok(await websiteWorkReviewService.EnrichAsync(result.Value, cancellationToken));
+    }
 
     [HttpPost("{id:guid}/start")]
     public async Task<ActionResult<WebsiteWorkResponse>> Start(Guid id, CancellationToken cancellationToken)
-        => ToActionResult(await websiteWorkService.StartAsync(id, Actor(), cancellationToken));
+    {
+        var result = await websiteWorkService.StartAsync(id, Actor(), cancellationToken);
+        if (result.Status != OperationStatus.Success || result.Value is null)
+        {
+            return ToActionResult(result);
+        }
+
+        var enriched = await websiteWorkReviewService.EnrichAsync([result.Value], cancellationToken);
+        return Ok(enriched.Single());
+    }
 
     [HttpPost("{id:guid}/complete")]
     public async Task<ActionResult<WebsiteWorkResponse>> Complete(Guid id, CancellationToken cancellationToken)
-        => ToActionResult(await websiteWorkService.CompleteAsync(id, Actor(), cancellationToken));
+        => ToActionResult(await websiteWorkReviewService.SubmitAsync(id, Actor(), cancellationToken));
 }
