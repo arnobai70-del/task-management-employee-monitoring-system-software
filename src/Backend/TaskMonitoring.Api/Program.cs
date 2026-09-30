@@ -64,6 +64,7 @@ if (trustForwardedHeaders)
     });
 }
 
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(PresenceOptions.SectionName));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<PresenceOptions>(builder.Configuration.GetSection(PresenceOptions.SectionName));
 builder.Services.AddScoped<TaskNotificationInterceptor>();
@@ -79,6 +80,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmployeeCoreService, EmployeeCoreService>();
 builder.Services.AddScoped<IAttendanceCoreService, AttendanceCoreService>();
 builder.Services.AddScoped<IProjectTaskCoreService, ProjectTaskCoreService>();
+builder.Services.AddScoped<IWebsiteWorkService, WebsiteWorkService>();
 builder.Services.AddScoped<ISurveyCoreService, SurveyCoreService>();
 builder.Services.AddScoped<IExternalSurveyService, ExternalSurveyService>();
 builder.Services.AddScoped<IReportingDashboardService, ReportingDashboardService>();
@@ -88,6 +90,7 @@ builder.Services.AddScoped<IRealtimeWorkspaceService, RealtimeWorkspaceService>(
 builder.Services.AddScoped<IMonitoringTelemetryService, MonitoringTelemetryService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddSingleton<IRealtimeEventPublisher, SignalRRealtimeEventPublisher>();
+builder.Services.AddSingleton<IWebsiteWorkRealtimePublisher, SignalRWebsiteWorkRealtimePublisher>();
 builder.Services.AddHostedService<MonitoringRetentionHostedService>();
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
