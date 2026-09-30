@@ -42,6 +42,20 @@ Only the manager currently assigned to a follow-up can mark it **Resolved**. Res
 
 If a follow-up is reassigned, acknowledged or snoozed after assignment, the replaced follow-up is no longer considered current and disappears from the former owner's inbox.
 
+## Realtime follow-up delivery
+
+Every authenticated SignalR connection joins a user-specific realtime group derived from the server-validated JWT subject. This allows manager follow-up events to target the assigned manager account even when that account is not linked to an employee profile.
+
+After a successful database save, follow-up lifecycle changes publish `websiteWorkFollowUpChanged` to the affected manager:
+
+- assignment sends **Assigned**;
+- assigning the same manager again with changed note/due time sends **Updated**;
+- reassignment sends **Removed** to the former manager and **Assigned** to the new manager;
+- owner resolution sends **Resolved**; and
+- acknowledgement, snooze, or a Website Work lifecycle change sends **Removed** when it makes the previous follow-up no longer current.
+
+The Admin Web shows a global Follow-ups badge, displays a short realtime toast, and refreshes **My Follow-ups** immediately. The authoritative inbox is still rebuilt from durable `TaskActivity` data, so realtime delivery is not the source of truth. The browser also refreshes follow-up state periodically; this is required for due-time transitions because a Pending follow-up can become Overdue simply as time passes without any database mutation. A newly overdue item produces an overdue toast and updates the badge.
+
 ## Persistence and audit
 
 No new table is required. Attention actions are stored as existing `TaskActivity` records:
