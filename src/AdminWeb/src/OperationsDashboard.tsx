@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { apiFetch } from './api';
 import OperationsIncidentsPage from './OperationsIncidents';
-import OperationsIncidentRealtimeNotice from './OperationsIncidentRealtimeNotice';
 import './management.css';
 
 interface ServerHealth {
@@ -259,7 +258,6 @@ export default function OperationsDashboardPage() {
       <div style={{ marginTop: 32 }}>
         <OperationsIncidentsPage />
       </div>
-      <OperationsIncidentRealtimeNotice />
     </>
   );
 }
