@@ -48,7 +48,7 @@ public sealed class AdminNotificationRealtimeInterceptor(
         foreach (var entry in context.ChangeTracker.Entries<TaskActivity>()
                      .Where(entry =>
                          entry.State == EntityState.Added &&
-                         entry.Entity.Action == AdminNotificationService.NotificationAction))
+                         entry.Entity.Action == AdminNotificationService.UnreadNotificationAction))
         {
             if (!entry.Entity.ActorUserId.HasValue)
             {
