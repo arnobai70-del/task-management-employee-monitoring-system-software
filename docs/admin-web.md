@@ -7,11 +7,14 @@
 Implemented areas include:
 
 - Dashboard — reporting metrics plus permission-gated live workforce presence.
+- Employee Productivity — daily/weekly Website Work productivity with assignment/start/review/approval metrics, working-time reconstruction and CSV export.
 - Employees and departments — directory plus management workflows.
 - Attendance and shifts — work-session visibility and shift administration.
 - Projects and tasks — project/task management workflows.
+- Website Work — external website target assignment, live worker progress, completion review and approved-completion history.
 - RDP, IP and website assignments — company access-assignment workflows.
-- Surveys — current read view for project-scoped survey forms; survey management write UI is not part of the current Admin Web roadmap.
+- Surveys — external survey-link assignment; survey questions and answers remain on the assigned third-party website.
+- Audit Logs — permission-gated administrative audit history.
 
 Backend business rules must not be duplicated or weakened in the browser.
 
@@ -21,7 +24,7 @@ Backend business rules must not be duplicated or weakened in the browser.
 - TypeScript with strict type checking
 - Vite
 - React Router
-- `@microsoft/signalr` for live workforce updates
+- `@microsoft/signalr` for live workforce and Website Work review updates
 - Native CSS for the responsive application shell and data visualization
 
 ## Authentication and authorization
@@ -64,6 +67,25 @@ Displayed work state is server-derived:
 
 The browser does not calculate or submit employee work state.
 
+## Website Work productivity reporting
+
+`/productivity` requires `reports.read` and calls `GET /api/reports/website-work/productivity`.
+
+The page supports a server-validated date range of up to 366 days and daily or calendar-week trend grouping. The browser sends its UTC offset so day boundaries match the administrator's local reporting day instead of the API server's timezone.
+
+The report includes:
+
+- Website Work targets assigned inside the selected period;
+- targets first started inside the period;
+- working time reconstructed from `Start/Open` or manager `reopen` until employee submission/final completion;
+- completion-review submissions;
+- final manager-approved completions;
+- correction/reopen actions;
+- unresolved overdue work at each period end; and
+- cohort completion rate for work assigned in the period and approved by that period's end.
+
+Employee rows are grouped by the currently assigned employee. The page can filter the returned rows locally by employee code/name/department and export the employee table as UTF-8 CSV. Export does not contain external website page content, passwords, cookies, balances or form data.
+
 ## Local development
 
 Install dependencies and run the Vite development server:
@@ -101,6 +123,7 @@ Important route/panel boundaries include:
 | Area | Required permission |
 | --- | --- |
 | `/dashboard` reporting | `reports.read` |
+| `/productivity` Website Work productivity | `reports.read` |
 | Dashboard live workforce panel | `presence.read` |
 | `/employees` | `employees.read` |
 | `/departments` | `departments.read` |
@@ -108,8 +131,11 @@ Important route/panel boundaries include:
 | `/attendance` | `attendance.read` |
 | `/projects` | `projects.read` |
 | `/tasks` | `tasks.read` |
+| `/website-work` | `tasks.read` |
+| Website Work assign/edit/review | `tasks.manage` |
 | `/surveys` | `surveys.read` |
 | `/access/rdp`, `/access/ip`, `/access/websites` | `access.assignments.read` |
+| `/audit-logs` | `audit.read` |
 
 A signed-in user without permission for a requested section receives the Admin Web `403` view. Optional panels such as live presence simply do not render/connect without their dedicated permission. These checks are UX controls only; backend authorization is still mandatory.
 

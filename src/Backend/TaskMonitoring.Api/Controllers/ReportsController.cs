@@ -9,7 +9,9 @@ namespace TaskMonitoring.Api.Controllers;
 [ApiController]
 [Authorize(Policy = PermissionCatalog.ReportsRead)]
 [Route("api/reports")]
-public sealed class ReportsController(IReportingDashboardService reportingDashboardService) : ControllerBase
+public sealed class ReportsController(
+    IReportingDashboardService reportingDashboardService,
+    IWebsiteWorkProductivityReportService websiteWorkProductivityReportService) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<ActionResult<DashboardOverviewResponse>> GetDashboard(
@@ -44,6 +46,20 @@ public sealed class ReportsController(IReportingDashboardService reportingDashbo
         Guid? projectId,
         CancellationToken cancellationToken)
         => ToActionResult(await reportingDashboardService.GetSurveyProgressAsync(projectId, cancellationToken));
+
+    [HttpGet("website-work/productivity")]
+    public async Task<ActionResult<WebsiteWorkProductivityReportResponse>> GetWebsiteWorkProductivity(
+        DateOnly? from,
+        DateOnly? to,
+        int utcOffsetMinutes = 0,
+        WebsiteWorkProductivityGrouping grouping = WebsiteWorkProductivityGrouping.Day,
+        CancellationToken cancellationToken = default)
+        => ToActionResult(await websiteWorkProductivityReportService.GetAsync(
+            from,
+            to,
+            utcOffsetMinutes,
+            grouping,
+            cancellationToken));
 
     private ActionResult<T> ToActionResult<T>(OperationResult<T> result)
     {
