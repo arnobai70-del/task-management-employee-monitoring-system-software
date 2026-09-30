@@ -8,6 +8,9 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 using TaskMonitoring.Api.Configuration;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
@@ -50,6 +53,46 @@ var presenceOptions = builder.Configuration.GetSection(PresenceOptions.SectionNa
 if (presenceOptions.OnlineThresholdSeconds is < 30 or > 600)
 {
     throw new InvalidOperationException("Presence:OnlineThresholdSeconds must be between 30 and 600 seconds.");
+}
+
+var otlpEndpointValue = builder.Configuration["Observability:OtlpEndpoint"]?.Trim();
+var observabilityServiceName = builder.Configuration["Observability:ServiceName"]?.Trim();
+if (string.IsNullOrWhiteSpace(observabilityServiceName))
+{
+    observabilityServiceName = "TaskMonitoring.Api";
+}
+
+Uri? otlpEndpoint = null;
+if (!string.IsNullOrWhiteSpace(otlpEndpointValue))
+{
+    if (!Uri.TryCreate(otlpEndpointValue, UriKind.Absolute, out otlpEndpoint) ||
+        (otlpEndpoint.Scheme != Uri.UriSchemeHttp && otlpEndpoint.Scheme != Uri.UriSchemeHttps))
+    {
+        throw new InvalidOperationException("Observability:OtlpEndpoint must be an absolute HTTP or HTTPS URI when configured.");
+    }
+
+    var serviceVersion = typeof(Program).Assembly.GetName().Version?.ToString();
+    var resourceBuilder = ResourceBuilder.CreateDefault()
+        .AddService(serviceName: observabilityServiceName, serviceVersion: serviceVersion);
+
+    builder.Logging.AddOpenTelemetry(options =>
+    {
+        options.IncludeScopes = true;
+        options.IncludeFormattedMessage = true;
+        options.ParseStateValues = true;
+        options.SetResourceBuilder(resourceBuilder);
+        options.AddOtlpExporter(exporterOptions => exporterOptions.Endpoint = otlpEndpoint);
+    });
+
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource.AddService(
+            serviceName: observabilityServiceName,
+            serviceVersion: serviceVersion))
+        .WithMetrics(metrics => metrics
+            .AddAspNetCoreInstrumentation()
+            .AddRuntimeInstrumentation()
+            .AddMeter(ApiTelemetry.MeterName)
+            .AddOtlpExporter(exporterOptions => exporterOptions.Endpoint = otlpEndpoint));
 }
 
 var trustForwardedHeaders = builder.Configuration.GetValue<bool>("ReverseProxy:TrustForwardedHeaders");
@@ -163,6 +206,7 @@ if (args.Any(argument => string.Equals(argument, "--migrate-only", StringCompari
     return;
 }
 
+app.UseMiddleware<ApiTelemetryMiddleware>();
 app.UseExceptionHandler();
 if (trustForwardedHeaders)
 {
