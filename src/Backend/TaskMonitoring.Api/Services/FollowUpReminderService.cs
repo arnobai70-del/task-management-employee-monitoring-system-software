@@ -109,13 +109,14 @@ public sealed class FollowUpReminderService(
         return created;
     }
 
-    private static FollowUpSnapshot? FindCurrentFollowUp(IReadOnlyCollection<TaskActivity> activities)
+    private static FollowUpSnapshot? FindCurrentFollowUp(IEnumerable<TaskActivity> activities)
     {
-        var lifecycleAtUtc = activities
+        var activityArray = activities as TaskActivity[] ?? activities.ToArray();
+        var lifecycleAtUtc = activityArray
             .Where(activity => IsLifecycleAction(activity.Action))
             .Select(activity => (DateTime?)activity.CreatedAtUtc)
             .Max();
-        var management = activities
+        var management = activityArray
             .Where(activity => IsManagementAction(activity.Action))
             .Where(activity => !lifecycleAtUtc.HasValue || activity.CreatedAtUtc > lifecycleAtUtc.Value)
             .OrderByDescending(activity => activity.CreatedAtUtc)
