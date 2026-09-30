@@ -106,6 +106,7 @@ builder.Services.AddScoped<IWebsiteWorkProductivityReportService, WebsiteWorkPro
 builder.Services.AddScoped<IWebsiteWorkTimelineService, WebsiteWorkTimelineService>();
 builder.Services.AddScoped<IWebsiteWorkAttentionService, WebsiteWorkAttentionService>();
 builder.Services.AddScoped<IWebsiteWorkAttentionActionService, WebsiteWorkAttentionActionService>();
+builder.Services.AddScoped<IFollowUpSlaAnalyticsService, FollowUpSlaAnalyticsService>();
 builder.Services.AddScoped<IAdminNotificationService, AdminNotificationService>();
 builder.Services.AddScoped<IFollowUpReminderService, FollowUpReminderService>();
 builder.Services.AddScoped<ISurveyCoreService, SurveyCoreService>();
