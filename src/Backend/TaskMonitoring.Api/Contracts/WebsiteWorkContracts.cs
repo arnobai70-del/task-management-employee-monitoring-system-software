@@ -50,3 +50,32 @@ public sealed record WebsiteWorkCompletionResponse(
     string TaskTitle,
     DateTime CompletedAtUtc,
     string Message);
+
+public sealed record WebsiteWorkActiveProgressResponse(
+    Guid TaskId,
+    Guid ProjectId,
+    string ProjectName,
+    Guid EmployeeId,
+    string EmployeeCode,
+    string EmployeeName,
+    string TaskTitle,
+    DateTime StartedAtUtc,
+    long ElapsedSeconds,
+    DateOnly? DueDate,
+    bool IsOverdue);
+
+public sealed record WebsiteWorkEmployeeTodayResponse(
+    Guid EmployeeId,
+    string EmployeeCode,
+    string EmployeeName,
+    int WorkingNow,
+    int CompletedToday,
+    DateTime? LastCompletedAtUtc);
+
+public sealed record WebsiteWorkProgressResponse(
+    DateTime GeneratedAtUtc,
+    int UtcOffsetMinutes,
+    int WorkingNow,
+    int CompletedToday,
+    IReadOnlyCollection<WebsiteWorkActiveProgressResponse> ActiveWork,
+    IReadOnlyCollection<WebsiteWorkEmployeeTodayResponse> Employees);
