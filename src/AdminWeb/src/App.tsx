@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'reac
 import { apiFetch } from './api';
 import { useAuth } from './auth';
 import AccessAssignmentsPage from './AccessAssignments';
+import AuditLogsPage from './AuditLogs';
 import { DepartmentManagementPage, EmployeeManagementPage } from './EmployeeDepartmentManagement';
 import PresencePanel from './PresencePanel';
 import { ProjectManagementPage, ShiftManagementPage, TaskManagementPage } from './WorkManagement';
@@ -36,7 +37,8 @@ const navItems: NavItem[] = [
   { path: '/surveys', label: 'Surveys', short: 'SV', permission: 'surveys.read' },
   { path: '/access/rdp', label: 'RDP Assign', short: 'RD', permission: 'access.assignments.read' },
   { path: '/access/ip', label: 'IP Assign', short: 'IP', permission: 'access.assignments.read' },
-  { path: '/access/websites', label: 'Website Assign', short: 'WB', permission: 'access.assignments.read' }
+  { path: '/access/websites', label: 'Website Assign', short: 'WB', permission: 'access.assignments.read' },
+  { path: '/audit-logs', label: 'Audit Logs', short: 'AU', permission: 'audit.read' }
 ];
 
 function firstAllowedPath(can: (permission: string) => boolean): string {
@@ -351,6 +353,7 @@ export default function App() {
       <Route path="/access/rdp" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="rdp" /></ProtectedPage>} />
       <Route path="/access/ip" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="ip" /></ProtectedPage>} />
       <Route path="/access/websites" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="websites" /></ProtectedPage>} />
+      <Route path="/audit-logs" element={<ProtectedPage permission="audit.read"><AuditLogsPage /></ProtectedPage>} />
       <Route path="/forbidden" element={<ForbiddenPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
