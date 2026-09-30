@@ -42,17 +42,29 @@ Only the manager currently assigned to a follow-up can mark it **Resolved**. Res
 
 If a follow-up is reassigned, acknowledged or snoozed after assignment, the replaced follow-up is no longer considered current and disappears from the former owner's inbox.
 
-## Durable notification center and reminders
+## Durable notification center, reminders and escalation
 
 The Follow-ups page contains a durable per-manager Notification Center. Follow-up assignment, update, reassignment/removal and resolution create notification projection records in the existing `TaskActivity` store. Each notification has its own unread/read state and remains available after logout or an offline period; SignalR is only the fast delivery path, not the source of truth.
 
 A background server service independently checks current unresolved follow-ups. By default it scans every 60 seconds and creates one **Due soon** notification when a follow-up enters the final 30 minutes before its due time, then one **Overdue** notification if it remains current after the due time. `FollowUpReminders:DueSoonMinutes` and `FollowUpReminders:ScanIntervalSeconds` are startup-validated configuration values. Reminder identity is derived deterministically from the recipient, current follow-up assignment and notification kind, so repeated scans do not create duplicate reminders.
 
-When a follow-up is resolved, reassigned, acknowledged, snoozed or invalidated by a later Website Work lifecycle event, that old assignment is no longer eligible for future reminder scans. A newly assigned follow-up receives a new reminder lifecycle.
+### Escalation policy
 
-The Admin Web exposes unread and total counts, an unread-only filter, **Mark read**, **Mark all read**, pagination and direct links back to My Follow-ups. Newly saved notifications are also pushed to the manager's user-specific SignalR group as `adminNotificationCreated`; missed realtime delivery does not remove the durable record.
+If a follow-up is still current after its due time plus `FollowUpReminders:EscalationAfterMinutes` (60 minutes by default), the server creates one durable **Follow-up escalated** notification for an eligible higher-level manager. Escalation recipients must be active and hold both `tasks.read` and `tasks.manage`, so the alert is actionable.
 
-No new database table or EF migration is required for this milestone because the existing `TaskActivity` persistence model already provides the task relationship, recipient user reference, JSON metadata and timestamps needed for the durable projection.
+Recipient selection is deterministic:
+
+1. Start from the assigned follow-up owner's employee reporting line and walk upward until the first eligible supervisor is found.
+2. If no eligible supervisor exists, try the configured `FollowUpReminders:EscalationFallbackRoles` in order. The default fallback roles are `SuperAdmin`, then `Admin`.
+3. The original follow-up owner is never selected as their own escalation recipient. If no eligible higher-level recipient exists, no escalation notification is created and the normal overdue notification remains with the owner.
+
+The escalation notification links to Website Work rather than My Follow-ups because the supervisor/boss is being alerted about another manager's assignment and is not automatically made the follow-up owner. Reassigning the follow-up creates a new assignment lifecycle and therefore a new escalation identity if the new assignment later exceeds its grace period.
+
+When a follow-up is resolved, reassigned, acknowledged, snoozed or invalidated by a later Website Work lifecycle event, that old assignment is no longer eligible for future reminder or escalation scans. A newly assigned follow-up receives a new reminder and escalation lifecycle.
+
+The Admin Web exposes unread and total counts, an unread-only filter, **Mark read**, **Mark all read**, pagination and direct links to the relevant follow-up or Website Work screen. Newly saved notifications are also pushed to the recipient's user-specific SignalR group as `adminNotificationCreated`; missed realtime delivery does not remove the durable record.
+
+No new database table or EF migration is required for this workflow because the existing `TaskActivity` persistence model already provides the task relationship, recipient user reference, JSON metadata and timestamps needed for the durable projection.
 
 ## Realtime follow-up delivery
 
@@ -66,7 +78,7 @@ After a successful database save, follow-up lifecycle changes publish `websiteWo
 - owner resolution sends **Resolved**; and
 - acknowledgement, snooze, or a Website Work lifecycle change sends **Removed** when it makes the previous follow-up no longer current.
 
-The Admin Web shows a global Follow-ups badge and refreshes **My Follow-ups** immediately. The durable Notification Center additionally provides the user-facing toast/history path. The authoritative inbox and notification history are stored server-side, while periodic browser refresh remains a resilience fallback for state display.
+The Admin Web shows a global Follow-ups badge and refreshes **My Follow-ups** immediately. The durable Notification Center additionally provides the user-facing toast/history path. Due, overdue and escalation notifications use the same durable-then-realtime delivery rule, while periodic browser refresh remains a resilience fallback for state display.
 
 ## Persistence and audit
 
@@ -77,7 +89,7 @@ No new table is required. Attention actions are stored as existing `TaskActivity
 - `website-work.attention.follow-up-assigned`
 - `website-work.attention.follow-up-resolved`
 
-Durable manager notifications are also `TaskActivity` projection records using `admin.notification.unread` and `admin.notification.read`. Their deterministic IDs prevent duplicate projection rows for the same recipient/source/kind. Each attention mutation still writes an `AuditLog` entry with the authenticated manager as actor. Because management state is attached to the Website Work activity stream, later lifecycle events naturally invalidate stale acknowledgements, follow-up suppression and resolutions.
+Durable manager notifications are also `TaskActivity` projection records using `admin.notification.unread` and `admin.notification.read`. Their deterministic IDs prevent duplicate projection rows for the same recipient/source/kind, including escalation notifications. Each attention mutation still writes an `AuditLog` entry with the authenticated manager as actor. Because management state is attached to the Website Work activity stream, later lifecycle events naturally invalidate stale acknowledgements, follow-up suppression and resolutions.
 
 ## API
 
@@ -102,4 +114,4 @@ Attention and admin-notification mutations require `tasks.manage`; the assign/ac
 
 ## Privacy boundary
 
-Needs Attention, My Follow-ups, durable notifications and due reminders use only internal task/lifecycle metadata already stored by the Website Work workflow. They do not capture external website page/form content, passwords, cookies, balances, earnings, browsing history or survey answers.
+Needs Attention, My Follow-ups, durable notifications, due reminders and escalation use only internal task/lifecycle metadata and reporting relationships already stored by the Website Work and employee-management workflows. They do not capture external website page/form content, passwords, cookies, balances, earnings, browsing history or survey answers.
