@@ -23,6 +23,20 @@ The Admin Web now uses the existing backend authorization model for read and wri
 - Tasks: create/edit, assign only to active project members, and move through the backend-supported status transitions.
 - Completing/archiving projects remains blocked by the backend while open tasks remain.
 
+## Survey and field-operations administration
+
+The Surveys section now exposes the existing survey backend as a complete permission-aware Admin Web workflow rather than a read-only list.
+
+- `surveys.read` can view survey forms, questionnaire details and lifecycle state.
+- `surveys.manage` can create draft surveys, edit draft metadata, replace the ordered questionnaire, publish drafts, close published surveys and archive eligible drafts/closed surveys.
+- Question editing supports Text, LongText, Number, Boolean, Date, SingleChoice and MultipleChoice types, required flags, and choice options. Backend validation remains authoritative and questions lock after publication.
+- `survey.assignments.read` can view field assignments and their latest revision/submission state.
+- `survey.assignments.manage` can assign published surveys to active employees and cancel assignments that the backend still considers cancellable.
+- `survey.review` can open submitted revisions, review every captured answer, approve submissions or reject them with the backend-required rejection comment.
+- Survey status, assignment and review actions continue to produce the existing audit events; the Admin Web does not create a parallel workflow or bypass server-side rules.
+
+Survey project/employee selectors use dedicated permission-gated admin lookup endpoints so survey operators do not need unrelated task-management screens merely to populate a form.
+
 ## RDP, IP and website assignments
 
 See `docs/access-assignments.md` for data and security rules.
@@ -36,7 +50,3 @@ The Admin Web provides three dedicated sections:
 Write buttons require `access.assignments.manage`; read access requires `access.assignments.read`.
 
 RDP and website forms deliberately do not accept passwords, private keys, cookies or other reusable secrets. RDP may store a credential-manager reference only.
-
-## Survey scope
-
-Survey backend capabilities and the existing read-only Survey list remain available. Survey create/question/assignment/review management screens are intentionally not part of this Admin Web milestone.
