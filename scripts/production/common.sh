@@ -19,6 +19,8 @@ set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
+AGENT_UPDATE_ENROLLMENT_KEY_SECRET_FILE="${AGENT_UPDATE_ENROLLMENT_KEY_SECRET_FILE:-./secrets/agent_update_enrollment_key}"
+export AGENT_UPDATE_ENROLLMENT_KEY_SECRET_FILE
 
 require_command() {
   local command_name="$1"
@@ -53,7 +55,6 @@ require_production_variables() {
     POSTGRES_PASSWORD_SECRET_FILE
     DATABASE_CONNECTION_SECRET_FILE
     JWT_SIGNING_KEY_SECRET_FILE
-    AGENT_UPDATE_ENROLLMENT_KEY_SECRET_FILE
     UPDATE_HOST_ROOT
     BACKUP_ROOT
   )
