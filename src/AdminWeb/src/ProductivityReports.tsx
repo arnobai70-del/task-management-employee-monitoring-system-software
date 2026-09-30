@@ -3,6 +3,7 @@ import { apiFetch } from './api';
 import './management.css';
 
 type Grouping = 'Day' | 'Week';
+type TimelineEventType = 'Assigned' | 'Started' | 'Submitted' | 'CorrectionRequested' | 'Approved' | 'Completed';
 
 interface ProductivityMetrics {
   assigned: number;
@@ -41,6 +42,46 @@ interface ProductivityReport {
   periods: ProductivityPeriod[];
 }
 
+interface TimelineEvent {
+  type: TimelineEventType;
+  atUtc: string;
+  title: string;
+  detail: string | null;
+  actorEmail: string | null;
+}
+
+interface TimelineItem {
+  taskId: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  title: string;
+  status: string;
+  dueDate: string | null;
+  assignedAtUtc: string;
+  firstStartedAtUtc: string | null;
+  lastSubmittedAtUtc: string | null;
+  approvedAtUtc: string | null;
+  correctionCount: number;
+  workingSecondsInPeriod: number;
+  totalWorkingSeconds: number;
+  overdueAtPeriodEnd: boolean;
+  events: TimelineEvent[];
+}
+
+interface EmployeeTimeline {
+  generatedAtUtc: string;
+  from: string;
+  to: string;
+  utcOffsetMinutes: number;
+  employeeId: string;
+  employeeCode: string;
+  fullName: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  items: TimelineItem[];
+}
+
 interface ReportFilter {
   from: string;
   to: string;
@@ -76,6 +117,27 @@ function formatDate(value: string): string {
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(parsed);
 }
 
+function formatDateTime(value: string | null): string {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(parsed);
+}
+
+function workStatusLabel(status: string): string {
+  if (status === 'ToDo') return 'Ready';
+  if (status === 'InProgress') return 'Working';
+  if (status === 'Blocked') return 'Pending Review';
+  if (status === 'Done') return 'Approved';
+  return status;
+}
+
+function timelineEventLabel(type: TimelineEventType): string {
+  if (type === 'CorrectionRequested') return 'Correction requested';
+  return type;
+}
+
 function csvCell(value: string | number): string {
   const text = String(value);
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
@@ -90,6 +152,10 @@ export default function ProductivityReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [timeline, setTimeline] = useState<EmployeeTimeline | null>(null);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineError, setTimelineError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +172,33 @@ export default function ProductivityReportsPage() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [filter, version]);
+
+  useEffect(() => {
+    if (!selectedEmployeeId) {
+      setTimeline(null);
+      setTimelineError('');
+      setTimelineLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const utcOffsetMinutes = -new Date().getTimezoneOffset();
+    setTimelineLoading(true);
+    setTimelineError('');
+    apiFetch<EmployeeTimeline>(
+      `/api/reports/website-work/productivity/${selectedEmployeeId}/timeline?from=${filter.from}&to=${filter.to}&utcOffsetMinutes=${utcOffsetMinutes}`
+    )
+      .then(value => { if (!cancelled) setTimeline(value); })
+      .catch(caught => {
+        if (!cancelled) {
+          setTimeline(null);
+          setTimelineError(caught instanceof Error ? caught.message : 'Unable to load worker timeline.');
+        }
+      })
+      .finally(() => { if (!cancelled) setTimelineLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [selectedEmployeeId, filter, version]);
 
   const visibleEmployees = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase();
@@ -210,7 +303,7 @@ export default function ProductivityReportsPage() {
 
           <article className="panel table-panel">
             <div className="panel-heading">
-              <div><h2>Employee productivity</h2><p>{formatDate(report.from)} – {formatDate(report.to)} · {report.employees.length} worker(s) with activity</p></div>
+              <div><h2>Employee productivity</h2><p>{formatDate(report.from)} – {formatDate(report.to)} · {report.employees.length} worker(s) with activity · click a worker name for timeline</p></div>
               <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Filter employee or department" aria-label="Filter employee productivity" />
             </div>
             <div className="table-wrap"><table>
@@ -218,7 +311,17 @@ export default function ProductivityReportsPage() {
               <tbody>
                 {visibleEmployees.map(item => (
                   <tr key={item.employeeId}>
-                    <td><strong>{item.fullName}</strong><small>{item.employeeCode}</small></td>
+                    <td>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => setSelectedEmployeeId(item.employeeId)}
+                        aria-label={`Open productivity timeline for ${item.fullName}`}
+                      >
+                        <strong>{item.fullName}</strong>
+                      </button>
+                      <small>{item.employeeCode}</small>
+                    </td>
                     <td>{item.departmentName || '—'}</td>
                     <td>{item.metrics.assigned}</td>
                     <td>{item.metrics.started}</td>
@@ -234,6 +337,61 @@ export default function ProductivityReportsPage() {
               </tbody>
             </table></div>
           </article>
+
+          {selectedEmployeeId && (
+            <article className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>{timeline?.fullName || 'Worker'} · detailed work timeline</h2>
+                  <p>{timeline ? `${timeline.employeeCode} · ${timeline.departmentName || 'No department'} · ${formatDate(timeline.from)} – ${formatDate(timeline.to)}` : 'Loading the selected report period…'}</p>
+                </div>
+                <button className="ghost-button" type="button" onClick={() => setSelectedEmployeeId(null)}>Close</button>
+              </div>
+
+              {timelineError && <div className="error-banner">{timelineError}</div>}
+              {timelineLoading && !timeline ? <div className="loading-block">Loading worker timeline…</div> : timeline && (
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {timeline.items.map(item => (
+                    <article key={item.taskId} style={{ border: '1px solid rgba(127,127,127,.22)', borderRadius: 12, padding: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                        <div>
+                          <strong>{item.title}</strong>
+                          <div className="muted" style={{ marginTop: 3 }}>{item.projectName} · {item.projectCode}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <strong>{workStatusLabel(item.status)}</strong>
+                          {item.overdueAtPeriodEnd && <div><small>Overdue at period end</small></div>}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 12 }}>
+                        <span><small>Assigned</small><br /><strong>{formatDateTime(item.assignedAtUtc)}</strong></span>
+                        <span><small>First started</small><br /><strong>{formatDateTime(item.firstStartedAtUtc)}</strong></span>
+                        <span><small>Working in period</small><br /><strong>{formatDuration(item.workingSecondsInPeriod)}</strong></span>
+                        <span><small>Total working</small><br /><strong>{formatDuration(item.totalWorkingSeconds)}</strong></span>
+                        <span><small>Corrections</small><br /><strong>{item.correctionCount}</strong></span>
+                        <span><small>Last submitted</small><br /><strong>{formatDateTime(item.lastSubmittedAtUtc)}</strong></span>
+                        <span><small>Approved</small><br /><strong>{formatDateTime(item.approvedAtUtc)}</strong></span>
+                        <span><small>Due</small><br /><strong>{item.dueDate ? formatDate(item.dueDate) : '—'}</strong></span>
+                      </div>
+
+                      <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
+                        {item.events.map((event, index) => (
+                          <div key={`${event.type}-${event.atUtc}-${index}`} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', borderTop: index === 0 ? undefined : '1px solid rgba(127,127,127,.14)', paddingTop: index === 0 ? 0 : 8 }}>
+                            <strong style={{ minWidth: 145 }}>{timelineEventLabel(event.type)}</strong>
+                            <span style={{ minWidth: 190 }}>{formatDateTime(event.atUtc)}</span>
+                            <span className="muted">{event.actorEmail || 'System / recorded actor unavailable'}</span>
+                            {event.detail && <span style={{ width: '100%', paddingLeft: 157 }}>{event.detail}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                  {!timeline.items.length && <div className="empty-cell">No Website Work lifecycle activity is relevant to this worker in the selected period.</div>}
+                </div>
+              )}
+            </article>
+          )}
 
           <article className="panel table-panel">
             <div className="panel-heading"><div><h2>{report.grouping === 'Week' ? 'Weekly' : 'Daily'} trend</h2><p>Working time is split across period boundaries; approval counts only final manager-approved completions.</p></div></div>
@@ -260,7 +418,7 @@ export default function ProductivityReportsPage() {
 
           <div className="panel">
             <strong>How the report is calculated</strong>
-            <p className="muted">Working time runs from Start/Open (or a manager correction/reopen) until the employee submits completion. Submitted work is not counted as approved until a manager approves it. The completion rate follows the cohort assigned inside the selected period. CSV export contains the employee table only and never includes external website page content, credentials, balances or form data.</p>
+            <p className="muted">Working time runs from Start/Open (or a manager correction/reopen) until the employee submits completion. Submitted work is not counted as approved until a manager approves it. The completion rate follows the cohort assigned inside the selected period. Click a worker name to inspect target-by-target lifecycle history. CSV export contains the employee table only and never includes external website page content, credentials, balances or form data.</p>
           </div>
         </>
       )}
