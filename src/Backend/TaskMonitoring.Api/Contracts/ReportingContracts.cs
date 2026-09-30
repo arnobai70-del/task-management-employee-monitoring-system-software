@@ -108,3 +108,42 @@ public sealed record SurveyProgressResponse(
     int Cancelled,
     int Overdue,
     decimal ApprovalPercent);
+
+public enum WebsiteWorkProductivityGrouping
+{
+    Day = 1,
+    Week = 2
+}
+
+public sealed record WebsiteWorkProductivityMetricsResponse(
+    int Assigned,
+    int Started,
+    long WorkingSeconds,
+    int Submitted,
+    int Approved,
+    int Reopened,
+    int Overdue,
+    decimal CompletionPercent);
+
+public sealed record WebsiteWorkEmployeeProductivityResponse(
+    Guid EmployeeId,
+    string EmployeeCode,
+    string FullName,
+    Guid? DepartmentId,
+    string? DepartmentName,
+    WebsiteWorkProductivityMetricsResponse Metrics);
+
+public sealed record WebsiteWorkProductivityPeriodResponse(
+    DateOnly From,
+    DateOnly To,
+    WebsiteWorkProductivityMetricsResponse Metrics);
+
+public sealed record WebsiteWorkProductivityReportResponse(
+    DateTime GeneratedAtUtc,
+    DateOnly From,
+    DateOnly To,
+    int UtcOffsetMinutes,
+    WebsiteWorkProductivityGrouping Grouping,
+    WebsiteWorkProductivityMetricsResponse Summary,
+    IReadOnlyCollection<WebsiteWorkEmployeeProductivityResponse> Employees,
+    IReadOnlyCollection<WebsiteWorkProductivityPeriodResponse> Periods);
