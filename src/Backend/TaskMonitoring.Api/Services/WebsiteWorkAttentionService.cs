@@ -56,7 +56,7 @@ public sealed class WebsiteWorkAttentionService(
                 x.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction))
             .ToListAsync(cancellationToken);
 
-        var alerts = tasks
+        var allAlerts = tasks
             .Select(task => BuildAlert(task, nowUtc, localDate))
             .Where(item => item is not null)
             .Select(item => item!)
@@ -66,8 +66,8 @@ public sealed class WebsiteWorkAttentionService(
             .ThenByDescending(item => item.CurrentWorkingSeconds)
             .ThenBy(item => item.DueDate)
             .ThenBy(item => item.EmployeeName, StringComparer.OrdinalIgnoreCase)
-            .Take(limit)
             .ToArray();
+        var visibleAlerts = allAlerts.Take(limit).ToArray();
 
         return OperationResult<WebsiteWorkAttentionResponse>.Success(
             new WebsiteWorkAttentionResponse(
@@ -78,11 +78,11 @@ public sealed class WebsiteWorkAttentionService(
                     _options.LongWorkingMinutes,
                     _options.PendingReviewMinutes,
                     _options.RepeatedCorrectionCount),
-                alerts.Length,
-                alerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.Critical),
-                alerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.High),
-                alerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.Medium),
-                alerts));
+                allAlerts.Length,
+                allAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.Critical),
+                allAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.High),
+                allAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.Medium),
+                visibleAlerts));
     }
 
     private WebsiteWorkAttentionItemResponse? BuildAlert(ProjectTask task, DateTime nowUtc, DateOnly localDate)
