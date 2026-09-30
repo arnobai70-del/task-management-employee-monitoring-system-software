@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { NavLink } from 'react-router-dom';
 import { apiFetch } from './api';
+import {
+  websiteWorkFollowUpChangedEvent,
+  websiteWorkFollowUpSummaryEvent,
+  type WebsiteWorkFollowUpSummary
+} from './WebsiteWorkRealtimeNotice';
 
 type FollowUpState = 'Pending' | 'Overdue' | 'Resolved';
 
@@ -70,6 +75,12 @@ function statusClass(value: string): string {
   return value.toLowerCase().replace(/\s+/g, '-');
 }
 
+function publishSummary(data: FollowUpInboxResponse) {
+  window.dispatchEvent(new CustomEvent<WebsiteWorkFollowUpSummary>(websiteWorkFollowUpSummaryEvent, {
+    detail: { pending: data.pending, overdue: data.overdue }
+  }));
+}
+
 export default function WebsiteWorkFollowUpsPage() {
   const [includeResolved, setIncludeResolved] = useState(false);
   const [data, setData] = useState<FollowUpInboxResponse | null>(null);
@@ -86,6 +97,12 @@ export default function WebsiteWorkFollowUpsPage() {
   );
 
   useEffect(() => {
+    const refresh = () => setVersion(value => value + 1);
+    window.addEventListener(websiteWorkFollowUpChangedEvent, refresh);
+    return () => window.removeEventListener(websiteWorkFollowUpChangedEvent, refresh);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     const load = async (showLoading: boolean) => {
@@ -96,6 +113,7 @@ export default function WebsiteWorkFollowUpsPage() {
         );
         if (!cancelled) {
           setData(result);
+          publishSummary(result);
           setError('');
           if (resolveTaskId && !result.items.some(item => item.taskId === resolveTaskId)) {
             setResolveTaskId(null);
@@ -150,7 +168,7 @@ export default function WebsiteWorkFollowUpsPage() {
         <div>
           <p className="eyebrow">Website Work</p>
           <h1>My Follow-ups</h1>
-          <p className="muted">Follow-up actions assigned to your manager account. Overdue items stay visible until you resolve them or the Website Work lifecycle changes.</p>
+          <p className="muted">Follow-up actions assigned to your manager account. Realtime changes refresh this inbox automatically; overdue state is also rechecked every 20 seconds.</p>
         </div>
         <div className="header-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -170,7 +188,7 @@ export default function WebsiteWorkFollowUpsPage() {
 
       <article className="panel table-panel">
         <div className="panel-heading">
-          <div><h2>Assigned follow-ups</h2><p>Auto-refresh every 20 seconds</p></div>
+          <div><h2>Assigned follow-ups</h2><p>Realtime refresh + 20-second due-state fallback</p></div>
           {data && <span>{data.totalCount} shown · updated {formatDateTime(data.generatedAtUtc)}</span>}
         </div>
         {loading && !data ? <div className="loading-block">Loading your follow-ups…</div> : (
