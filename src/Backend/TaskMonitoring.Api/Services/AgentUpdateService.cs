@@ -497,6 +497,7 @@ public sealed class AgentUpdateService(
             targets.OrderBy(x => x).ToArray());
         AddRolloutEvent(state, RolloutCreatedAction, actor, actorResult.User.Email, request.Note, now);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await TryCompleteRolloutAsync(state.Id, cancellationToken);
         return OperationResult<AgentUpdateRolloutResponse>.Success(await GetRolloutResponseAsync(state.Id, cancellationToken));
     }
 
@@ -559,12 +560,11 @@ public sealed class AgentUpdateService(
         {
             return OperationResult<AgentUpdateRolloutResponse>.NotFound("rollout_not_found", "Rollout was not found.");
         }
-        if (state.Stage != AgentUpdateRolloutStage.Pilot ||
-            state.Status is AgentUpdateRolloutStatus.Completed or AgentUpdateRolloutStatus.Cancelled)
+        if (state.Stage != AgentUpdateRolloutStage.Pilot || state.Status == AgentUpdateRolloutStatus.Cancelled)
         {
             return OperationResult<AgentUpdateRolloutResponse>.Conflict(
                 "rollout_not_promotable",
-                "Only an active or paused pilot rollout can be promoted.");
+                "Only a healthy non-cancelled pilot rollout can be promoted.");
         }
 
         var currentResponse = await GetRolloutResponseAsync(rolloutId, cancellationToken);
@@ -596,12 +596,14 @@ public sealed class AgentUpdateService(
         var promoted = state with
         {
             Stage = AgentUpdateRolloutStage.General,
+            Status = AgentUpdateRolloutStatus.Active,
             TargetEmployeeIds = merged,
             Revision = state.Revision + 1
         };
         var now = UtcNow();
         AddRolloutEvent(promoted, RolloutPromotedAction, actor, actorResult.User!.Email, request.Note, now);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await TryCompleteRolloutAsync(rolloutId, cancellationToken);
         return OperationResult<AgentUpdateRolloutResponse>.Success(await GetRolloutResponseAsync(rolloutId, cancellationToken));
     }
 
@@ -728,7 +730,7 @@ public sealed class AgentUpdateService(
             .ThenBy(x => x.FullName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var canPromote = rollout.Stage == AgentUpdateRolloutStage.Pilot &&
-                         rollout.Status is AgentUpdateRolloutStatus.Active or AgentUpdateRolloutStatus.Paused &&
+                         rollout.Status != AgentUpdateRolloutStatus.Cancelled &&
                          array.Length > 0 &&
                          array.All(x => x.Status == AgentUpdateAssignmentStatus.Installed);
 
@@ -770,7 +772,9 @@ public sealed class AgentUpdateService(
 
         if (!includeAll)
         {
-            query = query.Where(x => employeeSet.Contains(x.Id) || departmentSet.Contains(x.DepartmentId));
+            query = query.Where(x =>
+                employeeSet.Contains(x.Id) ||
+                (x.DepartmentId.HasValue && departmentSet.Contains(x.DepartmentId.Value)));
         }
 
         return (await query.Select(x => x.Id).ToArrayAsync(cancellationToken)).ToHashSet();
