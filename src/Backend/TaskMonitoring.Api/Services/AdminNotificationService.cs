@@ -36,7 +36,8 @@ public sealed class AdminNotificationService(
     AppDbContext dbContext,
     TimeProvider timeProvider) : IAdminNotificationService
 {
-    public const string NotificationAction = "admin.notification.created";
+    public const string UnreadNotificationAction = "admin.notification.unread";
+    public const string ReadNotificationAction = "admin.notification.read";
     public const string FollowUpActionUrl = "/follow-ups";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -61,12 +62,12 @@ public sealed class AdminNotificationService(
         var query = dbContext.TaskActivities
             .AsNoTracking()
             .Where(activity =>
-                activity.Action == NotificationAction &&
+                (activity.Action == UnreadNotificationAction || activity.Action == ReadNotificationAction) &&
                 activity.ActorUserId == userResult.User!.Id);
 
         if (unreadOnly)
         {
-            query = query.Where(activity => activity.DetailsJson.Contains("\"readAtUtc\":null"));
+            query = query.Where(activity => activity.Action == UnreadNotificationAction);
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -102,11 +103,11 @@ public sealed class AdminNotificationService(
         var query = dbContext.TaskActivities
             .AsNoTracking()
             .Where(activity =>
-                activity.Action == NotificationAction &&
+                (activity.Action == UnreadNotificationAction || activity.Action == ReadNotificationAction) &&
                 activity.ActorUserId == userResult.User!.Id);
         var total = await query.CountAsync(cancellationToken);
         var unread = await query.CountAsync(
-            activity => activity.DetailsJson.Contains("\"readAtUtc\":null"),
+            activity => activity.Action == UnreadNotificationAction,
             cancellationToken);
 
         return OperationResult<AdminNotificationSummaryResponse>.Success(
@@ -129,7 +130,7 @@ public sealed class AdminNotificationService(
         var activity = await dbContext.TaskActivities.SingleOrDefaultAsync(
             item =>
                 item.Id == notificationId &&
-                item.Action == NotificationAction &&
+                (item.Action == UnreadNotificationAction || item.Action == ReadNotificationAction) &&
                 item.ActorUserId == userResult.User!.Id,
             cancellationToken);
         if (activity is null)
@@ -146,9 +147,10 @@ public sealed class AdminNotificationService(
                 "Notification data is invalid and cannot be updated safely.");
         }
 
-        if (!details!.ReadAtUtc.HasValue)
+        if (activity.Action == UnreadNotificationAction)
         {
-            details = details with { ReadAtUtc = UtcNow() };
+            details = details! with { ReadAtUtc = UtcNow() };
+            activity.Action = ReadNotificationAction;
             activity.DetailsJson = JsonSerializer.Serialize(details, JsonOptions);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
@@ -170,21 +172,21 @@ public sealed class AdminNotificationService(
 
         var activities = await dbContext.TaskActivities
             .Where(activity =>
-                activity.Action == NotificationAction &&
-                activity.ActorUserId == userResult.User!.Id &&
-                activity.DetailsJson.Contains("\"readAtUtc\":null"))
+                activity.Action == UnreadNotificationAction &&
+                activity.ActorUserId == userResult.User!.Id)
             .ToArrayAsync(cancellationToken);
 
         var now = UtcNow();
         var marked = 0;
         foreach (var activity in activities)
         {
-            if (!TryParseDetails(activity.DetailsJson, out var details) || details!.ReadAtUtc.HasValue)
+            if (!TryParseDetails(activity.DetailsJson, out var details))
             {
                 continue;
             }
 
-            activity.DetailsJson = JsonSerializer.Serialize(details with { ReadAtUtc = now }, JsonOptions);
+            activity.Action = ReadNotificationAction;
+            activity.DetailsJson = JsonSerializer.Serialize(details! with { ReadAtUtc = now }, JsonOptions);
             marked++;
         }
 
@@ -223,7 +225,7 @@ public sealed class AdminNotificationService(
             ProjectTaskId = task.Id,
             ProjectTask = task,
             ActorUserId = recipientUserId,
-            Action = NotificationAction,
+            Action = UnreadNotificationAction,
             DetailsJson = JsonSerializer.Serialize(details, JsonOptions),
             CreatedAtUtc = createdAtUtc
         };
@@ -231,7 +233,8 @@ public sealed class AdminNotificationService(
 
     public static AdminNotificationResponse? ToResponse(TaskActivity activity)
     {
-        if (!TryParseDetails(activity.DetailsJson, out var details) ||
+        if (!IsNotificationAction(activity.Action) ||
+            !TryParseDetails(activity.DetailsJson, out var details) ||
             !Enum.TryParse<AdminNotificationKind>(details!.Kind, true, out var kind))
         {
             return null;
@@ -245,15 +248,19 @@ public sealed class AdminNotificationService(
             activity.ProjectTaskId,
             details.ActionUrl,
             activity.CreatedAtUtc,
-            details.ReadAtUtc);
+            activity.Action == ReadNotificationAction ? details.ReadAtUtc : null);
     }
+
+    public static bool IsNotificationAction(string action)
+        => action == UnreadNotificationAction || action == ReadNotificationAction;
 
     public static bool MatchesSource(
         TaskActivity activity,
         Guid recipientUserId,
         Guid sourceActivityId,
         AdminNotificationKind kind)
-        => activity.Id == DeterministicNotificationId(recipientUserId, sourceActivityId, kind);
+        => IsNotificationAction(activity.Action) &&
+           activity.Id == DeterministicNotificationId(recipientUserId, sourceActivityId, kind);
 
     private async Task<(User? User, ApiOperationError? Error)> ResolveUserAsync(
         RequestActor actor,
