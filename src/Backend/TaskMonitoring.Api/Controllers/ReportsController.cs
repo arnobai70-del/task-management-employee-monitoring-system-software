@@ -11,7 +11,8 @@ namespace TaskMonitoring.Api.Controllers;
 [Route("api/reports")]
 public sealed class ReportsController(
     IReportingDashboardService reportingDashboardService,
-    IWebsiteWorkProductivityReportService websiteWorkProductivityReportService) : ControllerBase
+    IWebsiteWorkProductivityReportService websiteWorkProductivityReportService,
+    IWebsiteWorkTimelineService websiteWorkTimelineService) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<ActionResult<DashboardOverviewResponse>> GetDashboard(
@@ -59,6 +60,20 @@ public sealed class ReportsController(
             to,
             utcOffsetMinutes,
             grouping,
+            cancellationToken));
+
+    [HttpGet("website-work/productivity/{employeeId:guid}/timeline")]
+    public async Task<ActionResult<WebsiteWorkEmployeeTimelineResponse>> GetWebsiteWorkEmployeeTimeline(
+        Guid employeeId,
+        DateOnly? from,
+        DateOnly? to,
+        int utcOffsetMinutes = 0,
+        CancellationToken cancellationToken = default)
+        => ToActionResult(await websiteWorkTimelineService.GetEmployeeAsync(
+            employeeId,
+            from,
+            to,
+            utcOffsetMinutes,
             cancellationToken));
 
     private ActionResult<T> ToActionResult<T>(OperationResult<T> result)
