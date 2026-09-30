@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TaskMonitoring.Api.Configuration;
@@ -37,6 +38,8 @@ public sealed class WebsiteWorkAttentionServiceTests
         Assert.Equal(WebsiteWorkAttentionSeverity.Critical, item.Severity);
         Assert.Equal(2, item.CorrectionCount);
         Assert.Equal(150 * 60L, item.CurrentWorkingSeconds);
+        Assert.Equal(WebsiteWorkAttentionDisposition.Active, item.Management.Disposition);
+        Assert.False(item.Management.IsSuppressed);
         Assert.Contains(item.Reasons, x => x.Type == WebsiteWorkAttentionReasonType.Overdue);
         Assert.Contains(item.Reasons, x => x.Type == WebsiteWorkAttentionReasonType.LongWorking);
         Assert.Contains(item.Reasons, x => x.Type == WebsiteWorkAttentionReasonType.RepeatedCorrection);
@@ -89,8 +92,100 @@ public sealed class WebsiteWorkAttentionServiceTests
 
         Assert.Equal(OperationStatus.Success, result.Status);
         Assert.Equal(2, result.Value!.Total);
+        Assert.Equal(2, result.Value.ActiveTotal);
+        Assert.Equal(0, result.Value.ManagedTotal);
         Assert.Equal(2, result.Value.Critical);
         Assert.Single(result.Value.Items);
+    }
+
+    [Fact]
+    public async Task Attention_acknowledgement_suppresses_until_lifecycle_changes()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var now = new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateDb();
+        var employee = AddEmployee(db, "ATT-A", "Acknowledged Worker");
+        var project = AddProject(db);
+        var task = AddWebsiteWork(db, employee, project, ProjectTaskStatus.ToDo, new DateOnly(2026, 9, 29));
+        AddActivity(task, WebsiteWorkService.ConfiguredAction, new DateTime(2026, 9, 30, 8, 0, 0, DateTimeKind.Utc));
+        AddActivity(task, WebsiteWorkAttentionActionService.AcknowledgedAction, new DateTime(2026, 9, 30, 9, 0, 0, DateTimeKind.Utc), new
+        {
+            actorUserId = employee.UserId,
+            actorEmail = "boss@example.com",
+            note = "I am handling this."
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        var service = CreateService(db, now);
+        var hidden = await service.GetAsync(0, 20, cancellationToken);
+        Assert.Equal(1, hidden.Value!.Total);
+        Assert.Equal(0, hidden.Value.ActiveTotal);
+        Assert.Equal(1, hidden.Value.ManagedTotal);
+        Assert.Empty(hidden.Value.Items);
+
+        var managed = await service.GetAsync(0, 20, true, cancellationToken);
+        var managedItem = Assert.Single(managed.Value!.Items);
+        Assert.True(managedItem.Management.IsSuppressed);
+        Assert.Equal(WebsiteWorkAttentionDisposition.Acknowledged, managedItem.Management.Disposition);
+        Assert.Equal("boss@example.com", managedItem.Management.ActorEmail);
+
+        AddActivity(task, WebsiteWorkService.ConfiguredAction, new DateTime(2026, 9, 30, 10, 0, 0, DateTimeKind.Utc));
+        await db.SaveChangesAsync(cancellationToken);
+
+        var reactivated = await service.GetAsync(0, 20, cancellationToken);
+        var item = Assert.Single(reactivated.Value!.Items);
+        Assert.Equal(WebsiteWorkAttentionDisposition.Active, item.Management.Disposition);
+        Assert.False(item.Management.IsSuppressed);
+    }
+
+    [Fact]
+    public async Task Attention_snooze_and_follow_up_resurface_when_their_due_time_passes()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDb();
+        var project = AddProject(db);
+
+        var snoozedEmployee = AddEmployee(db, "ATT-S", "Snoozed Worker");
+        var snoozedTask = AddWebsiteWork(db, snoozedEmployee, project, ProjectTaskStatus.ToDo, new DateOnly(2026, 9, 29));
+        AddActivity(snoozedTask, WebsiteWorkService.ConfiguredAction, new DateTime(2026, 9, 30, 8, 0, 0, DateTimeKind.Utc));
+        AddActivity(snoozedTask, WebsiteWorkAttentionActionService.SnoozedAction, new DateTime(2026, 9, 30, 11, 0, 0, DateTimeKind.Utc), new
+        {
+            actorUserId = snoozedEmployee.UserId,
+            actorEmail = "boss@example.com",
+            snoozedUntilUtc = new DateTime(2026, 9, 30, 12, 30, 0, DateTimeKind.Utc)
+        });
+
+        var followUpEmployee = AddEmployee(db, "ATT-F", "Follow-up Worker");
+        var followUpTask = AddWebsiteWork(db, followUpEmployee, project, ProjectTaskStatus.ToDo, new DateOnly(2026, 9, 29));
+        AddActivity(followUpTask, WebsiteWorkService.ConfiguredAction, new DateTime(2026, 9, 30, 8, 0, 0, DateTimeKind.Utc));
+        AddActivity(followUpTask, WebsiteWorkAttentionActionService.FollowUpAssignedAction, new DateTime(2026, 9, 30, 11, 0, 0, DateTimeKind.Utc), new
+        {
+            actorUserId = followUpEmployee.UserId,
+            actorEmail = "boss@example.com",
+            note = "Check target proof.",
+            followUpOwnerUserId = followUpEmployee.UserId,
+            followUpOwnerEmail = "manager@example.com",
+            followUpOwnerName = "Manager",
+            followUpDueAtUtc = new DateTime(2026, 9, 30, 12, 30, 0, DateTimeKind.Utc)
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        var beforeDue = await CreateService(db, new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc))
+            .GetAsync(0, 20, true, cancellationToken);
+        Assert.Equal(2, beforeDue.Value!.ManagedTotal);
+        Assert.All(beforeDue.Value.Items, item => Assert.True(item.Management.IsSuppressed));
+
+        var afterDue = await CreateService(db, new DateTime(2026, 9, 30, 13, 0, 0, DateTimeKind.Utc))
+            .GetAsync(0, 20, cancellationToken);
+        Assert.Equal(2, afterDue.Value!.ActiveTotal);
+        Assert.Equal(0, afterDue.Value.ManagedTotal);
+        Assert.Equal(2, afterDue.Value.Items.Count);
+        Assert.Contains(afterDue.Value.Items, item =>
+            item.Management.Disposition == WebsiteWorkAttentionDisposition.Snoozed && !item.Management.IsSuppressed);
+        Assert.Contains(afterDue.Value.Items, item =>
+            item.Management.Disposition == WebsiteWorkAttentionDisposition.FollowUp &&
+            !item.Management.IsSuppressed &&
+            item.Management.FollowUpOwnerEmail == "manager@example.com");
     }
 
     [Fact]
@@ -201,7 +296,7 @@ public sealed class WebsiteWorkAttentionServiceTests
         return task;
     }
 
-    private static void AddActivity(ProjectTask task, string action, DateTime atUtc)
+    private static void AddActivity(ProjectTask task, string action, DateTime atUtc, object? details = null)
     {
         task.Activities.Add(new TaskActivity
         {
@@ -209,7 +304,7 @@ public sealed class WebsiteWorkAttentionServiceTests
             ProjectTask = task,
             ActorUserId = task.AssigneeEmployee?.UserId,
             Action = action,
-            DetailsJson = "{}",
+            DetailsJson = details is null ? "{}" : JsonSerializer.Serialize(details),
             CreatedAtUtc = atUtc
         });
     }
