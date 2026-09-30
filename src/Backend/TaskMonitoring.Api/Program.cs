@@ -67,8 +67,11 @@ if (trustForwardedHeaders)
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<PresenceOptions>(builder.Configuration.GetSection(PresenceOptions.SectionName));
 builder.Services.AddScoped<TaskNotificationInterceptor>();
+builder.Services.AddScoped<SurveyNotificationInterceptor>();
 builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
-    options.UseNpgsql(connectionString).AddInterceptors(serviceProvider.GetRequiredService<TaskNotificationInterceptor>()));
+    options.UseNpgsql(connectionString).AddInterceptors(
+        serviceProvider.GetRequiredService<TaskNotificationInterceptor>(),
+        serviceProvider.GetRequiredService<SurveyNotificationInterceptor>()));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ITokenService, TokenService>();
