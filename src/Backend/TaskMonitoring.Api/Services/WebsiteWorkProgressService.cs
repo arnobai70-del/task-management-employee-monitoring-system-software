@@ -56,7 +56,7 @@ public sealed class WebsiteWorkProgressService(
             .Select(task =>
             {
                 var startedAt = task.Activities
-                    .Where(x => x.Action == WebsiteWorkService.StartedAction)
+                    .Where(x => x.Action == WebsiteWorkService.StartedAction || x.Action == WebsiteWorkReviewService.ReopenedAction)
                     .OrderByDescending(x => x.CreatedAtUtc)
                     .Select(x => (DateTime?)x.CreatedAtUtc)
                     .FirstOrDefault() ?? task.UpdatedAtUtc;
