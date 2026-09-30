@@ -40,7 +40,7 @@ export default function WebsiteWorkRealtimeNotice() {
     });
 
     void connection.start().catch(() => {
-      // Durable completion history remains available on the Website Work page.
+      // Durable completion submission history remains available on the Website Work page.
     });
 
     return () => {
@@ -54,7 +54,7 @@ export default function WebsiteWorkRealtimeNotice() {
   return (
     <aside className="realtime-toast" role="status" aria-live="polite">
       <div>
-        <strong>Work completed</strong>
+        <strong>Completion submitted</strong>
         <span>{latest.message}</span>
         <small>{latest.projectName} · {latest.employeeCode}</small>
       </div>
