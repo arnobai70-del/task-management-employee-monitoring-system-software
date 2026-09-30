@@ -5,6 +5,7 @@ param(
     [string]$ReleaseDirectory = $PSScriptRoot,
     [string]$UpdateManifestUrl,
     [string]$PublisherCertificateSha256,
+    [string]$AgentUpdateEnrollmentKey,
 
     [ValidateRange(15, 3600)]
     [int]$HeartbeatSeconds = 60,
@@ -39,7 +40,15 @@ $manifest = Read-TaskMonitoringReleaseManifest -Path $manifestPath
 $packagePath = Join-Path $resolvedReleaseDirectory ([string]$manifest.package.file)
 $updaterSource = Join-Path $resolvedReleaseDirectory 'updater'
 $updaterSourceExe = Join-Path $updaterSource 'TaskMonitoring.EmployeeUpdater.exe'
+$centralRunnerSource = Join-Path $resolvedReleaseDirectory 'run-central-agent-update.ps1'
+$centralUpdatesEnabled = -not [string]::IsNullOrWhiteSpace($AgentUpdateEnrollmentKey)
 
+if ($centralUpdatesEnabled -and $DisableAutoUpdate) {
+    throw 'AgentUpdateEnrollmentKey cannot be used together with -DisableAutoUpdate.'
+}
+if ($centralUpdatesEnabled -and -not (Test-Path $centralRunnerSource -PathType Leaf)) {
+    throw "Central update runner was not found: $centralRunnerSource"
+}
 if (-not (Test-Path $packagePath -PathType Leaf)) {
     throw "Runtime package was not found: $packagePath"
 }
@@ -104,6 +113,10 @@ $statePath = Join-Path $ProgramDataRoot 'install-state.json'
 $backupStatePath = Join-Path $backupRoot 'install-state.json'
 $updateSettingsPath = Join-Path $ProgramDataRoot 'update-settings.json'
 $backupUpdateSettingsPath = Join-Path $backupRoot 'update-settings.json'
+$deviceSecretPath = Join-Path $ProgramDataRoot 'agent-update-device.json'
+$deviceIdentityPath = Join-Path $ProgramDataRoot 'agent-update-device-id.json'
+$backupDeviceSecretPath = Join-Path $backupRoot 'agent-update-device.json'
+$backupDeviceIdentityPath = Join-Path $backupRoot 'agent-update-device-id.json'
 
 New-Item -ItemType Directory -Force -Path $stagingRoot, $runtimeStage, $backupRoot, $logsRoot | Out-Null
 Expand-Archive -Path $packagePath -DestinationPath $runtimeStage -Force
@@ -122,6 +135,9 @@ if (-not $AllowUnsignedDevelopmentBuild) {
     Assert-TaskMonitoringAuthenticodeSignature -Path $desktopExe -ExpectedPublisherCertificateSha256 $PublisherCertificateSha256
     Assert-TaskMonitoringAuthenticodeSignature -Path $serviceExe -ExpectedPublisherCertificateSha256 $PublisherCertificateSha256
     Assert-TaskMonitoringAuthenticodeSignature -Path $updaterSourceExe -ExpectedPublisherCertificateSha256 $PublisherCertificateSha256
+    if ($centralUpdatesEnabled) {
+        Assert-TaskMonitoringAuthenticodeSignature -Path $centralRunnerSource -ExpectedPublisherCertificateSha256 $PublisherCertificateSha256
+    }
 }
 
 $serviceExisted = $null -ne (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)
@@ -147,6 +163,12 @@ try {
     }
     if (Test-Path $updateSettingsPath -PathType Leaf) {
         Copy-Item -Path $updateSettingsPath -Destination $backupUpdateSettingsPath -Force
+    }
+    if (Test-Path $deviceSecretPath -PathType Leaf) {
+        Copy-Item -Path $deviceSecretPath -Destination $backupDeviceSecretPath -Force
+    }
+    if (Test-Path $deviceIdentityPath -PathType Leaf) {
+        Copy-Item -Path $deviceIdentityPath -Destination $backupDeviceIdentityPath -Force
     }
 
     New-Item -ItemType Directory -Force -Path $InstallRoot, $updaterRoot, $maintenanceRoot | Out-Null
@@ -205,6 +227,9 @@ try {
 
     Copy-Item -Path (Join-Path $PSScriptRoot 'uninstall-employee-windows.ps1') -Destination (Join-Path $maintenanceRoot 'uninstall-employee-windows.ps1') -Force
     Copy-Item -Path $commonPath -Destination (Join-Path $maintenanceRoot 'deployment-common.ps1') -Force
+    if ($centralUpdatesEnabled) {
+        Copy-Item -Path $centralRunnerSource -Destination (Join-Path $maintenanceRoot 'run-central-agent-update.ps1') -Force
+    }
 
     $installedServiceExe = Join-Path $InstallRoot 'Service\TaskMonitoring.EmployeeService.exe'
     if ($serviceExisted) {
@@ -226,6 +251,36 @@ try {
 
     Start-TaskMonitoringEmployeeService -ServiceName $serviceName
 
+    if ($centralUpdatesEnabled) {
+        $registrationUri = [Uri]::new($serverUri.AbsoluteUri.TrimEnd('/') + '/api/agent-updates/device/register')
+        $registrationHeaders = @{ 'X-Agent-Enrollment-Key' = $AgentUpdateEnrollmentKey }
+        $registrationBody = @{
+            machineName = $env:COMPUTERNAME
+            updaterVersion = $null
+        } | ConvertTo-Json -Depth 4
+        try {
+            $registration = Invoke-RestMethod -Method Post -Uri $registrationUri -Headers $registrationHeaders -ContentType 'application/json' -Body $registrationBody -TimeoutSec 20
+        }
+        catch {
+            throw "Central agent-update enrollment failed. $($_.Exception.Message)"
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$registration.deviceId) -or [string]::IsNullOrWhiteSpace([string]$registration.deviceToken)) {
+            throw 'Central agent-update enrollment returned an incomplete device identity.'
+        }
+
+        $deviceSecret = [ordered]@{
+            deviceId = [string]$registration.deviceId
+            deviceToken = [string]$registration.deviceToken
+            serverUrl = $serverUri.AbsoluteUri.TrimEnd('/')
+        }
+        Write-TaskMonitoringJson -Value $deviceSecret -Path $deviceSecretPath
+        & icacls.exe $deviceSecretPath /inheritance:r /grant:r '*S-1-5-18:(F)' '*S-1-5-32-544:(F)' | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to protect the central update device credential file.' }
+
+        $deviceIdentity = [ordered]@{ deviceId = [string]$registration.deviceId }
+        Write-TaskMonitoringJson -Value $deviceIdentity -Path $deviceIdentityPath
+    }
+
     $shortcutTarget = Join-Path $InstallRoot 'Desktop\TaskMonitoring.EmployeeDesktop.exe'
     $shell = New-Object -ComObject WScript.Shell
     $startMenuDirectory = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'
@@ -243,9 +298,16 @@ try {
     }
 
     if (-not $DisableAutoUpdate) {
-        $updaterExe = Join-Path $updaterRoot 'TaskMonitoring.EmployeeUpdater.exe'
-        $taskCommand = ('"{0}" --settings "{1}"' -f $updaterExe, $updateSettingsPath)
-        & schtasks.exe /Create /TN $taskName /TR $taskCommand /SC HOURLY /MO 4 /RU SYSTEM /RL HIGHEST /F | Out-Null
+        if ($centralUpdatesEnabled) {
+            $centralRunner = Join-Path $maintenanceRoot 'run-central-agent-update.ps1'
+            $taskCommand = ('powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -ProgramDataRoot "{1}"' -f $centralRunner, $ProgramDataRoot)
+            & schtasks.exe /Create /TN $taskName /TR $taskCommand /SC HOURLY /MO 1 /RU SYSTEM /RL HIGHEST /F | Out-Null
+        }
+        else {
+            $updaterExe = Join-Path $updaterRoot 'TaskMonitoring.EmployeeUpdater.exe'
+            $taskCommand = ('"{0}" --settings "{1}"' -f $updaterExe, $updateSettingsPath)
+            & schtasks.exe /Create /TN $taskName /TR $taskCommand /SC HOURLY /MO 4 /RU SYSTEM /RL HIGHEST /F | Out-Null
+        }
         if ($LASTEXITCODE -ne 0) { throw 'Failed to create the automatic update scheduled task.' }
     }
 
@@ -264,6 +326,7 @@ try {
     Write-Host "Server: $($serverUri.AbsoluteUri.TrimEnd('/'))"
     Write-Host "Install root: $InstallRoot"
     Write-Host "Auto update: $((-not $DisableAutoUpdate).ToString().ToLowerInvariant())"
+    Write-Host "Central rollout control: $($centralUpdatesEnabled.ToString().ToLowerInvariant())"
 }
 catch {
     Write-Warning "Installation failed. Attempting rollback: $($_.Exception.Message)"
@@ -304,6 +367,18 @@ catch {
     }
     else {
         Remove-Item -Force $updateSettingsPath -ErrorAction SilentlyContinue
+    }
+    if (Test-Path $backupDeviceSecretPath -PathType Leaf) {
+        Copy-Item -Path $backupDeviceSecretPath -Destination $deviceSecretPath -Force
+    }
+    elseif ($centralUpdatesEnabled) {
+        Remove-Item -Force $deviceSecretPath -ErrorAction SilentlyContinue
+    }
+    if (Test-Path $backupDeviceIdentityPath -PathType Leaf) {
+        Copy-Item -Path $backupDeviceIdentityPath -Destination $deviceIdentityPath -Force
+    }
+    elseif ($centralUpdatesEnabled) {
+        Remove-Item -Force $deviceIdentityPath -ErrorAction SilentlyContinue
     }
 
     if ($serviceExisted) {
