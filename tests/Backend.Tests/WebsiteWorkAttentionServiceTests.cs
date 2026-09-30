@@ -36,7 +36,7 @@ public sealed class WebsiteWorkAttentionServiceTests
         var item = Assert.Single(response.Items);
         Assert.Equal(WebsiteWorkAttentionSeverity.Critical, item.Severity);
         Assert.Equal(2, item.CorrectionCount);
-        Assert.Equal(150 * 60, item.CurrentWorkingSeconds);
+        Assert.Equal(150 * 60L, item.CurrentWorkingSeconds);
         Assert.Contains(item.Reasons, x => x.Type == WebsiteWorkAttentionReasonType.Overdue);
         Assert.Contains(item.Reasons, x => x.Type == WebsiteWorkAttentionReasonType.LongWorking);
         Assert.Contains(item.Reasons, x => x.Type == WebsiteWorkAttentionReasonType.RepeatedCorrection);
@@ -63,7 +63,7 @@ public sealed class WebsiteWorkAttentionServiceTests
         Assert.Equal(OperationStatus.Success, result.Status);
         var item = Assert.Single(result.Value!.Items);
         Assert.Equal(WebsiteWorkAttentionSeverity.High, item.Severity);
-        Assert.Equal(120 * 60, item.PendingReviewSeconds);
+        Assert.Equal(120 * 60L, item.PendingReviewSeconds);
         Assert.Contains(item.Reasons, x => x.Type == WebsiteWorkAttentionReasonType.PendingReview);
         Assert.DoesNotContain(item.Reasons, x => x.Type == WebsiteWorkAttentionReasonType.LongWorking);
     }
