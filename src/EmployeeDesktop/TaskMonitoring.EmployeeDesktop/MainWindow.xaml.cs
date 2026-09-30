@@ -176,6 +176,7 @@ public partial class MainWindow : Window
             MessageText.Text = $"New notification: {notification.Title}";
             await RefreshNotificationsAsync();
             await RefreshTasksAsync();
+            await RefreshSurveysAsync();
         });
     }
 
@@ -192,6 +193,9 @@ public partial class MainWindow : Window
 
     private async void RefreshTasksButton_Click(object sender, RoutedEventArgs e)
         => await RunAsync(RefreshTasksAsync);
+
+    private async void RefreshSurveysButton_Click(object sender, RoutedEventArgs e)
+        => await RunAsync(RefreshSurveysAsync);
 
     private async void RefreshAccessButton_Click(object sender, RoutedEventArgs e)
         => await RunAsync(RefreshAccessAsync);
@@ -215,6 +219,34 @@ public partial class MainWindow : Window
             await _api.MarkNotificationReadAsync(notification.Id);
             await RefreshNotificationsAsync();
             MessageText.Text = "Notification marked as read.";
+        });
+    }
+
+    private async void OpenSurveyButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (SurveyGrid.SelectedItem is not ExternalSurveyAssignmentResponse survey)
+        {
+            MessageText.Text = "Select a survey assignment first.";
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            if (!survey.IsActive)
+            {
+                throw new InvalidOperationException("The selected survey assignment is inactive.");
+            }
+
+            var confirmed = await _api.RecordSurveyLinkOpenAsync(survey.Id);
+            if (!Uri.TryCreate(confirmed.Url, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new InvalidOperationException("The selected survey URL is invalid.");
+            }
+
+            Process.Start(new ProcessStartInfo { FileName = confirmed.Url, UseShellExecute = true });
+            MessageText.Text = $"Opened survey website: {confirmed.Title}. Complete the survey on the external website.";
+            await RefreshSurveysAsync();
         });
     }
 
@@ -273,6 +305,7 @@ public partial class MainWindow : Window
     {
         await RefreshAttendanceAsync();
         await RefreshTasksAsync();
+        await RefreshSurveysAsync();
         await RefreshAccessAsync();
         await RefreshNotificationsAsync();
     }
@@ -321,6 +354,13 @@ public partial class MainWindow : Window
         TasksGrid.ItemsSource = result.Items;
     }
 
+    private async Task RefreshSurveysAsync()
+    {
+        var result = await _api.GetMySurveyLinksAsync(IncludeInactiveSurveysBox.IsChecked == true);
+        SurveyGrid.ItemsSource = result;
+        SurveyCountText.Text = $"{result.Count} survey assignment(s)";
+    }
+
     private async Task RefreshAccessAsync()
     {
         var result = await _api.GetMyAccessAsync(IncludeInactiveAccessBox.IsChecked == true);
@@ -340,6 +380,8 @@ public partial class MainWindow : Window
     {
         AttendanceStatusText.Text = "Sign in to load your attendance status.";
         TasksGrid.ItemsSource = null;
+        SurveyGrid.ItemsSource = null;
+        SurveyCountText.Text = "0 survey assignment(s)";
         RdpGrid.ItemsSource = null;
         IpGrid.ItemsSource = null;
         WebsiteGrid.ItemsSource = null;

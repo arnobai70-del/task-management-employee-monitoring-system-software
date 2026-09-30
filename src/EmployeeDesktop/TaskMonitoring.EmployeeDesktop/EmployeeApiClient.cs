@@ -74,6 +74,23 @@ public sealed class EmployeeApiClient : IDisposable
             $"api/me/access?includeInactive={includeInactive.ToString().ToLowerInvariant()}",
             cancellationToken);
 
+    public Task<IReadOnlyCollection<ExternalSurveyAssignmentResponse>> GetMySurveyLinksAsync(
+        bool includeInactive = false,
+        CancellationToken cancellationToken = default)
+        => GetAuthorizedAsync<IReadOnlyCollection<ExternalSurveyAssignmentResponse>>(
+            $"api/me/survey-links?includeInactive={includeInactive.ToString().ToLowerInvariant()}",
+            cancellationToken);
+
+    public async Task<ExternalSurveyAssignmentResponse> RecordSurveyLinkOpenAsync(
+        Guid surveyLinkId,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await SendAuthorizedAsync(HttpMethod.Post, $"api/me/survey-links/{surveyLinkId}/open", null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ExternalSurveyAssignmentResponse>(JsonOptions, cancellationToken)
+               ?? throw new InvalidOperationException("The server returned an empty survey assignment response.");
+    }
+
     public async Task<EmployeePresenceResponse> RecordPresenceHeartbeatAsync(CancellationToken cancellationToken = default)
     {
         using var response = await SendAuthorizedAsync(
@@ -306,6 +323,39 @@ public sealed record EmployeeAccessWorkspaceResponse(IReadOnlyCollection<RdpAssi
 public sealed record RdpAssignmentResponse(Guid Id, Guid EmployeeId, string EmployeeCode, string EmployeeName, string Name, string Host, int Port, string? UsernameReference, string? CredentialReference, DateOnly? ValidFrom, DateOnly? ExpiresOn, bool IsActive, string? Notes, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 public sealed record IpAssignmentResponse(Guid Id, Guid EmployeeId, string EmployeeCode, string EmployeeName, string IpAddress, string DeviceName, string? MacAddress, string Status, DateOnly? AssignedOn, DateOnly? ReleasedOn, string? Notes, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 public sealed record WebsiteAssignmentResponse(Guid Id, Guid EmployeeId, string EmployeeCode, string EmployeeName, string Name, string Url, string? UsernameReference, string AccessLevel, DateOnly? StartsOn, DateOnly? ExpiresOn, bool IsActive, string? Notes, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+public sealed record ExternalSurveyAssignmentResponse(
+    Guid Id,
+    Guid EmployeeId,
+    string EmployeeCode,
+    string EmployeeName,
+    string Title,
+    string Url,
+    DateOnly? StartsOn,
+    DateOnly? DueDate,
+    bool IsActive,
+    string? Instructions,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc)
+{
+    public string Availability
+    {
+        get
+        {
+            if (!IsActive)
+            {
+                return "Inactive";
+            }
+
+            var today = DateOnly.FromDateTime(DateTime.Now);
+            if (StartsOn.HasValue && StartsOn.Value > today)
+            {
+                return "Scheduled";
+            }
+
+            return DueDate.HasValue && DueDate.Value < today ? "Overdue" : "Ready";
+        }
+    }
+}
 
 public sealed record AttendanceStateResponse(string State, WorkSessionResponse? Session)
 {
