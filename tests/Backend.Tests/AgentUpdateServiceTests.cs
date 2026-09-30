@@ -11,6 +11,49 @@ namespace Backend.Tests;
 public sealed class AgentUpdateServiceTests
 {
     [Fact]
+    public async Task Enrollment_rejects_invalid_key_authenticates_device_and_never_persists_plaintext_token()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateReleaseManifest("2.0.0");
+        try
+        {
+            await using var db = CreateDb();
+            var service = CreateService(db, new MutableTimeProvider(new DateTime(2026, 10, 1, 5, 0, 0, DateTimeKind.Utc)), root.ManifestPath);
+
+            var rejected = await service.RegisterDeviceAsync(
+                new AgentUpdateDeviceRegisterRequest("PC-SECURE", "1.0.0"),
+                "wrong-enrollment-key",
+                cancellationToken);
+            Assert.Equal(OperationStatus.Invalid, rejected.Status);
+            Assert.Equal("agent_update_enrollment_invalid", rejected.ErrorCode);
+            Assert.Empty(db.AuditLogs);
+
+            var registered = await service.RegisterDeviceAsync(
+                new AgentUpdateDeviceRegisterRequest("PC-SECURE", "1.0.0"),
+                EnrollmentKey,
+                cancellationToken);
+            Assert.Equal(OperationStatus.Success, registered.Status);
+            Assert.False(string.IsNullOrWhiteSpace(registered.Value!.DeviceToken));
+
+            var registrationLog = Assert.Single(db.AuditLogs.Where(x => x.Action == AgentUpdateService.DeviceRegisteredAction));
+            Assert.DoesNotContain(registered.Value.DeviceToken, registrationLog.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+
+            var wrongToken = await service.GetDevicePlanAsync(registered.Value.DeviceId, "not-the-device-token", cancellationToken);
+            Assert.Equal(OperationStatus.Invalid, wrongToken.Status);
+            Assert.Equal("agent_update_device_auth_invalid", wrongToken.ErrorCode);
+
+            var validToken = await service.GetDevicePlanAsync(registered.Value.DeviceId, registered.Value.DeviceToken, cancellationToken);
+            Assert.Equal(OperationStatus.Success, validToken.Status);
+            Assert.True(validToken.Value!.IsManaged);
+            Assert.False(validToken.Value.EligibleNow);
+        }
+        finally
+        {
+            Directory.Delete(root.Directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Managed_device_can_bind_receive_rollout_and_complete_target_version()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -80,8 +123,10 @@ public sealed class AgentUpdateServiceTests
             var rollout = Assert.Single(overview.Rollouts);
             Assert.Equal(AgentUpdateRolloutStatus.Completed, rollout.Status);
             Assert.Equal(1, rollout.Installed);
+            Assert.True(rollout.CanPromote);
             Assert.Equal(1, overview.EnrolledDevices);
             Assert.Equal(1, overview.BoundDevices);
+            Assert.Contains(db.AuditLogs, x => x.Action == AgentUpdateService.RolloutCompletedAction);
         }
         finally
         {
@@ -90,14 +135,142 @@ public sealed class AgentUpdateServiceTests
     }
 
     [Fact]
-    public async Task Pilot_must_be_healthy_before_general_promotion_and_overlapping_targets_are_rejected()
+    public async Task Department_targeting_pilot_limit_invalid_targets_and_waiting_device_state_are_enforced()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateReleaseManifest("4.0.0");
+        try
+        {
+            await using var db = CreateDb();
+            var now = new DateTime(2026, 10, 1, 6, 30, 0, DateTimeKind.Utc);
+            var department = AddDepartment(db, "SURVEY", "Survey Team");
+            var employeeOne = AddEmployee(db, "EMP-001", "Worker One", "worker1@example.com", department);
+            var employeeTwo = AddEmployee(db, "EMP-002", "Worker Two", "worker2@example.com", department);
+            var manager = AddUser(db, "manager@example.com");
+            for (var index = 3; index <= 21; index++)
+            {
+                AddEmployee(db, $"EMP-{index:000}", $"Worker {index}", $"worker{index}@example.com");
+            }
+            await db.SaveChangesAsync(cancellationToken);
+            var service = CreateService(db, new MutableTimeProvider(now), root.ManifestPath);
+
+            var device = await service.RegisterDeviceAsync(new AgentUpdateDeviceRegisterRequest("PC-01", "1.0.0"), EnrollmentKey, cancellationToken);
+            await service.ObserveDeviceAsync(new RequestActor(employeeOne.UserId, null, null), device.Value!.DeviceId, "PC-01", "1.0.0", "1.0.0", cancellationToken);
+
+            var invalidTarget = await service.CreateRolloutAsync(
+                new AgentUpdateCreateRolloutRequest("Invalid", null, AgentUpdateRolloutStage.General, false, [], [Guid.NewGuid()], null, null, null),
+                new RequestActor(manager.Id, null, null),
+                cancellationToken);
+            Assert.Equal(OperationStatus.Invalid, invalidTarget.Status);
+            Assert.Equal("rollout_targets_required", invalidTarget.ErrorCode);
+
+            var tooLargePilot = await service.CreateRolloutAsync(
+                new AgentUpdateCreateRolloutRequest("Too large", null, AgentUpdateRolloutStage.Pilot, true, [], [], null, null, null),
+                new RequestActor(manager.Id, null, null),
+                cancellationToken);
+            Assert.Equal(OperationStatus.Invalid, tooLargePilot.Status);
+            Assert.Equal("pilot_target_limit", tooLargePilot.ErrorCode);
+
+            var departmentRollout = await service.CreateRolloutAsync(
+                new AgentUpdateCreateRolloutRequest("Department", null, AgentUpdateRolloutStage.General, false, [department.Id], [], null, null, null),
+                new RequestActor(manager.Id, null, null),
+                cancellationToken);
+            Assert.Equal(OperationStatus.Success, departmentRollout.Status);
+            Assert.Equal(2, departmentRollout.Value!.TargetEmployees);
+            Assert.Equal(1, departmentRollout.Value.Pending);
+            Assert.Equal(1, departmentRollout.Value.WaitingForDevice);
+            Assert.Contains(departmentRollout.Value.Assignments, x => x.EmployeeId == employeeTwo.Id && x.Status == AgentUpdateAssignmentStatus.WaitingForDevice);
+        }
+        finally
+        {
+            Directory.Delete(root.Directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Maintenance_pause_resume_cancel_and_device_status_states_are_enforced()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateReleaseManifest("5.0.0");
+        try
+        {
+            await using var db = CreateDb();
+            var now = new DateTime(2026, 10, 1, 7, 0, 0, DateTimeKind.Utc);
+            var clock = new MutableTimeProvider(now);
+            var employee = AddEmployee(db, "EMP-001", "Worker One", "worker@example.com");
+            var manager = AddUser(db, "manager@example.com");
+            await db.SaveChangesAsync(cancellationToken);
+            var service = CreateService(db, clock, root.ManifestPath);
+            var device = await service.RegisterDeviceAsync(new AgentUpdateDeviceRegisterRequest("PC-01", "1.0.0"), EnrollmentKey, cancellationToken);
+            await service.ObserveDeviceAsync(new RequestActor(employee.UserId, null, null), device.Value!.DeviceId, "PC-01", "1.0.0", "1.0.0", cancellationToken);
+
+            var rollout = await service.CreateRolloutAsync(
+                new AgentUpdateCreateRolloutRequest(
+                    "Windowed rollout", null, AgentUpdateRolloutStage.General, false, [], [employee.Id],
+                    now.AddHours(1), now.AddHours(3), null),
+                new RequestActor(manager.Id, null, null),
+                cancellationToken);
+            Assert.Equal(OperationStatus.Success, rollout.Status);
+
+            var beforeWindow = await service.GetDevicePlanAsync(device.Value.DeviceId, device.Value.DeviceToken, cancellationToken);
+            Assert.False(beforeWindow.Value!.EligibleNow);
+            Assert.Contains("not started", beforeWindow.Value.Reason, StringComparison.OrdinalIgnoreCase);
+
+            var paused = await service.PauseAsync(rollout.Value!.Id, new AgentUpdateRolloutActionRequest("maintenance hold"), new RequestActor(manager.Id, null, null), cancellationToken);
+            Assert.Equal(AgentUpdateRolloutStatus.Paused, paused.Value!.Status);
+            var pausedPlan = await service.GetDevicePlanAsync(device.Value.DeviceId, device.Value.DeviceToken, cancellationToken);
+            Assert.False(pausedPlan.Value!.EligibleNow);
+            Assert.Contains("paused", pausedPlan.Value.Reason, StringComparison.OrdinalIgnoreCase);
+
+            var resumed = await service.ResumeAsync(rollout.Value.Id, new AgentUpdateRolloutActionRequest(null), new RequestActor(manager.Id, null, null), cancellationToken);
+            Assert.Equal(AgentUpdateRolloutStatus.Active, resumed.Value!.Status);
+            clock.UtcNow = now.AddHours(2);
+            var eligible = await service.GetDevicePlanAsync(device.Value.DeviceId, device.Value.DeviceToken, cancellationToken);
+            Assert.True(eligible.Value!.EligibleNow);
+
+            foreach (var state in new[]
+                     {
+                         AgentUpdateAssignmentStatus.Deferred,
+                         AgentUpdateAssignmentStatus.Downloading,
+                         AgentUpdateAssignmentStatus.Failed,
+                         AgentUpdateAssignmentStatus.RolledBack
+                     })
+            {
+                var recorded = await service.RecordDeviceStatusAsync(
+                    device.Value.DeviceId,
+                    device.Value.DeviceToken,
+                    new AgentUpdateDeviceStatusRequest(rollout.Value.Id, state, "1.0.0", $"state={state}"),
+                    cancellationToken);
+                Assert.Equal(OperationStatus.Success, recorded.Status);
+                var overview = await service.GetOverviewAsync(cancellationToken);
+                Assert.Equal(state, overview.Rollouts.Single().Assignments.Single().Status);
+            }
+
+            var cancelled = await service.CancelAsync(rollout.Value.Id, new AgentUpdateRolloutActionRequest("cancelled safely"), new RequestActor(manager.Id, null, null), cancellationToken);
+            Assert.Equal(AgentUpdateRolloutStatus.Cancelled, cancelled.Value!.Status);
+            var cancelledPlan = await service.GetDevicePlanAsync(device.Value.DeviceId, device.Value.DeviceToken, cancellationToken);
+            Assert.False(cancelledPlan.Value!.EligibleNow);
+            Assert.Null(cancelledPlan.Value.RolloutId);
+
+            Assert.Contains(db.AuditLogs, x => x.Action == AgentUpdateService.RolloutPausedAction);
+            Assert.Contains(db.AuditLogs, x => x.Action == AgentUpdateService.RolloutResumedAction);
+            Assert.Contains(db.AuditLogs, x => x.Action == AgentUpdateService.RolloutCancelledAction);
+        }
+        finally
+        {
+            Directory.Delete(root.Directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Completed_healthy_pilot_can_be_promoted_and_overlapping_targets_are_rejected()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var root = CreateReleaseManifest("3.0.0");
         try
         {
             await using var db = CreateDb();
-            var now = new DateTime(2026, 10, 1, 7, 0, 0, DateTimeKind.Utc);
+            var now = new DateTime(2026, 10, 1, 8, 0, 0, DateTimeKind.Utc);
             var employeeOne = AddEmployee(db, "EMP-001", "Worker One", "worker1@example.com");
             var employeeTwo = AddEmployee(db, "EMP-002", "Worker Two", "worker2@example.com");
             var manager = AddUser(db, "manager@example.com");
@@ -140,7 +313,53 @@ public sealed class AgentUpdateServiceTests
                 new AgentUpdateDeviceStatusRequest(pilot.Value.Id, AgentUpdateAssignmentStatus.Installed, "3.0.0", null),
                 cancellationToken);
             var completedOverview = await service.GetOverviewAsync(cancellationToken);
-            Assert.Equal(AgentUpdateRolloutStatus.Completed, completedOverview.Rollouts.Single().Status);
+            var completedPilot = completedOverview.Rollouts.Single();
+            Assert.Equal(AgentUpdateRolloutStatus.Completed, completedPilot.Status);
+            Assert.True(completedPilot.CanPromote);
+
+            var promoted = await service.PromoteAsync(
+                pilot.Value.Id,
+                new AgentUpdatePromoteRolloutRequest(false, [], [employeeTwo.Id], "Pilot verified; expanding."),
+                new RequestActor(manager.Id, null, null),
+                cancellationToken);
+            Assert.Equal(OperationStatus.Success, promoted.Status);
+            Assert.Equal(AgentUpdateRolloutStage.General, promoted.Value!.Stage);
+            Assert.Equal(AgentUpdateRolloutStatus.Active, promoted.Value.Status);
+            Assert.Equal(2, promoted.Value.TargetEmployees);
+            Assert.Equal(1, promoted.Value.Installed);
+            Assert.Equal(1, promoted.Value.WaitingForDevice);
+            Assert.Contains(db.AuditLogs, x => x.Action == AgentUpdateService.RolloutPromotedAction);
+        }
+        finally
+        {
+            Directory.Delete(root.Directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Rollout_with_already_current_device_completes_without_waiting_for_updater_status()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateReleaseManifest("6.0.0");
+        try
+        {
+            await using var db = CreateDb();
+            var now = new DateTime(2026, 10, 1, 8, 30, 0, DateTimeKind.Utc);
+            var employee = AddEmployee(db, "EMP-001", "Worker One", "worker@example.com");
+            var manager = AddUser(db, "manager@example.com");
+            await db.SaveChangesAsync(cancellationToken);
+            var service = CreateService(db, new MutableTimeProvider(now), root.ManifestPath);
+            var device = await service.RegisterDeviceAsync(new AgentUpdateDeviceRegisterRequest("PC-01", "1.0.0"), EnrollmentKey, cancellationToken);
+            await service.ObserveDeviceAsync(new RequestActor(employee.UserId, null, null), device.Value!.DeviceId, "PC-01", "6.0.0", "1.0.0", cancellationToken);
+
+            var rollout = await service.CreateRolloutAsync(
+                new AgentUpdateCreateRolloutRequest("Already current", null, AgentUpdateRolloutStage.General, false, [], [employee.Id], null, null, null),
+                new RequestActor(manager.Id, null, null),
+                cancellationToken);
+
+            Assert.Equal(OperationStatus.Success, rollout.Status);
+            Assert.Equal(AgentUpdateRolloutStatus.Completed, rollout.Value!.Status);
+            Assert.Equal(1, rollout.Value.Installed);
         }
         finally
         {
@@ -156,7 +375,7 @@ public sealed class AgentUpdateServiceTests
         try
         {
             await using var db = CreateDb();
-            var now = new DateTime(2026, 10, 1, 8, 0, 0, DateTimeKind.Utc);
+            var now = new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc);
             var clock = new MutableTimeProvider(now);
             var employee = AddEmployee(db, "EMP-001", "Worker One", "worker@example.com");
             var manager = AddUser(db, "manager@example.com");
@@ -237,13 +456,29 @@ public sealed class AgentUpdateServiceTests
             .UseInMemoryDatabase($"agent-updates-{Guid.NewGuid():N}")
             .Options);
 
-    private static Employee AddEmployee(AppDbContext db, string code, string name, string email)
+    private static Department AddDepartment(AppDbContext db, string code, string name)
+    {
+        var department = new Department
+        {
+            Code = code,
+            NormalizedCode = code.ToUpperInvariant(),
+            Name = name,
+            NormalizedName = name.ToUpperInvariant(),
+            IsActive = true
+        };
+        db.Departments.Add(department);
+        return department;
+    }
+
+    private static Employee AddEmployee(AppDbContext db, string code, string name, string email, Department? department = null)
     {
         var user = AddUser(db, email);
         var employee = new Employee
         {
             User = user,
             UserId = user.Id,
+            Department = department,
+            DepartmentId = department?.Id,
             EmployeeCode = code,
             NormalizedEmployeeCode = code.ToUpperInvariant(),
             FullName = name,
