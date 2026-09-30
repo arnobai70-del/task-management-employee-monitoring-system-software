@@ -12,7 +12,7 @@ fi
 
 install -d -o app -g app -m 0700 "$target_dir"
 install -d -o app -g app -m 0750 "$operations_dir"
-for key in ConnectionStrings__DefaultConnection Jwt__SigningKey; do
+for key in ConnectionStrings__DefaultConnection Jwt__SigningKey AgentUpdates__EnrollmentKey; do
   source_path="$source_dir/$key"
   target_path="$target_dir/$key"
   if [ ! -s "$source_path" ]; then
