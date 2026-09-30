@@ -55,7 +55,7 @@ function kindLabel(kind: AdminNotificationKind): string {
   return 'Changed';
 }
 
-export default function AdminNotificationsPage() {
+export default function AdminNotificationsPage({ embedded = false }: { embedded?: boolean }) {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<PagedResponse<AdminNotification> | null>(null);
@@ -125,26 +125,36 @@ export default function AdminNotificationsPage() {
   const pageCount = Math.max(1, Math.ceil((data?.totalCount ?? 0) / 50));
 
   return (
-    <>
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Administration</p>
-          <h1>Notifications</h1>
-          <p className="muted">Durable manager alerts stay here even when you were offline when the realtime event occurred.</p>
+    <section id="notifications">
+      {embedded ? (
+        <div className="panel-heading" style={{ marginBottom: 14 }}>
+          <div>
+            <h2>Notification Center</h2>
+            <p>Durable manager alerts remain available even if realtime delivery was missed while you were offline.</p>
+          </div>
         </div>
-        <div className="header-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              checked={unreadOnly}
-              onChange={event => { setUnreadOnly(event.target.checked); setPage(1); }}
-            /> Unread only
-          </label>
-          <button className="ghost-button" type="button" onClick={() => void markAllRead()} disabled={busyId === 'all' || summary.unread === 0}>
-            {busyId === 'all' ? 'Updating…' : 'Mark all read'}
-          </button>
-          <button className="ghost-button" type="button" onClick={() => void load(true)}>Refresh</button>
+      ) : (
+        <div className="page-header">
+          <div>
+            <p className="eyebrow">Administration</p>
+            <h1>Notifications</h1>
+            <p className="muted">Durable manager alerts stay here even when you were offline when the realtime event occurred.</p>
+          </div>
         </div>
+      )}
+
+      <div className="header-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+        <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={unreadOnly}
+            onChange={event => { setUnreadOnly(event.target.checked); setPage(1); }}
+          /> Unread only
+        </label>
+        <button className="ghost-button" type="button" onClick={() => void markAllRead()} disabled={busyId === 'all' || summary.unread === 0}>
+          {busyId === 'all' ? 'Updating…' : 'Mark all read'}
+        </button>
+        <button className="ghost-button" type="button" onClick={() => void load(true)}>Refresh</button>
       </div>
 
       <section className="metric-grid">
@@ -207,6 +217,6 @@ export default function AdminNotificationsPage() {
           </div>
         )}
       </article>
-    </>
+    </section>
   );
 }
