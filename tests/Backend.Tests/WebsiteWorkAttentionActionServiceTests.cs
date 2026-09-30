@@ -99,6 +99,103 @@ public sealed class WebsiteWorkAttentionActionServiceTests
         Assert.Equal(manager.Id, item.Management.FollowUpOwnerUserId);
         Assert.Equal("manager@example.com", item.Management.FollowUpOwnerEmail);
         Assert.Equal("Check the target.", item.Management.Note);
+        Assert.Equal(1, managed.Value.PendingFollowUpTotal);
+        Assert.Equal(0, managed.Value.OverdueFollowUpTotal);
+    }
+
+    [Fact]
+    public async Task My_follow_ups_are_owner_scoped_become_overdue_and_can_be_resolved_by_owner()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var now = new DateTime(2026, 10, 1, 8, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateDb();
+        var owner = AddManager(db, "owner@example.com", "Follow-up Owner");
+        var assigningManager = AddManager(db, "assigner@example.com", "Assigning Manager");
+        var employee = AddEmployee(db, "ATT-ACT-4", "Target Worker");
+        var project = AddProject(db);
+        var task = AddWebsiteWork(db, employee, project, new DateOnly(2026, 9, 30));
+        await db.SaveChangesAsync(cancellationToken);
+
+        var assignService = new WebsiteWorkAttentionActionService(db, new FixedTimeProvider(now));
+        var assigned = await assignService.AssignFollowUpAsync(
+            task.Id,
+            new WebsiteWorkAttentionFollowUpRequest(owner.Id, now.AddHours(2), "Check the worker's target status."),
+            new RequestActor(assigningManager.Id, "127.0.0.2", "test"),
+            cancellationToken);
+        Assert.Equal(OperationStatus.Success, assigned.Status);
+
+        var ownerInbox = await assignService.GetMyFollowUpsAsync(
+            new RequestActor(owner.Id, null, null),
+            false,
+            cancellationToken);
+        Assert.Equal(OperationStatus.Success, ownerInbox.Status);
+        Assert.Equal(1, ownerInbox.Value!.Pending);
+        Assert.Equal(0, ownerInbox.Value.Overdue);
+        var pending = Assert.Single(ownerInbox.Value.Items);
+        Assert.Equal(WebsiteWorkFollowUpState.Pending, pending.State);
+        Assert.Equal("assigner@example.com", pending.AssignedByEmail);
+        Assert.Equal("Check the worker's target status.", pending.AssignmentNote);
+
+        var assignerInbox = await assignService.GetMyFollowUpsAsync(
+            new RequestActor(assigningManager.Id, null, null),
+            false,
+            cancellationToken);
+        Assert.Empty(assignerInbox.Value!.Items);
+
+        var overdueService = new WebsiteWorkAttentionActionService(db, new FixedTimeProvider(now.AddHours(3)));
+        var overdueInbox = await overdueService.GetMyFollowUpsAsync(
+            new RequestActor(owner.Id, null, null),
+            false,
+            cancellationToken);
+        Assert.Equal(0, overdueInbox.Value!.Pending);
+        Assert.Equal(1, overdueInbox.Value.Overdue);
+        Assert.Equal(WebsiteWorkFollowUpState.Overdue, Assert.Single(overdueInbox.Value.Items).State);
+
+        var unauthorized = await overdueService.ResolveFollowUpAsync(
+            task.Id,
+            new WebsiteWorkAttentionResolveFollowUpRequest(null),
+            new RequestActor(assigningManager.Id, null, null),
+            cancellationToken);
+        Assert.Equal(OperationStatus.Conflict, unauthorized.Status);
+        Assert.Equal("follow_up_not_owned", unauthorized.ErrorCode);
+
+        var resolveService = new WebsiteWorkAttentionActionService(db, new FixedTimeProvider(now.AddHours(3).AddMinutes(1)));
+        var resolved = await resolveService.ResolveFollowUpAsync(
+            task.Id,
+            new WebsiteWorkAttentionResolveFollowUpRequest("Worker contacted; target status verified."),
+            new RequestActor(owner.Id, "127.0.0.3", "test"),
+            cancellationToken);
+        Assert.Equal(OperationStatus.Success, resolved.Status);
+        Assert.Equal(WebsiteWorkAttentionDisposition.Resolved, resolved.Value!.Disposition);
+        Assert.Contains(db.TaskActivities, activity =>
+            activity.ProjectTaskId == task.Id &&
+            activity.Action == WebsiteWorkAttentionActionService.FollowUpResolvedAction);
+        Assert.Contains(db.AuditLogs, audit =>
+            audit.TargetId == task.Id.ToString() &&
+            audit.Action == "website-work.attention.follow-up-resolved");
+
+        var pendingAfterResolve = await resolveService.GetMyFollowUpsAsync(
+            new RequestActor(owner.Id, null, null),
+            false,
+            cancellationToken);
+        Assert.Empty(pendingAfterResolve.Value!.Items);
+        Assert.Equal(1, pendingAfterResolve.Value.Resolved);
+
+        var history = await resolveService.GetMyFollowUpsAsync(
+            new RequestActor(owner.Id, null, null),
+            true,
+            cancellationToken);
+        var resolvedItem = Assert.Single(history.Value!.Items);
+        Assert.Equal(WebsiteWorkFollowUpState.Resolved, resolvedItem.State);
+        Assert.Equal("Worker contacted; target status verified.", resolvedItem.ResolutionNote);
+
+        var attention = await CreateAttentionService(db, now.AddHours(3).AddMinutes(1))
+            .GetAsync(0, 20, true, cancellationToken);
+        var attentionItem = Assert.Single(attention.Value!.Items);
+        Assert.Equal(WebsiteWorkAttentionDisposition.Resolved, attentionItem.Management.Disposition);
+        Assert.True(attentionItem.Management.IsSuppressed);
+        Assert.Equal(0, attention.Value.PendingFollowUpTotal);
+        Assert.Equal(0, attention.Value.OverdueFollowUpTotal);
     }
 
     [Fact]

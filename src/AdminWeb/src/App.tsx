@@ -8,6 +8,7 @@ import { DepartmentManagementPage, EmployeeManagementPage } from './EmployeeDepa
 import PresencePanel from './PresencePanel';
 import ProductivityReportsPage from './ProductivityReports';
 import SurveyManagementPage from './SurveyManagement';
+import WebsiteWorkFollowUpsPage from './WebsiteWorkFollowUps';
 import WebsiteWorkManagementPage from './WebsiteWorkManagement';
 import WebsiteWorkRealtimeNotice from './WebsiteWorkRealtimeNotice';
 import { ProjectManagementPage, ShiftManagementPage, TaskManagementPage } from './WorkManagement';
@@ -40,6 +41,7 @@ const navItems: NavItem[] = [
   { path: '/projects', label: 'Projects', short: 'PR', permission: 'projects.read' },
   { path: '/tasks', label: 'Tasks', short: 'TK', permission: 'tasks.read' },
   { path: '/website-work', label: 'Website Work', short: 'WW', permission: 'tasks.read' },
+  { path: '/follow-ups', label: 'My Follow-ups', short: 'FU', permission: 'tasks.manage' },
   { path: '/surveys', label: 'Surveys', short: 'SV', permission: 'surveys.read' },
   { path: '/access/rdp', label: 'RDP Assign', short: 'RD', permission: 'access.assignments.read' },
   { path: '/access/ip', label: 'IP Assign', short: 'IP', permission: 'access.assignments.read' },
@@ -358,6 +360,7 @@ export default function App() {
       <Route path="/projects" element={<ProtectedPage permission="projects.read"><ProjectManagementPage /></ProtectedPage>} />
       <Route path="/tasks" element={<ProtectedPage permission="tasks.read"><TaskManagementPage /></ProtectedPage>} />
       <Route path="/website-work" element={<ProtectedPage permission="tasks.read"><WebsiteWorkManagementPage /></ProtectedPage>} />
+      <Route path="/follow-ups" element={<ProtectedPage permission="tasks.manage"><WebsiteWorkFollowUpsPage /></ProtectedPage>} />
       <Route path="/surveys" element={<ProtectedPage permission="surveys.read"><SurveyManagementPage /></ProtectedPage>} />
       <Route path="/access/rdp" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="rdp" /></ProtectedPage>} />
       <Route path="/access/ip" element={<ProtectedPage permission="access.assignments.read"><AccessAssignmentsPage kind="ip" /></ProtectedPage>} />
