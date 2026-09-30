@@ -10,7 +10,7 @@ To enroll a managed PC during elevated installation, pass the enrollment secret 
 
 The installer stores the per-device token in `%ProgramData%\TaskMonitoring\agent-update-device.json` with ACL access restricted to SYSTEM and local Administrators. Employee Desktop cannot read that credential. A separate non-secret `agent-update-device-id.json` is readable by Employee Desktop so authenticated health reporting can bind the enrolled machine to the signed-in employee account.
 
-If `-AgentUpdateEnrollmentKey` is omitted, the existing direct updater schedule is retained for backward compatibility. Central rollout control therefore activates only on explicitly enrolled installations.
+If `-AgentUpdateEnrollmentKey` is omitted, the existing direct updater schedule is retained for backward compatibility. Central rollout control therefore activates only on explicitly enrolled installations. If installation or upgrade rollback restores an already-enrolled installation, the hourly centralized runner schedule is restored as well rather than silently downgrading that PC to the legacy direct-updater schedule.
 
 ## Rollout lifecycle
 
@@ -30,7 +30,7 @@ Per-target states are:
 - `Failed` — updater returned a failure;
 - `RolledBack` — a rollback state was observed during the failed update attempt.
 
-When all targets report the target version installed, the rollout is marked Completed automatically.
+When all targets report the target version installed, the rollout is marked Completed automatically. A fully installed Pilot remains eligible for explicit promotion after completion; adding the confirmed wider target set changes that same rollout to General/Active and continues the audited lifecycle.
 
 ## Windows execution boundary
 
