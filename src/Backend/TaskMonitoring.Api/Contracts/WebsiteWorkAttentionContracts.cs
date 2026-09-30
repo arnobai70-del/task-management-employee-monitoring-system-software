@@ -17,6 +17,14 @@ public enum WebsiteWorkAttentionReasonType
     PendingReview = 4
 }
 
+public enum WebsiteWorkAttentionDisposition
+{
+    Active = 1,
+    Acknowledged = 2,
+    Snoozed = 3,
+    FollowUp = 4
+}
+
 public sealed record WebsiteWorkAttentionThresholdsResponse(
     int LongWorkingMinutes,
     int PendingReviewMinutes,
@@ -26,6 +34,19 @@ public sealed record WebsiteWorkAttentionReasonResponse(
     WebsiteWorkAttentionReasonType Type,
     WebsiteWorkAttentionSeverity Severity,
     string Message);
+
+public sealed record WebsiteWorkAttentionManagementResponse(
+    WebsiteWorkAttentionDisposition Disposition,
+    bool IsSuppressed,
+    DateTime? ActionAtUtc,
+    Guid? ActorUserId,
+    string? ActorEmail,
+    string? Note,
+    DateTime? SnoozedUntilUtc,
+    Guid? FollowUpOwnerUserId,
+    string? FollowUpOwnerEmail,
+    string? FollowUpOwnerName,
+    DateTime? FollowUpDueAtUtc);
 
 public sealed record WebsiteWorkAttentionItemResponse(
     Guid TaskId,
@@ -44,7 +65,8 @@ public sealed record WebsiteWorkAttentionItemResponse(
     long PendingReviewSeconds,
     int CorrectionCount,
     WebsiteWorkAttentionSeverity Severity,
-    IReadOnlyCollection<WebsiteWorkAttentionReasonResponse> Reasons);
+    IReadOnlyCollection<WebsiteWorkAttentionReasonResponse> Reasons,
+    WebsiteWorkAttentionManagementResponse Management);
 
 public sealed record WebsiteWorkAttentionResponse(
     DateTime GeneratedAtUtc,
@@ -52,7 +74,29 @@ public sealed record WebsiteWorkAttentionResponse(
     int UtcOffsetMinutes,
     WebsiteWorkAttentionThresholdsResponse Thresholds,
     int Total,
+    int ActiveTotal,
+    int ManagedTotal,
     int Critical,
     int High,
     int Medium,
     IReadOnlyCollection<WebsiteWorkAttentionItemResponse> Items);
+
+public sealed record WebsiteWorkAttentionAcknowledgeRequest(string? Note);
+
+public sealed record WebsiteWorkAttentionSnoozeRequest(int Minutes, string? Note);
+
+public sealed record WebsiteWorkAttentionFollowUpRequest(
+    Guid OwnerUserId,
+    DateTime DueAtUtc,
+    string Note);
+
+public sealed record WebsiteWorkAttentionActionResponse(
+    Guid TaskId,
+    WebsiteWorkAttentionDisposition Disposition,
+    DateTime ActionAtUtc,
+    string Message);
+
+public sealed record WebsiteWorkAttentionFollowUpOwnerResponse(
+    Guid UserId,
+    string Email,
+    string? FullName);

@@ -43,7 +43,8 @@ public abstract class WebsiteWorkControllerBase : ControllerBase
 public sealed class WebsiteWorkController(
     IWebsiteWorkService websiteWorkService,
     IWebsiteWorkProgressService websiteWorkProgressService,
-    IWebsiteWorkReviewService websiteWorkReviewService) : WebsiteWorkControllerBase
+    IWebsiteWorkReviewService websiteWorkReviewService,
+    IWebsiteWorkAttentionActionService websiteWorkAttentionActionService) : WebsiteWorkControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResponse<WebsiteWorkResponse>>> GetAll(
@@ -67,6 +68,12 @@ public sealed class WebsiteWorkController(
         int utcOffsetMinutes = 0,
         CancellationToken cancellationToken = default)
         => Ok(await websiteWorkProgressService.GetAsync(utcOffsetMinutes, cancellationToken));
+
+    [HttpGet("attention/follow-up-owners")]
+    [Authorize(Policy = PermissionCatalog.TasksManage)]
+    public async Task<ActionResult<IReadOnlyCollection<WebsiteWorkAttentionFollowUpOwnerResponse>>> GetAttentionFollowUpOwners(
+        CancellationToken cancellationToken)
+        => Ok(await websiteWorkAttentionActionService.GetFollowUpOwnersAsync(cancellationToken));
 
     [HttpPost]
     [Authorize(Policy = PermissionCatalog.TasksManage)]
@@ -98,6 +105,30 @@ public sealed class WebsiteWorkController(
         WebsiteWorkReviewRequest request,
         CancellationToken cancellationToken)
         => ToActionResult(await websiteWorkReviewService.ReopenAsync(id, request, Actor(), cancellationToken));
+
+    [HttpPost("{id:guid}/attention/acknowledge")]
+    [Authorize(Policy = PermissionCatalog.TasksManage)]
+    public async Task<ActionResult<WebsiteWorkAttentionActionResponse>> AcknowledgeAttention(
+        Guid id,
+        WebsiteWorkAttentionAcknowledgeRequest request,
+        CancellationToken cancellationToken)
+        => ToActionResult(await websiteWorkAttentionActionService.AcknowledgeAsync(id, request, Actor(), cancellationToken));
+
+    [HttpPost("{id:guid}/attention/snooze")]
+    [Authorize(Policy = PermissionCatalog.TasksManage)]
+    public async Task<ActionResult<WebsiteWorkAttentionActionResponse>> SnoozeAttention(
+        Guid id,
+        WebsiteWorkAttentionSnoozeRequest request,
+        CancellationToken cancellationToken)
+        => ToActionResult(await websiteWorkAttentionActionService.SnoozeAsync(id, request, Actor(), cancellationToken));
+
+    [HttpPost("{id:guid}/attention/follow-up")]
+    [Authorize(Policy = PermissionCatalog.TasksManage)]
+    public async Task<ActionResult<WebsiteWorkAttentionActionResponse>> AssignAttentionFollowUp(
+        Guid id,
+        WebsiteWorkAttentionFollowUpRequest request,
+        CancellationToken cancellationToken)
+        => ToActionResult(await websiteWorkAttentionActionService.AssignFollowUpAsync(id, request, Actor(), cancellationToken));
 }
 
 [ApiController]

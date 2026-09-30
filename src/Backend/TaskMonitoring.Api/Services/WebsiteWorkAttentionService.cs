@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TaskMonitoring.Api.Configuration;
@@ -13,6 +14,12 @@ public interface IWebsiteWorkAttentionService
         int utcOffsetMinutes,
         int limit,
         CancellationToken cancellationToken);
+
+    Task<OperationResult<WebsiteWorkAttentionResponse>> GetAsync(
+        int utcOffsetMinutes,
+        int limit,
+        bool includeSuppressed,
+        CancellationToken cancellationToken);
 }
 
 public sealed class WebsiteWorkAttentionService(
@@ -22,9 +29,16 @@ public sealed class WebsiteWorkAttentionService(
 {
     private readonly WebsiteWorkAttentionOptions _options = options.Value;
 
+    public Task<OperationResult<WebsiteWorkAttentionResponse>> GetAsync(
+        int utcOffsetMinutes,
+        int limit,
+        CancellationToken cancellationToken)
+        => GetAsync(utcOffsetMinutes, limit, false, cancellationToken);
+
     public async Task<OperationResult<WebsiteWorkAttentionResponse>> GetAsync(
         int utcOffsetMinutes,
         int limit,
+        bool includeSuppressed,
         CancellationToken cancellationToken)
     {
         if (utcOffsetMinutes is < -840 or > 840)
@@ -60,14 +74,17 @@ public sealed class WebsiteWorkAttentionService(
             .Select(task => BuildAlert(task, nowUtc, localDate))
             .Where(item => item is not null)
             .Select(item => item!)
-            .OrderByDescending(item => item.Severity)
+            .OrderBy(item => item.Management.IsSuppressed)
+            .ThenByDescending(item => item.Severity)
             .ThenByDescending(item => item.Reasons.Count)
             .ThenByDescending(item => item.PendingReviewSeconds)
             .ThenByDescending(item => item.CurrentWorkingSeconds)
             .ThenBy(item => item.DueDate)
             .ThenBy(item => item.EmployeeName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var visibleAlerts = allAlerts.Take(limit).ToArray();
+        var activeAlerts = allAlerts.Where(item => !item.Management.IsSuppressed).ToArray();
+        var resultSet = includeSuppressed ? allAlerts : activeAlerts;
+        var visibleAlerts = resultSet.Take(limit).ToArray();
 
         return OperationResult<WebsiteWorkAttentionResponse>.Success(
             new WebsiteWorkAttentionResponse(
@@ -79,9 +96,11 @@ public sealed class WebsiteWorkAttentionService(
                     _options.PendingReviewMinutes,
                     _options.RepeatedCorrectionCount),
                 allAlerts.Length,
-                allAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.Critical),
-                allAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.High),
-                allAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.Medium),
+                activeAlerts.Length,
+                allAlerts.Length - activeAlerts.Length,
+                activeAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.Critical),
+                activeAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.High),
+                activeAlerts.Count(x => x.Severity == WebsiteWorkAttentionSeverity.Medium),
                 visibleAlerts));
     }
 
@@ -92,7 +111,7 @@ public sealed class WebsiteWorkAttentionService(
             return null;
         }
 
-        var ordered = task.Activities.OrderBy(x => x.CreatedAtUtc).ToArray();
+        var ordered = task.Activities.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id).ToArray();
         var workingStartedAtUtc = CurrentOpenWorkStartedAt(ordered);
         var currentWorkingSeconds = workingStartedAtUtc.HasValue
             ? Math.Max(0L, (long)(nowUtc - workingStartedAtUtc.Value).TotalSeconds)
@@ -170,13 +189,161 @@ public sealed class WebsiteWorkAttentionService(
             pendingReviewSeconds,
             correctionCount,
             severity,
-            reasons);
+            reasons,
+            BuildManagement(ordered, nowUtc));
+    }
+
+    private static WebsiteWorkAttentionManagementResponse BuildManagement(
+        IReadOnlyCollection<TaskActivity> activities,
+        DateTime nowUtc)
+    {
+        var lifecycleAtUtc = activities
+            .Where(activity => IsLifecycleAction(activity.Action))
+            .Select(activity => (DateTime?)activity.CreatedAtUtc)
+            .Max();
+
+        var action = activities
+            .Where(activity => IsManagementAction(activity.Action))
+            .Where(activity => !lifecycleAtUtc.HasValue || activity.CreatedAtUtc > lifecycleAtUtc.Value)
+            .OrderByDescending(activity => activity.CreatedAtUtc)
+            .ThenByDescending(activity => activity.Id)
+            .FirstOrDefault();
+
+        if (action is null)
+        {
+            return ActiveManagement();
+        }
+
+        var details = ParseDetails(action.DetailsJson);
+        var actorUserId = ReadGuid(details, "actorUserId") ?? action.ActorUserId;
+        var actorEmail = ReadString(details, "actorEmail");
+        var note = ReadString(details, "note");
+
+        if (action.Action == WebsiteWorkAttentionActionService.AcknowledgedAction)
+        {
+            return new WebsiteWorkAttentionManagementResponse(
+                WebsiteWorkAttentionDisposition.Acknowledged,
+                true,
+                action.CreatedAtUtc,
+                actorUserId,
+                actorEmail,
+                note,
+                null,
+                null,
+                null,
+                null,
+                null);
+        }
+
+        if (action.Action == WebsiteWorkAttentionActionService.SnoozedAction)
+        {
+            var untilUtc = ReadDateTime(details, "snoozedUntilUtc");
+            return new WebsiteWorkAttentionManagementResponse(
+                WebsiteWorkAttentionDisposition.Snoozed,
+                untilUtc.HasValue && untilUtc.Value > nowUtc,
+                action.CreatedAtUtc,
+                actorUserId,
+                actorEmail,
+                note,
+                untilUtc,
+                null,
+                null,
+                null,
+                null);
+        }
+
+        var followUpDueAtUtc = ReadDateTime(details, "followUpDueAtUtc");
+        return new WebsiteWorkAttentionManagementResponse(
+            WebsiteWorkAttentionDisposition.FollowUp,
+            followUpDueAtUtc.HasValue && followUpDueAtUtc.Value > nowUtc,
+            action.CreatedAtUtc,
+            actorUserId,
+            actorEmail,
+            note,
+            null,
+            ReadGuid(details, "followUpOwnerUserId"),
+            ReadString(details, "followUpOwnerEmail"),
+            ReadString(details, "followUpOwnerName"),
+            followUpDueAtUtc);
+    }
+
+    private static WebsiteWorkAttentionManagementResponse ActiveManagement()
+        => new(
+            WebsiteWorkAttentionDisposition.Active,
+            false,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+    private static bool IsLifecycleAction(string action)
+        => action == WebsiteWorkService.ConfiguredAction ||
+           action == WebsiteWorkService.StartedAction ||
+           action == WebsiteWorkReviewService.SubmittedAction ||
+           action == WebsiteWorkReviewService.ReopenedAction ||
+           action == WebsiteWorkReviewService.ApprovedAction ||
+           action == WebsiteWorkService.CompletedAction;
+
+    private static bool IsManagementAction(string action)
+        => action == WebsiteWorkAttentionActionService.AcknowledgedAction ||
+           action == WebsiteWorkAttentionActionService.SnoozedAction ||
+           action == WebsiteWorkAttentionActionService.FollowUpAssignedAction;
+
+    private static JsonElement? ParseDetails(string detailsJson)
+    {
+        if (string.IsNullOrWhiteSpace(detailsJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(detailsJson);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadString(JsonElement? details, string propertyName)
+    {
+        if (!details.HasValue ||
+            !details.Value.TryGetProperty(propertyName, out var value) ||
+            value.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var text = value.GetString()?.Trim();
+        return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
+    private static Guid? ReadGuid(JsonElement? details, string propertyName)
+        => Guid.TryParse(ReadString(details, propertyName), out var value) ? value : null;
+
+    private static DateTime? ReadDateTime(JsonElement? details, string propertyName)
+    {
+        if (!details.HasValue || !details.Value.TryGetProperty(propertyName, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind == JsonValueKind.String && value.TryGetDateTime(out var parsed)
+            ? DateTime.SpecifyKind(parsed, DateTimeKind.Utc)
+            : null;
     }
 
     private static DateTime? CurrentOpenWorkStartedAt(IEnumerable<TaskActivity> activities)
     {
         DateTime? openAtUtc = null;
-        foreach (var activity in activities.OrderBy(x => x.CreatedAtUtc))
+        foreach (var activity in activities.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id))
         {
             if (activity.Action == WebsiteWorkService.StartedAction ||
                 activity.Action == WebsiteWorkReviewService.ReopenedAction)
