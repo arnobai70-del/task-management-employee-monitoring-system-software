@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { apiFetch } from './api';
+import AgentUpdateManagementPage from './AgentUpdateManagement';
 import OperationsIncidentsPage from './OperationsIncidents';
 import './management.css';
 
@@ -257,6 +258,9 @@ export default function OperationsDashboardPage() {
 
       <div style={{ marginTop: 32 }}>
         <OperationsIncidentsPage />
+      </div>
+      <div style={{ marginTop: 32 }}>
+        <AgentUpdateManagementPage />
       </div>
     </>
   );

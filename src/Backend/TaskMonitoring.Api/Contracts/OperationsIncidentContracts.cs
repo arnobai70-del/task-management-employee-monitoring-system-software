@@ -21,7 +21,8 @@ public enum OperationsIncidentKind
     OutdatedRuntime = 3,
     RollbackDetected = 4,
     BackupStale = 5,
-    DatabaseDegraded = 6
+    DatabaseDegraded = 6,
+    UpdateFailed = 7
 }
 
 public sealed record OperationsIncidentEventResponse(

@@ -209,12 +209,18 @@ jobs:
             'scripts/windows/install-employee-windows.ps1',
             'scripts/windows/uninstall-employee-windows.ps1',
             'scripts/windows/rollback-employee-windows.ps1',
+            'scripts/windows/run-central-agent-update.ps1',
+            'scripts/windows/test-central-agent-update.ps1',
             'scripts/windows/test-employee-release.ps1',
             'scripts/windows/test-install-update-rollback.ps1'
           )
           foreach ($script in $scripts) {
             [void][scriptblock]::Create((Get-Content $script -Raw))
           }
+
+      - name: Run centralized updater control acceptance
+        shell: pwsh
+        run: ./scripts/windows/test-central-agent-update.ps1 -WorkingRoot "${{ runner.temp }}\central-update-acceptance"
 
       - name: Publish legacy employee Windows outputs
         shell: pwsh

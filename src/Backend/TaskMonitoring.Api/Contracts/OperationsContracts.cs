@@ -9,7 +9,8 @@ public sealed record AgentHealthReportRequest(
     string? InstalledVersion,
     string? UpdateChannel,
     DateTime? LastSuccessfulUpdateAtUtc,
-    DateTime? RolledBackAtUtc);
+    DateTime? RolledBackAtUtc,
+    Guid? DeviceId = null);
 
 public sealed record AgentHealthReportResponse(
     DateTime RecordedAtUtc);

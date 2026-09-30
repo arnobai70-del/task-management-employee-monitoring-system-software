@@ -20,6 +20,7 @@ internal sealed partial class AgentHealthCollector
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             "TaskMonitoring");
         var state = await ReadInstallStateAsync(Path.Combine(programDataRoot, "install-state.json"), cancellationToken);
+        var deviceId = await ReadDeviceIdAsync(Path.Combine(programDataRoot, "agent-update-device-id.json"), cancellationToken);
         var installRoot = ResolveInstallRoot();
         var servicePath = installRoot is null
             ? null
@@ -35,7 +36,8 @@ internal sealed partial class AgentHealthCollector
             NormalizeVersion(state?.Version),
             string.IsNullOrWhiteSpace(state?.Channel) ? null : state.Channel.Trim(),
             NormalizeUtc(state?.LastSuccessfulUpdateUtc),
-            NormalizeUtc(state?.RolledBackAtUtc));
+            NormalizeUtc(state?.RolledBackAtUtc),
+            deviceId);
     }
 
     private static string? ResolveInstallRoot()
@@ -132,6 +134,25 @@ internal sealed partial class AgentHealthCollector
         }
     }
 
+    private static async Task<Guid?> ReadDeviceIdAsync(string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            await using var stream = File.OpenRead(path);
+            var value = await JsonSerializer.DeserializeAsync<DeviceIdentity>(stream, JsonOptions, cancellationToken);
+            return value?.DeviceId == Guid.Empty ? null : value?.DeviceId;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static DateTime? NormalizeUtc(DateTime? value)
     {
         if (!value.HasValue)
@@ -157,6 +178,11 @@ internal sealed partial class AgentHealthCollector
         public DateTime? LastSuccessfulUpdateUtc { get; set; }
         public DateTime? RolledBackAtUtc { get; set; }
     }
+
+    private sealed class DeviceIdentity
+    {
+        public Guid DeviceId { get; set; }
+    }
 }
 
 public sealed record AgentHealthReport(
@@ -168,4 +194,5 @@ public sealed record AgentHealthReport(
     string? InstalledVersion,
     string? UpdateChannel,
     DateTime? LastSuccessfulUpdateAtUtc,
-    DateTime? RolledBackAtUtc);
+    DateTime? RolledBackAtUtc,
+    Guid? DeviceId);

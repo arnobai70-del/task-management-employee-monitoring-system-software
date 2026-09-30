@@ -10,13 +10,29 @@ namespace TaskMonitoring.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/me/agent-health")]
-public sealed class MyAgentHealthController(IOperationsHealthService operationsHealthService) : ControllerBase
+public sealed class MyAgentHealthController(
+    IOperationsHealthService operationsHealthService,
+    IAgentUpdateService agentUpdateService) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<AgentHealthReportResponse>> Record(
         AgentHealthReportRequest request,
         CancellationToken cancellationToken)
-        => ToActionResult(await operationsHealthService.RecordAgentHealthAsync(Actor(), request, cancellationToken));
+    {
+        var actor = Actor();
+        var result = await operationsHealthService.RecordAgentHealthAsync(actor, request, cancellationToken);
+        if (result.Status == OperationStatus.Success && request.DeviceId.HasValue)
+        {
+            await agentUpdateService.ObserveDeviceAsync(
+                actor,
+                request.DeviceId.Value,
+                request.MachineName,
+                request.InstalledVersion,
+                request.UpdaterVersion,
+                cancellationToken);
+        }
+        return ToActionResult(result);
+    }
 
     private ActionResult<T> ToActionResult<T>(OperationResult<T> result)
     {
