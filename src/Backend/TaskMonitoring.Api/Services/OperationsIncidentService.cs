@@ -61,18 +61,22 @@ public sealed class OperationsIncidentService(
     {
         var current = await LoadCurrentAsync(includeHistory: false, cancellationToken);
         IEnumerable<CurrentIncident> filtered = current.Values;
+
         if (status.HasValue)
         {
             filtered = filtered.Where(x => x.State.Status == status.Value);
         }
+
         if (severity.HasValue)
         {
             filtered = filtered.Where(x => x.State.Severity == severity.Value);
         }
+
         if (kind.HasValue)
         {
             filtered = filtered.Where(x => x.State.Kind == kind.Value);
         }
+
         if (!string.IsNullOrWhiteSpace(search))
         {
             var value = search.Trim();
@@ -82,7 +86,8 @@ public sealed class OperationsIncidentService(
                 (x.State.EmployeeName?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
                 (x.State.EmployeeCode?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
                 (x.State.DepartmentName?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (x.State.OwnerEmail?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false));
+                (x.State.OwnerEmail?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (x.State.OwnerName?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false));
         }
 
         var ordered = filtered
@@ -108,7 +113,9 @@ public sealed class OperationsIncidentService(
         var current = await LoadCurrentAsync(includeHistory: true, cancellationToken);
         if (!current.TryGetValue(id, out var incident))
         {
-            return OperationResult<OperationsIncidentResponse>.NotFound("operations_incident_not_found", "Incident was not found.");
+            return OperationResult<OperationsIncidentResponse>.NotFound(
+                "operations_incident_not_found",
+                "Incident was not found.");
         }
 
         return OperationResult<OperationsIncidentResponse>.Success(ToResponse(incident.State, incident.History));
@@ -119,6 +126,7 @@ public sealed class OperationsIncidentService(
         var current = await LoadCurrentAsync(includeHistory: false, cancellationToken);
         var states = current.Values.Select(x => x.State).ToArray();
         var today = DateOnly.FromDateTime(UtcNow());
+
         return new OperationsIncidentSummaryResponse(
             states.Count(x => x.Status == OperationsIncidentStatus.Open),
             states.Count(x => x.Status == OperationsIncidentStatus.Open && x.Severity == OperationsIncidentSeverity.Critical),
@@ -133,10 +141,16 @@ public sealed class OperationsIncidentService(
         var users = await dbContext.Users
             .AsNoTracking()
             .Include(x => x.Employee)
-            .Where(x => x.IsActive && x.UserRoles.Any(userRole =>
-                userRole.Role.IsActive &&
-                userRole.Role.RolePermissions.Any(rolePermission =>
-                    rolePermission.Permission.Code == PermissionCatalog.OperationsManage)))
+            .Where(x =>
+                x.IsActive &&
+                x.UserRoles.Any(userRole =>
+                    userRole.Role.IsActive &&
+                    userRole.Role.RolePermissions.Any(rolePermission =>
+                        rolePermission.Permission.Code == PermissionCatalog.OperationsManage)) &&
+                x.UserRoles.Any(userRole =>
+                    userRole.Role.IsActive &&
+                    userRole.Role.RolePermissions.Any(rolePermission =>
+                        rolePermission.Permission.Code == PermissionCatalog.ReportsRead)))
             .OrderBy(x => x.Employee != null ? x.Employee.NormalizedFullName : x.NormalizedEmail)
             .ToArrayAsync(cancellationToken);
 
@@ -161,7 +175,8 @@ public sealed class OperationsIncidentService(
             return (state with
             {
                 Status = OperationsIncidentStatus.Acknowledged,
-                AcknowledgedAtUtc = state.AcknowledgedAtUtc ?? now
+                AcknowledgedAtUtc = state.AcknowledgedAtUtc ?? now,
+                Revision = state.Revision + 1
             }, null);
         });
 
@@ -180,13 +195,18 @@ public sealed class OperationsIncidentService(
                 x.UserRoles.Any(userRole =>
                     userRole.Role.IsActive &&
                     userRole.Role.RolePermissions.Any(rolePermission =>
-                        rolePermission.Permission.Code == PermissionCatalog.OperationsManage)),
+                        rolePermission.Permission.Code == PermissionCatalog.OperationsManage)) &&
+                x.UserRoles.Any(userRole =>
+                    userRole.Role.IsActive &&
+                    userRole.Role.RolePermissions.Any(rolePermission =>
+                        rolePermission.Permission.Code == PermissionCatalog.ReportsRead)),
                 cancellationToken);
+
         if (owner is null)
         {
             return OperationResult<OperationsIncidentResponse>.Invalid(
                 "incident_owner_invalid",
-                "Incident owner must be an active user with operations.manage permission.");
+                "Incident owner must be an active user with reports.read and operations.manage permissions.");
         }
 
         return await MutateAsync(id, actor, AssignedAction, request.Note, cancellationToken, state =>
@@ -200,7 +220,8 @@ public sealed class OperationsIncidentService(
             {
                 OwnerUserId = owner.Id,
                 OwnerEmail = owner.Email,
-                OwnerName = owner.Employee?.FullName
+                OwnerName = owner.Employee?.FullName,
+                Revision = state.Revision + 1
             }, null);
         });
     }
@@ -222,7 +243,8 @@ public sealed class OperationsIncidentService(
             {
                 Status = OperationsIncidentStatus.Resolved,
                 ResolvedAtUtc = now,
-                ResolutionKind = "Manual"
+                ResolutionKind = "Manual",
+                Revision = state.Revision + 1
             }, null);
         });
 
@@ -260,7 +282,8 @@ public sealed class OperationsIncidentService(
                     null,
                     null,
                     1,
-                    null);
+                    null,
+                    1);
                 AddEvent(created, DetectedAction, null, null, null, null, null, now);
                 changed.Add((created, DetectedAction));
                 continue;
@@ -271,7 +294,8 @@ public sealed class OperationsIncidentService(
             {
                 var recoveredPreviously = existing.LatestAction == AutoResolvedAction;
                 var cooldownElapsed = !state.ResolvedAtUtc.HasValue ||
-                                      now - state.ResolvedAtUtc.Value >= TimeSpan.FromMinutes(Math.Clamp(_options.IncidentReopenCooldownMinutes, 1, 1440));
+                                      now - state.ResolvedAtUtc.Value >= TimeSpan.FromMinutes(
+                                          Math.Clamp(_options.IncidentReopenCooldownMinutes, 1, 1440));
                 if (recoveredPreviously || cooldownElapsed)
                 {
                     var reopened = state with
@@ -284,11 +308,13 @@ public sealed class OperationsIncidentService(
                         AcknowledgedAtUtc = null,
                         ResolvedAtUtc = null,
                         ResolutionKind = null,
-                        OccurrenceCount = state.OccurrenceCount + 1
+                        OccurrenceCount = state.OccurrenceCount + 1,
+                        Revision = state.Revision + 1
                     };
                     AddEvent(reopened, ReopenedAction, null, null, null, null, "Health signal detected again.", now);
                     changed.Add((reopened, ReopenedAction));
                 }
+
                 continue;
             }
 
@@ -301,7 +327,8 @@ public sealed class OperationsIncidentService(
                     Severity = signal.Severity,
                     Title = signal.Title,
                     Message = signal.Message,
-                    LastDetectedAtUtc = now
+                    LastDetectedAtUtc = now,
+                    Revision = state.Revision + 1
                 };
                 AddEvent(updated, UpdatedAction, null, null, null, null, "Detected health details changed.", now);
                 changed.Add((updated, UpdatedAction));
@@ -319,9 +346,18 @@ public sealed class OperationsIncidentService(
             {
                 Status = OperationsIncidentStatus.Resolved,
                 ResolvedAtUtc = now,
-                ResolutionKind = "Recovered"
+                ResolutionKind = "Recovered",
+                Revision = existing.State.Revision + 1
             };
-            AddEvent(resolved, AutoResolvedAction, null, null, null, null, "The monitored health signal recovered automatically.", now);
+            AddEvent(
+                resolved,
+                AutoResolvedAction,
+                null,
+                null,
+                null,
+                null,
+                "The monitored health signal recovered automatically.",
+                now);
             changed.Add((resolved, AutoResolvedAction));
         }
 
@@ -347,7 +383,9 @@ public sealed class OperationsIncidentService(
     {
         if (!actor.UserId.HasValue)
         {
-            return OperationResult<OperationsIncidentResponse>.Invalid("actor_required", "A valid authenticated user is required.");
+            return OperationResult<OperationsIncidentResponse>.Invalid(
+                "actor_required",
+                "A valid authenticated user is required.");
         }
 
         var actorUser = await dbContext.Users
@@ -355,13 +393,17 @@ public sealed class OperationsIncidentService(
             .SingleOrDefaultAsync(x => x.Id == actor.UserId.Value && x.IsActive, cancellationToken);
         if (actorUser is null)
         {
-            return OperationResult<OperationsIncidentResponse>.Invalid("actor_invalid", "The authenticated user is unavailable.");
+            return OperationResult<OperationsIncidentResponse>.Invalid(
+                "actor_invalid",
+                "The authenticated user is unavailable.");
         }
 
         var current = await LoadCurrentAsync(includeHistory: false, cancellationToken);
         if (!current.TryGetValue(id, out var incident))
         {
-            return OperationResult<OperationsIncidentResponse>.NotFound("operations_incident_not_found", "Incident was not found.");
+            return OperationResult<OperationsIncidentResponse>.NotFound(
+                "operations_incident_not_found",
+                "Incident was not found.");
         }
 
         var mutated = mutation(incident.State);
@@ -377,8 +419,7 @@ public sealed class OperationsIncidentService(
         await dbContext.SaveChangesAsync(cancellationToken);
         await realtimePublisher.PublishAsync(ToChanged(next, action, now), cancellationToken);
 
-        var detail = await GetByIdAsync(id, cancellationToken);
-        return detail;
+        return await GetByIdAsync(id, cancellationToken);
     }
 
     private IReadOnlyCollection<IncidentSignal> BuildSignals(OperationsOverviewResponse overview, DateTime now)
@@ -395,11 +436,17 @@ public sealed class OperationsIncidentService(
                 overview.Backup.IsKnown
                     ? $"The last successful backup is {overview.Backup.AgeMinutes ?? 0} minutes old."
                     : "No successful PostgreSQL backup status is currently available.",
-                null, null, null, null));
+                null,
+                null,
+                null,
+                null));
         }
 
         if (overview.Server.DatabaseHealthy &&
-            overview.Server.DatabaseLatencyMilliseconds >= Math.Clamp(_options.DatabaseLatencyWarningMilliseconds, 100, 60_000))
+            overview.Server.DatabaseLatencyMilliseconds >= Math.Clamp(
+                _options.DatabaseLatencyWarningMilliseconds,
+                100,
+                60_000))
         {
             signals.Add(new IncidentSignal(
                 OperationsIncidentKind.DatabaseDegraded,
@@ -407,7 +454,10 @@ public sealed class OperationsIncidentService(
                 OperationsIncidentSeverity.Warning,
                 "Database response is degraded",
                 $"The current database connectivity probe took {overview.Server.DatabaseLatencyMilliseconds} ms.",
-                null, null, null, null));
+                null,
+                null,
+                null,
+                null));
         }
 
         var offlineCutoff = now.AddMinutes(-Math.Clamp(_options.AgentOfflineMinutes, 1, 1440));
@@ -424,7 +474,10 @@ public sealed class OperationsIncidentService(
                     agent.LastSeenAtUtc.HasValue
                         ? $"No employee heartbeat has been received since {agent.LastSeenAtUtc.Value:O}."
                         : "This employee agent has not recorded a heartbeat.",
-                    agent.EmployeeId, agent.EmployeeCode, agent.FullName, agent.DepartmentName));
+                    agent.EmployeeId,
+                    agent.EmployeeCode,
+                    agent.FullName,
+                    agent.DepartmentName));
             }
 
             if (agent.ServiceRunning == false)
@@ -435,7 +488,10 @@ public sealed class OperationsIncidentService(
                     OperationsIncidentSeverity.Critical,
                     $"Employee service stopped: {agent.FullName}",
                     "The latest detailed agent report says TaskMonitoringEmployeeService is not running.",
-                    agent.EmployeeId, agent.EmployeeCode, agent.FullName, agent.DepartmentName));
+                    agent.EmployeeId,
+                    agent.EmployeeCode,
+                    agent.FullName,
+                    agent.DepartmentName));
             }
 
             if (agent.IsOutdated)
@@ -446,7 +502,10 @@ public sealed class OperationsIncidentService(
                     OperationsIncidentSeverity.Warning,
                     $"Employee runtime outdated: {agent.FullName}",
                     $"Installed/runtime version {agent.InstalledVersion ?? agent.DesktopVersion ?? "unknown"} is older than stable release {overview.Release.LatestVersion ?? "unknown"}.",
-                    agent.EmployeeId, agent.EmployeeCode, agent.FullName, agent.DepartmentName));
+                    agent.EmployeeId,
+                    agent.EmployeeCode,
+                    agent.FullName,
+                    agent.DepartmentName));
             }
 
             if (agent.RolledBackAtUtc.HasValue &&
@@ -459,24 +518,30 @@ public sealed class OperationsIncidentService(
                     OperationsIncidentSeverity.Critical,
                     $"Rollback detected: {agent.FullName}",
                     $"The employee installation reports a rollback at {agent.RolledBackAtUtc.Value:O}.",
-                    agent.EmployeeId, agent.EmployeeCode, agent.FullName, agent.DepartmentName));
+                    agent.EmployeeId,
+                    agent.EmployeeCode,
+                    agent.FullName,
+                    agent.DepartmentName));
             }
         }
 
         return signals;
     }
 
-    private async Task<Dictionary<Guid, CurrentIncident>> LoadCurrentAsync(bool includeHistory, CancellationToken cancellationToken)
+    private async Task<Dictionary<Guid, CurrentIncident>> LoadCurrentAsync(
+        bool includeHistory,
+        CancellationToken cancellationToken)
     {
         var logs = await dbContext.AuditLogs
             .AsNoTracking()
-            .Where(x => x.TargetType == TargetType && x.TargetId != null && x.Action.StartsWith("operations.incident."))
-            .OrderBy(x => x.CreatedAtUtc)
-            .ThenBy(x => x.Id)
+            .Where(x =>
+                x.TargetType == TargetType &&
+                x.TargetId != null &&
+                x.Action.StartsWith("operations.incident."))
             .ToArrayAsync(cancellationToken);
 
         var result = new Dictionary<Guid, CurrentIncident>();
-        foreach (var group in logs.GroupBy(x => x.TargetId, StringComparer.OrdinalIgnoreCase))
+        foreach (var group in logs.GroupBy(x => x.TargetId!, StringComparer.OrdinalIgnoreCase))
         {
             if (!Guid.TryParse(group.Key, out var id))
             {
@@ -487,6 +552,9 @@ public sealed class OperationsIncidentService(
                 .Select(log => (Log: log, Event: ParseEvent(log.MetadataJson)))
                 .Where(x => x.Event is not null)
                 .Select(x => (x.Log, Event: x.Event!))
+                .OrderBy(x => x.Event.State.Revision)
+                .ThenBy(x => x.Log.CreatedAtUtc)
+                .ThenBy(x => x.Log.Id)
                 .ToArray();
             if (parsed.Length == 0)
             {
@@ -495,12 +563,16 @@ public sealed class OperationsIncidentService(
 
             var latest = parsed[^1];
             var history = includeHistory
-                ? parsed.Select(x => new OperationsIncidentEventResponse(
-                    FriendlyAction(x.Log.Action),
-                    x.Log.CreatedAtUtc,
-                    x.Log.ActorUserId,
-                    x.Event.ActorEmail,
-                    x.Event.Note)).Reverse().ToArray()
+                ? parsed
+                    .OrderByDescending(x => x.Event.State.Revision)
+                    .ThenByDescending(x => x.Log.CreatedAtUtc)
+                    .Select(x => new OperationsIncidentEventResponse(
+                        FriendlyAction(x.Log.Action),
+                        x.Log.CreatedAtUtc,
+                        x.Log.ActorUserId,
+                        x.Event.ActorEmail,
+                        x.Event.Note))
+                    .ToArray()
                 : [];
             result[id] = new CurrentIncident(latest.Event.State, latest.Log.Action, history);
         }
@@ -574,8 +646,19 @@ public sealed class OperationsIncidentService(
             state.ResolutionKind,
             history);
 
-    private static OperationsIncidentChangedResponse ToChanged(IncidentState state, string action, DateTime atUtc)
-        => new(state.Id, state.Kind, state.Severity, state.Status, state.Title, state.Message, FriendlyAction(action), atUtc);
+    private static OperationsIncidentChangedResponse ToChanged(
+        IncidentState state,
+        string action,
+        DateTime atUtc)
+        => new(
+            state.Id,
+            state.Kind,
+            state.Severity,
+            state.Status,
+            state.Title,
+            state.Message,
+            FriendlyAction(action),
+            atUtc);
 
     private static string FriendlyAction(string action) => action switch
     {
@@ -644,7 +727,8 @@ public sealed class OperationsIncidentService(
         string? OwnerEmail,
         string? OwnerName,
         int OccurrenceCount,
-        string? ResolutionKind);
+        string? ResolutionKind,
+        int Revision);
 
     private sealed record StoredIncidentEvent(
         IncidentState State,
