@@ -171,7 +171,8 @@ $bundleFiles = @(
     'install-employee-windows.ps1',
     'uninstall-employee-windows.ps1',
     'rollback-employee-windows.ps1',
-    'deployment-common.ps1'
+    'deployment-common.ps1',
+    'run-central-agent-update.ps1'
 )
 foreach ($file in $bundleFiles) {
     Copy-Item -Path (Join-Path $PSScriptRoot $file) -Destination (Join-Path $releaseRoot $file) -Force
