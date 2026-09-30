@@ -64,15 +64,7 @@ public sealed class WebsiteWorkReviewService(
             .ToDictionary(x => x.Key, x => ResolveReview(x));
 
         return items
-            .Select(item => metadata.TryGetValue(item.Id, out var review)
-                ? item with
-                {
-                    ReviewState = review.State,
-                    ReviewComment = review.Comment,
-                    SubmittedAtUtc = review.SubmittedAtUtc,
-                    ReviewedAtUtc = review.ReviewedAtUtc
-                }
-                : item)
+            .Select(item => EnrichItem(item, metadata.GetValueOrDefault(item.Id)))
             .ToArray();
     }
 
@@ -256,6 +248,33 @@ public sealed class WebsiteWorkReviewService(
 
     public static string ResolveState(IEnumerable<TaskActivity> activities)
         => ResolveReview(activities).State;
+
+    private static WebsiteWorkResponse EnrichItem(WebsiteWorkResponse item, ReviewMetadata? review)
+    {
+        if (review is null)
+        {
+            return item;
+        }
+
+        // Before the review workflow existed, a completion activity directly moved work to Done.
+        // Keep those historical rows final instead of presenting an impossible Pending Review state.
+        if (review.State == WebsiteWorkReviewStates.PendingReview && item.Status == ProjectTaskStatus.Done)
+        {
+            review = review with
+            {
+                State = WebsiteWorkReviewStates.Approved,
+                ReviewedAtUtc = item.CompletedAtUtc ?? review.SubmittedAtUtc
+            };
+        }
+
+        return item with
+        {
+            ReviewState = review.State,
+            ReviewComment = review.Comment,
+            SubmittedAtUtc = review.SubmittedAtUtc,
+            ReviewedAtUtc = review.ReviewedAtUtc
+        };
+    }
 
     private IQueryable<ProjectTask> WorkQuery(bool tracked = false)
     {
