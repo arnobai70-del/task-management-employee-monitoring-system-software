@@ -23,9 +23,11 @@ exporters:
     endpoint: 0.0.0.0:9464
     enable_open_metrics: true
     translation_strategy: UnderscoreEscapingWithSuffixes
-    resource_to_telemetry_conversion:
-      enabled: true
-  otlphttp/loki:
+    resource_constant_labels:
+      included:
+        - service.name
+        - service.version
+  otlp_http/loki:
     endpoint: http://loki:3100/otlp
     tls:
       insecure: true
@@ -40,4 +42,4 @@ service:
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlphttp/loki]
+      exporters: [otlp_http/loki]
