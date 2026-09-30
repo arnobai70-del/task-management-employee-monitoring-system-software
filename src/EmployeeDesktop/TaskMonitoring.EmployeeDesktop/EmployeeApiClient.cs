@@ -106,7 +106,7 @@ public sealed class EmployeeApiClient : IDisposable
                ?? throw new InvalidOperationException("The server returned an empty website work response.");
     }
 
-    public async Task<WebsiteWorkResponse> CompleteWebsiteWorkAsync(Guid taskId, CancellationToken cancellationToken = default)
+    public async Task<WebsiteWorkResponse> SubmitWebsiteWorkCompletionAsync(Guid taskId, CancellationToken cancellationToken = default)
     {
         using var response = await SendAuthorizedAsync(HttpMethod.Post, $"api/me/website-work/{taskId}/complete", null, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
@@ -399,13 +399,26 @@ public sealed record WebsiteWorkResponse(
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc)
 {
-    public string StatusLabel => Status switch
+    public string ReviewState { get; init; } = "NotSubmitted";
+    public string? ReviewComment { get; init; }
+    public DateTime? SubmittedAtUtc { get; init; }
+    public DateTime? ReviewedAtUtc { get; init; }
+
+    public string StatusLabel => ReviewState switch
     {
-        "ToDo" => "Ready",
-        "InProgress" => "Working",
-        "Done" => "Completed",
-        _ => Status
+        "PendingReview" => "Pending Review",
+        "Approved" => "Approved",
+        "CorrectionRequired" => "Correction Required",
+        _ => Status switch
+        {
+            "ToDo" => "Ready",
+            "InProgress" => "Working",
+            "Done" => "Completed",
+            _ => Status
+        }
     };
+
+    public string ManagerNote => string.IsNullOrWhiteSpace(ReviewComment) ? "—" : ReviewComment;
 }
 
 public sealed record AttendanceStateResponse(string State, WorkSessionResponse? Session)

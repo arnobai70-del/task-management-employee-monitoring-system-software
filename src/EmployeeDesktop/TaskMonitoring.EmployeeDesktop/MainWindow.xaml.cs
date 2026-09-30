@@ -236,9 +236,13 @@ public partial class MainWindow : Window
 
         await RunAsync(async () =>
         {
+            if (work.ReviewState == "PendingReview" || work.Status == "Blocked")
+            {
+                throw new InvalidOperationException("This completion is waiting for manager review. You can continue only if the manager reopens it for correction.");
+            }
             if (work.Status is "Done" or "Cancelled")
             {
-                throw new InvalidOperationException("Completed or cancelled work cannot be opened.");
+                throw new InvalidOperationException("Approved/completed or cancelled work cannot be opened.");
             }
 
             var confirmed = await _api.StartWebsiteWorkAsync(work.Id);
@@ -249,7 +253,9 @@ public partial class MainWindow : Window
             }
 
             Process.Start(new ProcessStartInfo { FileName = confirmed.Url, UseShellExecute = true });
-            MessageText.Text = $"Working: {confirmed.Title}. The assigned website was opened in your default browser.";
+            MessageText.Text = confirmed.ReviewState == "CorrectionRequired"
+                ? $"Correction work resumed: {confirmed.Title}. Review the manager note and resubmit when fixed."
+                : $"Working: {confirmed.Title}. The assigned website was opened in your default browser.";
             await RefreshWebsiteWorkAsync();
             await RefreshTasksAsync();
         });
@@ -263,15 +269,21 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (work.ReviewState == "PendingReview" || work.Status == "Blocked")
+        {
+            MessageText.Text = "This completion is already waiting for manager review.";
+            return;
+        }
+
         if (work.Status != "InProgress")
         {
-            MessageText.Text = "Start/open this website work before marking it complete.";
+            MessageText.Text = "Start/open this website work before submitting it for review.";
             return;
         }
 
         var confirmation = MessageBox.Show(
-            $"Mark this target complete?\n\n{work.Title}\n\nYour manager will receive the completion notification.",
-            "Complete website work",
+            $"Submit this target for manager review?\n\n{work.Title}\n\nThe manager can approve it or reopen it with a correction note.",
+            "Submit website work",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
         if (confirmation != MessageBoxResult.Yes)
@@ -281,8 +293,8 @@ public partial class MainWindow : Window
 
         await RunAsync(async () =>
         {
-            var completed = await _api.CompleteWebsiteWorkAsync(work.Id);
-            MessageText.Text = $"Completed: {completed.Title}. Your manager was notified.";
+            var submitted = await _api.SubmitWebsiteWorkCompletionAsync(work.Id);
+            MessageText.Text = $"Submitted for review: {submitted.Title}. Your manager was notified.";
             await RefreshWebsiteWorkAsync();
             await RefreshTasksAsync();
             await RefreshNotificationsAsync();

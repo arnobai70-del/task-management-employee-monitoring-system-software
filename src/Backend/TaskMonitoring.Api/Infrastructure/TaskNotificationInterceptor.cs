@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -89,8 +90,18 @@ public sealed class TaskNotificationInterceptor(
 
             if (entry.Property(x => x.Status).IsModified)
             {
-                Queue(context, entry.Entity.AssigneeEmployeeId.Value, EmployeeNotificationKind.TaskStatusChanged,
-                    "Task status changed", TaskMessage(entry.Entity, $"Status is now {entry.Entity.Status}."), entry.Entity.Id, now);
+                var reviewActivity = FindWebsiteReviewActivity(context, entry.Entity.Id);
+                if (reviewActivity is not null)
+                {
+                    var reviewMessage = WebsiteReviewMessage(entry.Entity, reviewActivity);
+                    Queue(context, entry.Entity.AssigneeEmployeeId.Value, EmployeeNotificationKind.TaskStatusChanged,
+                        reviewMessage.Title, reviewMessage.Message, entry.Entity.Id, now);
+                }
+                else
+                {
+                    Queue(context, entry.Entity.AssigneeEmployeeId.Value, EmployeeNotificationKind.TaskStatusChanged,
+                        "Task status changed", TaskMessage(entry.Entity, $"Status is now {entry.Entity.Status}."), entry.Entity.Id, now);
+                }
                 continue;
             }
 
@@ -99,6 +110,55 @@ public sealed class TaskNotificationInterceptor(
                 Queue(context, entry.Entity.AssigneeEmployeeId.Value, EmployeeNotificationKind.TaskUpdated,
                     "Task updated", TaskMessage(entry.Entity, "Task details were updated."), entry.Entity.Id, now);
             }
+        }
+    }
+
+    private static TaskActivity? FindWebsiteReviewActivity(DbContext context, Guid taskId)
+        => context.ChangeTracker.Entries<TaskActivity>()
+            .Where(x => x.State == EntityState.Added && x.Entity.ProjectTaskId == taskId)
+            .Select(x => x.Entity)
+            .LastOrDefault(x =>
+                x.Action == WebsiteWorkService.CompletedAction ||
+                x.Action == WebsiteWorkReviewService.ApprovedAction ||
+                x.Action == WebsiteWorkReviewService.ReopenedAction);
+
+    private static (string Title, string Message) WebsiteReviewMessage(ProjectTask task, TaskActivity activity)
+    {
+        if (activity.Action == WebsiteWorkService.CompletedAction)
+        {
+            return ("Completion submitted", TaskMessage(task, "Your completion is waiting for manager review."));
+        }
+
+        if (activity.Action == WebsiteWorkReviewService.ApprovedAction)
+        {
+            return ("Website work approved", TaskMessage(task, "Your completion was approved."));
+        }
+
+        var comment = ReadComment(activity.DetailsJson);
+        if (string.IsNullOrWhiteSpace(comment))
+        {
+            return ("Correction requested", TaskMessage(task, "Your manager reopened this work for correction."));
+        }
+
+        if (comment.Length > 500)
+        {
+            comment = comment[..500] + "…";
+        }
+        return ("Correction requested", TaskMessage(task, $"Your manager requested changes: {comment}"));
+    }
+
+    private static string? ReadComment(string detailsJson)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(detailsJson);
+            return json.RootElement.TryGetProperty("comment", out var comment) && comment.ValueKind == JsonValueKind.String
+                ? comment.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 
