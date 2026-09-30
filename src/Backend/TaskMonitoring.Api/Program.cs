@@ -86,6 +86,10 @@ builder.Services.AddOptions<OperationsOptions>()
     .Bind(builder.Configuration.GetSection(OperationsOptions.SectionName))
     .Validate(options => options.DetailedAgentStaleMinutes is >= 1 and <= 60, "Operations:DetailedAgentStaleMinutes must be between 1 and 60.")
     .Validate(options => options.BackupStaleHours is >= 1 and <= 168, "Operations:BackupStaleHours must be between 1 and 168.")
+    .Validate(options => options.AgentOfflineMinutes is >= 1 and <= 1440, "Operations:AgentOfflineMinutes must be between 1 and 1440.")
+    .Validate(options => options.DatabaseLatencyWarningMilliseconds is >= 100 and <= 60000, "Operations:DatabaseLatencyWarningMilliseconds must be between 100 and 60000.")
+    .Validate(options => options.IncidentScanIntervalSeconds is >= 30 and <= 3600, "Operations:IncidentScanIntervalSeconds must be between 30 and 3600.")
+    .Validate(options => options.IncidentReopenCooldownMinutes is >= 1 and <= 1440, "Operations:IncidentReopenCooldownMinutes must be between 1 and 1440.")
     .Validate(options => !string.IsNullOrWhiteSpace(options.StableReleaseManifestPath), "Operations:StableReleaseManifestPath is required.")
     .Validate(options => !string.IsNullOrWhiteSpace(options.BackupStatusPath), "Operations:BackupStatusPath is required.")
     .ValidateOnStart();
@@ -125,12 +129,15 @@ builder.Services.AddScoped<IEmployeeWorkspaceService, EmployeeWorkspaceService>(
 builder.Services.AddScoped<IRealtimeWorkspaceService, RealtimeWorkspaceService>();
 builder.Services.AddScoped<IMonitoringTelemetryService, MonitoringTelemetryService>();
 builder.Services.AddScoped<IOperationsHealthService, OperationsHealthService>();
+builder.Services.AddScoped<IOperationsIncidentService, OperationsIncidentService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddSingleton<IRealtimeEventPublisher, SignalRRealtimeEventPublisher>();
 builder.Services.AddSingleton<IWebsiteWorkRealtimePublisher, SignalRWebsiteWorkRealtimePublisher>();
 builder.Services.AddSingleton<IAdminNotificationRealtimePublisher, SignalRAdminNotificationRealtimePublisher>();
+builder.Services.AddSingleton<IOperationsIncidentRealtimePublisher, SignalROperationsIncidentRealtimePublisher>();
 builder.Services.AddHostedService<MonitoringRetentionHostedService>();
 builder.Services.AddHostedService<FollowUpReminderHostedService>();
+builder.Services.AddHostedService<OperationsIncidentHostedService>();
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
