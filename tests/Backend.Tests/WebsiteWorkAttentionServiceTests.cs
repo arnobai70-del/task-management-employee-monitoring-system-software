@@ -129,7 +129,14 @@ public sealed class WebsiteWorkAttentionServiceTests
         Assert.Equal(WebsiteWorkAttentionDisposition.Acknowledged, managedItem.Management.Disposition);
         Assert.Equal("boss@example.com", managedItem.Management.ActorEmail);
 
-        AddActivity(task, WebsiteWorkService.ConfiguredAction, new DateTime(2026, 9, 30, 10, 0, 0, DateTimeKind.Utc));
+        db.TaskActivities.Add(new TaskActivity
+        {
+            ProjectTaskId = task.Id,
+            ActorUserId = employee.UserId,
+            Action = WebsiteWorkService.ConfiguredAction,
+            DetailsJson = "{}",
+            CreatedAtUtc = new DateTime(2026, 9, 30, 10, 0, 0, DateTimeKind.Utc)
+        });
         await db.SaveChangesAsync(cancellationToken);
 
         var reactivated = await service.GetAsync(0, 20, cancellationToken);
