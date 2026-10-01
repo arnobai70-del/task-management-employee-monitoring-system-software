@@ -44,7 +44,8 @@ public sealed class SecurityObservabilityService(
             .ToArrayAsync(cancellationToken);
 
         var securityLogs = logs.Where(IsSecurityEvent).ToArray();
-        var privilegedLogs = logs.Where(IsPrivilegedAction).Take(50).ToArray();
+        var privilegedAll = logs.Where(IsPrivilegedAction).ToArray();
+        var privilegedLogs = privilegedAll.Take(50).ToArray();
         var recentSecurity = securityLogs.Take(100).ToArray();
         var actorIds = recentSecurity
             .Concat(privilegedLogs)
@@ -87,7 +88,7 @@ public sealed class SecurityObservabilityService(
                 securityLogs.Count(x => x.Action == "auth.login.succeeded"),
                 securityLogs.Count(x => x.Action == "auth.refresh.reuse_detected"),
                 securityLogs.Count(x => x.Action == RateLimitRejectedAction),
-                privilegedLogs.Length,
+                privilegedAll.Length,
                 securityLogs.Where(x => !string.IsNullOrWhiteSpace(x.IpAddress)).Select(x => x.IpAddress!).Distinct(StringComparer.OrdinalIgnoreCase).Count()),
             recentSecurity.Select(log => ToSecurityEvent(log, actorEmails)).ToArray(),
             sources,
