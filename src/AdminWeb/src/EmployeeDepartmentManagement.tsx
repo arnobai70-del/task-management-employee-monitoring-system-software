@@ -146,6 +146,7 @@ export function EmployeeManagementPage() {
   const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
   const [supervisors, setSupervisors] = useState<EmployeeOption[]>([]);
   const [draft, setDraft] = useState<EmployeeDraft>(emptyEmployee);
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [searchDraft, setSearchDraft] = useState('');
@@ -173,13 +174,19 @@ export function EmployeeManagementPage() {
     return () => { cancelled = true; };
   }, [search, version]);
 
-  function openCreate() { setEditingId(null); setDraft(emptyEmployee); setError(''); setNotice(''); setShowForm(true); }
+  function openCreate() {
+    setEditingId(null); setDraft(emptyEmployee); setPasswordConfirmation(''); setError(''); setNotice(''); setShowForm(true);
+  }
+
   function openEdit(item: EmployeeRecord) {
     setEditingId(item.id);
     setDraft({ employeeCode: item.employeeCode, fullName: item.fullName, email: item.email, password: '', jobTitle: item.jobTitle, phone: item.phone || '', employmentType: item.employmentType, joinedOn: item.joinedOn || '', departmentId: item.departmentId || '', supervisorEmployeeId: item.supervisorEmployeeId || '', isActive: item.isActive, roleIds: item.roles.filter(role => role.isActive).map(role => role.id) });
-    setError(''); setNotice(''); setShowForm(true);
+    setPasswordConfirmation(''); setError(''); setNotice(''); setShowForm(true);
   }
-  function toggleRole(roleId: string) { setDraft(value => ({ ...value, roleIds: value.roleIds.includes(roleId) ? value.roleIds.filter(id => id !== roleId) : [...value.roleIds, roleId] })); }
+
+  function toggleRole(roleId: string) {
+    setDraft(value => ({ ...value, roleIds: value.roleIds.includes(roleId) ? value.roleIds.filter(id => id !== roleId) : [...value.roleIds, roleId] }));
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!mayManage) return;
@@ -187,9 +194,37 @@ export function EmployeeManagementPage() {
     const body = { employeeCode: draft.employeeCode, fullName: draft.fullName, email: draft.email, jobTitle: draft.jobTitle, phone: draft.phone || null, employmentType: draft.employmentType, joinedOn: draft.joinedOn || null, departmentId: draft.departmentId || null, supervisorEmployeeId: draft.supervisorEmployeeId || null, roleIds: draft.roleIds, isActive: draft.isActive, ...(editingId ? {} : { password: draft.password }) };
     try {
       await apiFetch(`/api/employees${editingId ? `/${editingId}` : ''}`, { method: editingId ? 'PUT' : 'POST', body: JSON.stringify(body) });
-      setNotice(`Employee ${editingId ? 'updated' : 'created'} successfully.`); setShowForm(false); setEditingId(null); setVersion(value => value + 1);
+      setNotice(`Employee ${editingId ? 'updated' : 'created'} successfully.`); setShowForm(false); setEditingId(null); setPasswordConfirmation(''); setVersion(value => value + 1);
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to save employee.'); }
     finally { setBusy(false); }
+  }
+
+  async function resetPassword() {
+    if (!mayManage || !editingId) return;
+    if (draft.password.length < 12) {
+      setError('New password must contain at least 12 characters.');
+      return;
+    }
+    if (draft.password !== passwordConfirmation) {
+      setError('New password and confirmation do not match.');
+      return;
+    }
+
+    const employee = items.find(item => item.id === editingId);
+    if (!window.confirm(`Reset the password for ${employee?.fullName || draft.fullName}? Existing refresh sessions will be revoked.`)) return;
+
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await apiFetch(`/api/employees/${editingId}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ newPassword: draft.password })
+      });
+      setDraft(value => ({ ...value, password: '' }));
+      setPasswordConfirmation('');
+      setNotice(`Password reset successfully for ${employee?.fullName || draft.fullName}. The employee can sign in with the new password.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to reset employee password.');
+    } finally { setBusy(false); }
   }
 
   async function deactivate(item: EmployeeRecord) {
@@ -206,11 +241,16 @@ export function EmployeeManagementPage() {
     <div className="page-header"><div><p className="eyebrow">People administration</p><h1>Employees & roles</h1><p className="muted">Provision accounts, reporting lines, departments and role assignments.</p></div><div className="header-actions"><form className="inline-search" onSubmit={event => { event.preventDefault(); setSearch(searchDraft.trim()); }}><input value={searchDraft} onChange={event => setSearchDraft(event.target.value)} placeholder="Search employees" /><button className="ghost-button">Search</button></form>{mayManage && <button className="primary-button" onClick={openCreate}>New employee</button>}</div></div>
     {!mayManage && can('employees.manage') && <div className="error-banner">Employee create/update with role assignment also requires <strong>roles.manage</strong>.</div>}
     {notice && <div className="success-banner">{notice}</div>}{error && <div className="error-banner">{error}</div>}
-    {showForm && mayManage && <article className="panel management-form-panel"><div className="panel-heading"><div><h2>{editingId ? 'Edit employee' : 'Create employee'}</h2><p>Role changes are protected separately by the backend.</p></div><button className="ghost-button" onClick={() => setShowForm(false)}>Close</button></div><form className="form-grid" onSubmit={submit}>
+    {showForm && mayManage && <article className="panel management-form-panel"><div className="panel-heading"><div><h2>{editingId ? 'Edit employee' : 'Create employee'}</h2><p>Role changes and password resets are protected separately by the backend and written to the audit log.</p></div><button className="ghost-button" onClick={() => setShowForm(false)}>Close</button></div><form className="form-grid" onSubmit={submit}>
       <label><span>Employee code</span><input required maxLength={50} value={draft.employeeCode} onChange={event => setDraft(value => ({ ...value, employeeCode: event.target.value }))} /></label>
       <label><span>Full name</span><input required minLength={2} maxLength={200} value={draft.fullName} onChange={event => setDraft(value => ({ ...value, fullName: event.target.value }))} /></label>
       <label><span>Email</span><input type="email" required maxLength={320} value={draft.email} onChange={event => setDraft(value => ({ ...value, email: event.target.value }))} /></label>
       {!editingId && <label><span>Initial password</span><input type="password" required minLength={12} maxLength={256} autoComplete="new-password" value={draft.password} onChange={event => setDraft(value => ({ ...value, password: event.target.value }))} /><small>Minimum 12 characters. The server stores only the password hash.</small></label>}
+      {editingId && <>
+        <label><span>New password</span><input type="password" minLength={12} maxLength={256} autoComplete="new-password" value={draft.password} onChange={event => setDraft(value => ({ ...value, password: event.target.value }))} placeholder="Minimum 12 characters" /></label>
+        <label><span>Confirm new password</span><input type="password" minLength={12} maxLength={256} autoComplete="new-password" value={passwordConfirmation} onChange={event => setPasswordConfirmation(event.target.value)} placeholder="Re-enter new password" /></label>
+        <div className="wide-field form-actions"><button type="button" className="ghost-button" disabled={busy || draft.password.length < 12 || draft.password !== passwordConfirmation} onClick={() => void resetPassword()}>{busy ? 'Working…' : 'Reset password'}</button><small>Resetting clears login lockout state and revokes active refresh sessions. Password values are never written to audit logs.</small></div>
+      </>}
       <label><span>Job title</span><input required minLength={2} maxLength={150} value={draft.jobTitle} onChange={event => setDraft(value => ({ ...value, jobTitle: event.target.value }))} /></label>
       <label><span>Phone</span><input maxLength={50} value={draft.phone} onChange={event => setDraft(value => ({ ...value, phone: event.target.value }))} /></label>
       <label><span>Employment type</span><select value={draft.employmentType} onChange={event => setDraft(value => ({ ...value, employmentType: event.target.value as EmployeeRecord['employmentType'] }))}><option>FullTime</option><option>PartTime</option><option>Contract</option><option>Intern</option><option>Temporary</option></select></label>
