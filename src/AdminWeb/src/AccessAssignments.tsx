@@ -105,6 +105,7 @@ const emptyIp: IpDraft = {
 const emptyWebsite: WebsiteDraft = {
   employeeId: '', name: '', url: 'https://', usernameReference: '', accessLevel: 'Work', startsOn: '', expiresOn: '', isActive: true, notes: ''
 };
+const PAGE_SIZE = 100;
 
 function dateOrNull(value: string): string | null {
   return value || null;
@@ -133,6 +134,8 @@ export default function AccessAssignmentsPage({ kind }: { kind: AccessKind }) {
   const [notice, setNotice] = useState('');
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -146,12 +149,15 @@ export default function AccessAssignmentsPage({ kind }: { kind: AccessKind }) {
     if (kind === 'ip') return { title: 'IP Assignments', subtitle: 'Track active, reserved and released employee/device IP addresses.', noun: 'IP assignment' };
     return { title: 'Website Assignments', subtitle: 'Assign approved websites and access levels without storing website passwords or session cookies.', noun: 'website assignment' };
   }, [kind]);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   useEffect(() => {
     setShowForm(false);
     setEditingId(null);
     setNotice('');
     setError('');
+    setPage(1);
+    setTotalCount(0);
   }, [kind]);
 
   useEffect(() => {
@@ -161,17 +167,18 @@ export default function AccessAssignmentsPage({ kind }: { kind: AccessKind }) {
     const searchPart = search ? `&search=${encodeURIComponent(search)}` : '';
     Promise.all([
       apiFetch<EmployeeOption[]>('/api/access-assignments/employees'),
-      apiFetch<PagedResponse<Assignment>>(`/api/access-assignments/${kind}?page=1&pageSize=100${searchPart}`)
+      apiFetch<PagedResponse<Assignment>>(`/api/access-assignments/${kind}?page=${page}&pageSize=${PAGE_SIZE}${searchPart}`)
     ])
       .then(([employeeData, assignmentData]) => {
         if (cancelled) return;
         setEmployees(employeeData);
         setItems(assignmentData.items);
+        setTotalCount(assignmentData.totalCount);
       })
       .catch(caught => { if (!cancelled) setError(caught instanceof Error ? caught.message : 'Unable to load assignments.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [kind, search, version]);
+  }, [kind, page, search, version]);
 
   function resetForm() {
     setEditingId(null);
@@ -261,7 +268,7 @@ export default function AccessAssignmentsPage({ kind }: { kind: AccessKind }) {
       <div className="page-header">
         <div><p className="eyebrow">Access administration</p><h1>{config.title}</h1><p className="muted">{config.subtitle}</p></div>
         <div className="header-actions">
-          <form className="inline-search" onSubmit={event => { event.preventDefault(); setSearch(searchDraft.trim()); }}><input value={searchDraft} onChange={event => setSearchDraft(event.target.value)} placeholder="Search" /><button className="ghost-button">Search</button></form>
+          <form className="inline-search" onSubmit={event => { event.preventDefault(); setPage(1); setSearch(searchDraft.trim()); }}><input value={searchDraft} onChange={event => setSearchDraft(event.target.value)} placeholder="Search" /><button className="ghost-button">Search</button></form>
           {mayManage && <button className="primary-button" type="button" onClick={openCreate}>New assignment</button>}
         </div>
       </div>
@@ -307,7 +314,7 @@ export default function AccessAssignmentsPage({ kind }: { kind: AccessKind }) {
         </form>
       </article>}
       <article className="panel table-panel">
-        <div className="panel-heading"><div><h2>{config.title}</h2><p>{items.length} loaded</p></div><button className="ghost-button" type="button" onClick={() => setVersion(value => value + 1)}>Refresh</button></div>
+        <div className="panel-heading"><div><h2>{config.title}</h2><p>Showing {items.length} of {totalCount}</p></div><button className="ghost-button" type="button" onClick={() => setVersion(value => value + 1)}>Refresh</button></div>
         {loading ? <div className="loading-block">Loading current server data…</div> : <div className="table-wrap">
           {kind === 'rdp' && <table><thead><tr><th>Employee</th><th>Endpoint</th><th>User / credential ref</th><th>Validity</th><th>Status</th>{mayManage && <th>Actions</th>}</tr></thead><tbody>
             {(items as RdpAssignment[]).map(item => <tr key={item.id}><td><strong>{item.employeeName}</strong><small>{item.employeeCode}</small></td><td><strong>{item.name}</strong><small>{item.host}:{item.port}</small></td><td>{item.usernameReference || '—'}<small>{item.credentialReference || 'No credential reference'}</small></td><td>{item.validFrom || '—'} → {item.expiresOn || 'No expiry'}</td><td><Status value={item.isActive ? 'Active' : 'Inactive'} /></td>{mayManage && <td className="action-cell"><button className="text-button" onClick={() => edit(item)}>Edit</button>{item.isActive && <button className="text-button danger" disabled={busy} onClick={() => void quickDeactivate(item)}>Deactivate</button>}</td>}</tr>)}
@@ -321,6 +328,11 @@ export default function AccessAssignmentsPage({ kind }: { kind: AccessKind }) {
             {(items as WebsiteAssignment[]).map(item => <tr key={item.id}><td><strong>{item.employeeName}</strong><small>{item.employeeCode}</small></td><td><strong>{item.name}</strong><small><a href={item.url} target="_blank" rel="noreferrer">{item.url}</a></small></td><td><Status value={item.accessLevel} /></td><td>{item.usernameReference || '—'}</td><td>{item.startsOn || '—'} → {item.expiresOn || 'No expiry'}</td><td><Status value={item.isActive ? 'Active' : 'Inactive'} /></td>{mayManage && <td className="action-cell"><button className="text-button" onClick={() => edit(item)}>Edit</button>{item.isActive && <button className="text-button danger" disabled={busy} onClick={() => void quickDeactivate(item)}>Deactivate</button>}</td>}</tr>)}
             {!items.length && <tr><td colSpan={mayManage ? 7 : 6} className="empty-cell">No website assignments found.</td></tr>}
           </tbody></table>}
+        </div>}
+        {!loading && totalPages > 1 && <div className="form-actions">
+          <button className="ghost-button" type="button" disabled={page <= 1 || busy} onClick={() => setPage(value => Math.max(1, value - 1))}>Previous</button>
+          <span className="muted">Page {page} of {totalPages}</span>
+          <button className="ghost-button" type="button" disabled={page >= totalPages || busy} onClick={() => setPage(value => Math.min(totalPages, value + 1))}>Next</button>
         </div>}
       </article>
     </>
