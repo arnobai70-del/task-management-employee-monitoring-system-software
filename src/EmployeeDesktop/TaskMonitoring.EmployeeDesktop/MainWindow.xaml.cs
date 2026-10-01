@@ -40,7 +40,7 @@ public partial class MainWindow : Window
 
     private async void Window_Closing(object? sender, CancelEventArgs e)
     {
-        if (_allowClose || !_api.IsAuthenticated)
+        if (_allowClose)
         {
             return;
         }
@@ -48,13 +48,26 @@ public partial class MainWindow : Window
         e.Cancel = true;
         _presenceTimer.Stop();
         _monitoringTimer.Stop();
+
         try
         {
             await _realtime.StopAsync();
-            await _api.LogoutAsync();
         }
         catch
         {
+            // Closing must continue even if realtime shutdown fails.
+        }
+
+        try
+        {
+            if (_api.IsAuthenticated)
+            {
+                await _api.LogoutAsync();
+            }
+        }
+        catch
+        {
+            // EmployeeApiClient clears the local session even if server revocation fails.
         }
         finally
         {
@@ -82,18 +95,50 @@ public partial class MainWindow : Window
             _api.ConfigureServer(ServerUrlBox.Text);
             await _api.LoginAsync(employeeEmail, PasswordBox.Password);
             PasswordBox.Clear();
-            ConnectionStatusText.Text = $"Server: connected to {serverUri.Host}";
+
+            try
+            {
+                // Keep the login shell visible until every required workspace component has
+                // initialized. A partial failure is rolled back instead of exposing a broken
+                // authenticated workspace with dead monitoring/realtime state.
+                await RefreshWorkspaceAsync();
+                await RefreshMonitoringPolicyAsync();
+                await SendPresenceHeartbeatAsync();
+                await _realtime.StartAsync();
+            }
+            catch (Exception ex)
+            {
+                _presenceTimer.Stop();
+                _monitoringTimer.Stop();
+
+                try
+                {
+                    await _realtime.StopAsync();
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    await _api.LogoutAsync();
+                }
+                catch
+                {
+                }
+
+                ResetSignedOutUi("Server: initialization failed");
+                throw new InvalidOperationException($"Sign-in could not finish: {ex.Message}", ex);
+            }
+
             SessionIdentityText.Text = employeeEmail;
             LogoutButton.IsEnabled = true;
             LoginShell.Visibility = Visibility.Collapsed;
             WorkspaceShell.Visibility = Visibility.Visible;
-            MessageText.Text = "Signed in successfully.";
-            await RefreshWorkspaceAsync();
-            await RefreshMonitoringPolicyAsync();
-            await SendPresenceHeartbeatAsync();
-            await _realtime.StartAsync();
             _presenceTimer.Start();
             _monitoringTimer.Start();
+            ConnectionStatusText.Text = $"Server: connected to {serverUri.Host}";
+            MessageText.Text = "Signed in successfully.";
         });
     }
 
@@ -103,15 +148,42 @@ public partial class MainWindow : Window
         {
             _presenceTimer.Stop();
             _monitoringTimer.Stop();
-            await _realtime.StopAsync();
-            await _api.LogoutAsync();
-            ClearWorkspace();
-            ConnectionStatusText.Text = "Server: signed out";
-            SessionIdentityText.Text = "Employee session";
-            LogoutButton.IsEnabled = false;
-            WorkspaceShell.Visibility = Visibility.Collapsed;
-            LoginShell.Visibility = Visibility.Visible;
-            MessageText.Text = "Signed out and refresh token revoked.";
+
+            Exception? realtimeError = null;
+            Exception? logoutError = null;
+
+            try
+            {
+                await _realtime.StopAsync();
+            }
+            catch (Exception ex)
+            {
+                realtimeError = ex;
+            }
+
+            try
+            {
+                await _api.LogoutAsync();
+            }
+            catch (Exception ex)
+            {
+                logoutError = ex;
+            }
+
+            ResetSignedOutUi();
+
+            if (logoutError is not null)
+            {
+                MessageText.Text = $"Signed out locally, but server token revocation could not be confirmed: {logoutError.Message}";
+            }
+            else if (realtimeError is not null)
+            {
+                MessageText.Text = $"Signed out and refresh token revoked. Realtime shutdown reported: {realtimeError.Message}";
+            }
+            else
+            {
+                MessageText.Text = "Signed out and refresh token revoked.";
+            }
         });
     }
 
@@ -334,9 +406,12 @@ public partial class MainWindow : Window
 
         await RunAsync(async () =>
         {
-            if (!website.IsActive)
+            var today = DateOnly.FromDateTime(DateTime.Now);
+            if (!website.IsActive ||
+                (website.StartsOn.HasValue && website.StartsOn.Value > today) ||
+                (website.ExpiresOn.HasValue && website.ExpiresOn.Value < today))
             {
-                throw new InvalidOperationException("The selected website assignment is inactive.");
+                throw new InvalidOperationException("The selected website assignment is not currently available.");
             }
             if (!Uri.TryCreate(website.Url, UriKind.Absolute, out var uri) ||
                 (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
@@ -456,6 +531,16 @@ public partial class MainWindow : Window
         var result = await _api.GetMyNotificationsAsync(UnreadNotificationsOnlyBox.IsChecked == true);
         NotificationsGrid.ItemsSource = result.Items;
         NotificationsCountText.Text = $"{result.TotalCount} notification(s)";
+    }
+
+    private void ResetSignedOutUi(string connectionStatus = "Server: signed out")
+    {
+        ClearWorkspace();
+        ConnectionStatusText.Text = connectionStatus;
+        SessionIdentityText.Text = "Employee session";
+        LogoutButton.IsEnabled = false;
+        WorkspaceShell.Visibility = Visibility.Collapsed;
+        LoginShell.Visibility = Visibility.Visible;
     }
 
     private void ClearWorkspace()
