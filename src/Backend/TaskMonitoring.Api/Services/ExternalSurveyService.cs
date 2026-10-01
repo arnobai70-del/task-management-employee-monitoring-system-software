@@ -188,12 +188,16 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
                 "An active employee profile is required.");
         }
 
+        var today = DateOnly.FromDateTime(UtcNow());
         var query = dbContext.Set<WebsiteAssignment>()
             .AsNoTracking()
             .Where(x => x.EmployeeId == employee.Id && x.AccessLevel == WebsiteAccessLevel.Survey);
         if (!includeInactive)
         {
-            query = query.Where(x => x.IsActive);
+            query = query.Where(x =>
+                x.IsActive &&
+                (!x.StartsOn.HasValue || x.StartsOn.Value <= today) &&
+                (!x.ExpiresOn.HasValue || x.ExpiresOn.Value >= today));
         }
 
         var rows = await query
@@ -240,6 +244,11 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
         if (assignment.StartsOn.HasValue && assignment.StartsOn.Value > today)
         {
             return OperationResult<ExternalSurveyAssignmentResponse>.Conflict("survey_link_not_started", "This survey assignment is not available yet.");
+        }
+
+        if (assignment.ExpiresOn.HasValue && assignment.ExpiresOn.Value < today)
+        {
+            return OperationResult<ExternalSurveyAssignmentResponse>.Conflict("survey_link_expired", "This survey assignment has expired.");
         }
 
         if (!Uri.TryCreate(assignment.Url, UriKind.Absolute, out var uri) ||
@@ -313,6 +322,8 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
         }
 
         var url = uri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped);
+        var effectiveFrom = request.StartsOn ?? DateOnly.FromDateTime(UtcNow());
+        var effectiveTo = request.DueDate ?? DateOnly.MaxValue;
         if (request.IsActive && await dbContext.Set<WebsiteAssignment>()
                 .AsNoTracking()
                 .AnyAsync(x =>
@@ -320,10 +331,12 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
                     x.EmployeeId == request.EmployeeId &&
                     x.AccessLevel == WebsiteAccessLevel.Survey &&
                     x.Url == url &&
-                    x.IsActive,
+                    x.IsActive &&
+                    (!x.ExpiresOn.HasValue || x.ExpiresOn.Value >= effectiveFrom) &&
+                    (!x.StartsOn.HasValue || x.StartsOn.Value <= effectiveTo),
                     cancellationToken))
         {
-            return (null, null, null, new ApiOperationError("survey_link_exists", "This employee already has an active assignment for the same survey URL."));
+            return (null, null, null, new ApiOperationError("survey_link_exists", "This employee already has an active assignment for the same survey URL during the requested validity period."));
         }
 
         return (employee, url, uri.IdnHost.ToLowerInvariant(), null);
