@@ -67,8 +67,10 @@ public sealed class SecurityHardeningTests
         Assert.Equal(ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, options.ForwardedHeaders);
         Assert.Equal(1, options.ForwardLimit);
         Assert.True(options.RequireHeaderSymmetry);
-        Assert.Equal([IPAddress.Loopback], options.KnownProxies);
-        Assert.Equal([IPNetwork.Parse("10.77.0.0/24")], options.KnownIPNetworks);
+        Assert.Single(options.KnownProxies);
+        Assert.Equal(IPAddress.Loopback, options.KnownProxies[0]);
+        Assert.Single(options.KnownIPNetworks);
+        Assert.Equal(System.Net.IPNetwork.Parse("10.77.0.0/24"), options.KnownIPNetworks[0]);
     }
 
     [Fact]
