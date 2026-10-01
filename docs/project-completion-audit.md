@@ -8,9 +8,11 @@ The product is divided into 25 equal delivery domains. Each domain is worth 4 pe
 
 A domain is counted complete only when its applicable backend/data/UI or client behavior, authorization, validation, tests/CI and operational documentation are present. Partial work does not receive fractional credit in the headline percentage; it remains pending until its completion gate is met.
 
-## Verified baseline at main `a88c2f2256ecad65137e919483e5d2765883700d`
+## Baseline before Production Release Control Center
 
-| # | Delivery domain | Status |
+At main `a88c2f2256ecad65137e919483e5d2765883700d`, 23 of 25 delivery domains were complete: **92%**.
+
+| # | Delivery domain | Status after PR #41 is merged |
 |---|---|---|
 | 1 | Backend/.NET/PostgreSQL foundation and migrations | Complete |
 | 2 | Authentication, refresh-token rotation, lockout and RBAC | Complete |
@@ -35,25 +37,29 @@ A domain is counted complete only when its applicable backend/data/UI or client 
 | 21 | Security observability, integrity checks and compliance export | Complete |
 | 22 | Automated security alerting and escalation | Complete |
 | 23 | CI quality gates including Windows lifecycle acceptance | Complete |
-| 24 | Centralized production release/deployment control plane | Pending |
+| 24 | Centralized production release/deployment control plane | Complete by PR #41; counts after merge |
 | 25 | Real-environment signed production launch/operator acceptance | Pending |
 
-**Verified codebase completion baseline: 23 / 25 = 92%.**
+## Domain 24 evidence
 
-## Remaining domain 24 gate
+PR #41 satisfies the centralized production release/deployment control gate with:
 
-The centralized production release/deployment control plane is complete only when the repository provides a permission-gated release registry/control API and Admin UI that can:
+- permission-gated immutable release candidate registration;
+- explicit signed-artifact and publisher-fingerprint verification attestations;
+- explicit approval before promotion;
+- promotion gates covering API/database health, backup freshness, critical operations/security signals, active agent rollouts and version progression;
+- observed stable release/deployment readiness in the Admin Operations console;
+- exact live `release.json` SHA-256 and metadata verification;
+- exact runtime package size/SHA-256 verification;
+- archived publisher fingerprint/certificate verification;
+- durable audit-backed approval, promotion, deployment, supersede, rollback and withdrawal history;
+- an operator-owned archived-release rollback helper that preserves the API's read-only update-host boundary;
+- backend regression tests for approval verification, blocked health gates, tampered package rejection, deployment verification, supersede and rollback restoration;
+- production and operator documentation.
 
-- register immutable release candidates and verification metadata;
-- require explicit approval before promotion;
-- expose current published release and deployment readiness;
-- correlate production health, backup freshness and agent rollout readiness;
-- record promotion, deployment verification, rollback decision and release history in the audit trail;
-- prevent unsafe promotion when required gates are not satisfied;
-- avoid arbitrary remote-command execution and preserve the existing read-only update-host trust boundary;
-- include regression tests and documentation.
+The domain counts only after PR #41's final exact head passes the full CI gate and is merged to `main`.
 
-Completing this domain moves the codebase score to **24 / 25 = 96%**.
+**Post-merge verified codebase completion: 24 / 25 = 96%.**
 
 ## Remaining domain 25 gate
 
