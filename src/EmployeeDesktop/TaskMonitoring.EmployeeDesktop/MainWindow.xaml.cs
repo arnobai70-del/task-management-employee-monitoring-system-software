@@ -78,11 +78,15 @@ public partial class MainWindow : Window
                 throw new InvalidOperationException("Email and password are required.");
             }
 
+            var employeeEmail = EmailBox.Text.Trim();
             _api.ConfigureServer(ServerUrlBox.Text);
-            await _api.LoginAsync(EmailBox.Text.Trim(), PasswordBox.Password);
+            await _api.LoginAsync(employeeEmail, PasswordBox.Password);
             PasswordBox.Clear();
             ConnectionStatusText.Text = $"Server: connected to {serverUri.Host}";
+            SessionIdentityText.Text = employeeEmail;
             LogoutButton.IsEnabled = true;
+            LoginShell.Visibility = Visibility.Collapsed;
+            WorkspaceShell.Visibility = Visibility.Visible;
             MessageText.Text = "Signed in successfully.";
             await RefreshWorkspaceAsync();
             await RefreshMonitoringPolicyAsync();
@@ -103,7 +107,10 @@ public partial class MainWindow : Window
             await _api.LogoutAsync();
             ClearWorkspace();
             ConnectionStatusText.Text = "Server: signed out";
+            SessionIdentityText.Text = "Employee session";
             LogoutButton.IsEnabled = false;
+            WorkspaceShell.Visibility = Visibility.Collapsed;
+            LoginShell.Visibility = Visibility.Visible;
             MessageText.Text = "Signed out and refresh token revoked.";
         });
     }
