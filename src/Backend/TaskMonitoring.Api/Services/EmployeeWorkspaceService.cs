@@ -20,7 +20,7 @@ public interface IEmployeeWorkspaceService
         CancellationToken cancellationToken);
 }
 
-public sealed class EmployeeWorkspaceService(AppDbContext dbContext) : IEmployeeWorkspaceService
+public sealed class EmployeeWorkspaceService(AppDbContext dbContext, TimeProvider timeProvider) : IEmployeeWorkspaceService
 {
     public async Task<OperationResult<PagedResponse<ProjectTaskResponse>>> GetMyTasksAsync(
         RequestActor actor,
@@ -90,13 +90,17 @@ public sealed class EmployeeWorkspaceService(AppDbContext dbContext) : IEmployee
         }
 
         var employee = employeeResult.Value;
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
 
         var rdpQuery = dbContext.Set<RdpAssignment>()
             .AsNoTracking()
             .Where(x => x.EmployeeId == employee.Id);
         if (!includeInactive)
         {
-            rdpQuery = rdpQuery.Where(x => x.IsActive);
+            rdpQuery = rdpQuery.Where(x =>
+                x.IsActive &&
+                (!x.ValidFrom.HasValue || x.ValidFrom.Value <= today) &&
+                (!x.ExpiresOn.HasValue || x.ExpiresOn.Value >= today));
         }
 
         var ipQuery = dbContext.Set<IpAssignment>()
@@ -112,7 +116,10 @@ public sealed class EmployeeWorkspaceService(AppDbContext dbContext) : IEmployee
             .Where(x => x.EmployeeId == employee.Id && x.AccessLevel != WebsiteAccessLevel.Survey);
         if (!includeInactive)
         {
-            websiteQuery = websiteQuery.Where(x => x.IsActive);
+            websiteQuery = websiteQuery.Where(x =>
+                x.IsActive &&
+                (!x.StartsOn.HasValue || x.StartsOn.Value <= today) &&
+                (!x.ExpiresOn.HasValue || x.ExpiresOn.Value >= today));
         }
 
         var rdpAssignments = await rdpQuery
