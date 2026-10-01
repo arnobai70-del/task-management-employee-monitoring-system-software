@@ -316,6 +316,16 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
             return OperationResult<WorkSessionResponse>.Invalid("shift_not_assigned", "No active shift assignment applies to the current work date.");
         }
 
+        if (now < resolved.ScheduledStartUtc)
+        {
+            return OperationResult<WorkSessionResponse>.Conflict("shift_not_started", "Check-in is available when the assigned shift starts.");
+        }
+
+        if (now >= resolved.ScheduledEndUtc)
+        {
+            return OperationResult<WorkSessionResponse>.Conflict("shift_check_in_closed", "Check-in is closed because the assigned shift has ended.");
+        }
+
         if (await dbContext.WorkSessions.AnyAsync(x => x.EmployeeId == employee.Id && x.WorkDate == resolved.WorkDate, cancellationToken))
         {
             return OperationResult<WorkSessionResponse>.Conflict("attendance_already_recorded", "Attendance has already been recorded for this work date.");
@@ -364,8 +374,8 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
 
         var session = sessionResult.Session!;
         if (await dbContext.WorkBreaks.AnyAsync(
-    x => x.WorkSessionId == session.Id && !x.EndedAtUtc.HasValue,
-    cancellationToken))
+            x => x.WorkSessionId == session.Id && !x.EndedAtUtc.HasValue,
+            cancellationToken))
         {
             return OperationResult<WorkSessionResponse>.Conflict("break_already_open", "A break is already in progress.");
         }
