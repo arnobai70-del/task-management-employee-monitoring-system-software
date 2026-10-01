@@ -47,7 +47,7 @@ The wizard provides the normal flow:
 Welcome -> Next -> confirm organization configuration -> Install
 ```
 
-It invokes the existing signed `install-employee-windows.ps1` installer with PowerShell `AllSigned` enforcement. The underlying installer still verifies the release manifest, runtime ZIP SHA-256, executable version metadata and pinned publisher identity before activation. The wizard does not weaken or replace those checks.
+Before invoking the existing `install-employee-windows.ps1` installer, the wizard explicitly validates the Authenticode signature and exact pinned publisher-certificate SHA-256 for every deployment PowerShell file it relies on. It then runs the already-validated installer non-interactively. This avoids machine-specific PowerShell trusted-publisher prompts without weakening the release trust boundary. The underlying installer still verifies the release manifest, runtime ZIP SHA-256, executable version metadata and pinned publisher identity before activation.
 
 ### Preconfigure the wizard
 
