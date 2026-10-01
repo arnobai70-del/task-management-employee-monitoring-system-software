@@ -56,6 +56,7 @@ services:
       TASKMONITORING_KEY_PER_FILE_DIRECTORY: /run/secrets
       Database__AutoMigrate: "false"
       ReverseProxy__TrustForwardedHeaders: "true"
+      ReverseProxy__KnownNetworks__0: ${BACKEND_NETWORK_CIDR:-10.77.0.0/24}
       Jwt__Issuer: ${JWT_ISSUER:-TaskMonitoring.Api}
       Jwt__Audience: ${JWT_AUDIENCE:-TaskMonitoring.Clients}
     secrets:
@@ -124,3 +125,6 @@ networks:
   edge:
   backend:
     internal: true
+    ipam:
+      config:
+        - subnet: ${BACKEND_NETWORK_CIDR:-10.77.0.0/24}
