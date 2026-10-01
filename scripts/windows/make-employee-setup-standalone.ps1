@@ -18,6 +18,9 @@ Set-StrictMode -Version Latest
 
 function Assert-AbsoluteUrl {
     param([string]$Value, [string]$Name, [switch]$AllowHttp)
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        throw "$Name must be supplied."
+    }
     $uri = $null
     if (-not [Uri]::TryCreate($Value.Trim(), [UriKind]::Absolute, [ref]$uri)) {
         throw "$Name must be an absolute URL."
@@ -48,6 +51,9 @@ if (-not $DevelopmentSetup -and [string]::IsNullOrWhiteSpace($UpdateManifestUrl)
 if ($DevelopmentSetup -and -not [string]::IsNullOrWhiteSpace($PfxPath)) {
     throw 'DevelopmentSetup must not be combined with a production signing certificate.'
 }
+
+$setupServerUrl = $ServerUrl.Trim().TrimEnd('/')
+$setupManifestUrl = if ([string]::IsNullOrWhiteSpace($UpdateManifestUrl)) { '' } else { $UpdateManifestUrl.Trim() }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $setupProject = Join-Path $repoRoot 'src\EmployeeSetup\TaskMonitoring.EmployeeSetup\TaskMonitoring.EmployeeSetup.csproj'
@@ -136,8 +142,8 @@ try {
         -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:DebugType=None `
         -p:DebugSymbols=false `
-        "-p:TaskMonitoringServerUrl=$($ServerUrl.TrimEnd('/'))" `
-        "-p:TaskMonitoringUpdateManifestUrl=$($UpdateManifestUrl.Trim())" `
+        "-p:TaskMonitoringServerUrl=$setupServerUrl" `
+        "-p:TaskMonitoringUpdateManifestUrl=$setupManifestUrl" `
         "-p:TaskMonitoringPublisherSha256=$publisherFingerprint" `
         "-p:TaskMonitoringDevelopmentSetup=$developmentValue" `
         "-p:TaskMonitoringPayloadZip=$payloadZip"
