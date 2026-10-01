@@ -19,10 +19,11 @@ public partial class App : System.Windows.Application
                 return;
             }
 
+            var serverUrlBox = mainWindow.FindName("ServerUrlBox") as TextBox;
+
             EmployeeLoginExperience.Apply(mainWindow);
 
-            if (deploymentSettings is null ||
-                mainWindow.FindName("ServerUrlBox") is not TextBox serverUrlBox)
+            if (deploymentSettings is null || serverUrlBox is null)
             {
                 return;
             }

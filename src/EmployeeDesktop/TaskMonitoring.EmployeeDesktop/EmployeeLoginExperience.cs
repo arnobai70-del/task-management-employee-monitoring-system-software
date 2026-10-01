@@ -24,16 +24,19 @@ internal static class EmployeeLoginExperience
             return;
         }
 
-        if (Equals(loginShell.Tag, "clean-login-v3"))
+        if (Equals(loginShell.Tag, "clean-login-v4"))
         {
             return;
         }
 
-        loginShell.Tag = "clean-login-v3";
-        loginShell.Content = null;
-        loginShell.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        loginShell.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-        loginShell.Background = Brush("#F6F8FC");
+        // The controls come from the compiled XAML tree. They must be explicitly
+        // detached from their original StackPanel before they can be inserted into
+        // the redesigned runtime layout; otherwise WPF throws because an element
+        // cannot have two logical parents.
+        DetachFromParent(serverUrlBox);
+        DetachFromParent(emailBox);
+        DetachFromParent(passwordBox);
+        DetachFromParent(loginButton);
 
         NormalizeInput(serverUrlBox);
         NormalizeInput(emailBox);
@@ -74,8 +77,35 @@ internal static class EmployeeLoginExperience
         Grid.SetRow(footer, 2);
         root.Children.Add(footer);
 
+        loginShell.Tag = "clean-login-v4";
+        loginShell.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        loginShell.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        loginShell.Background = Brush("#F6F8FC");
         loginShell.Content = root;
+
         emailBox.Focus();
+    }
+
+    private static void DetachFromParent(FrameworkElement element)
+    {
+        var parent = LogicalTreeHelper.GetParent(element);
+        switch (parent)
+        {
+            case Panel panel:
+                panel.Children.Remove(element);
+                break;
+            case Decorator decorator when ReferenceEquals(decorator.Child, element):
+                decorator.Child = null;
+                break;
+            case ContentControl contentControl when ReferenceEquals(contentControl.Content, element):
+                contentControl.Content = null;
+                break;
+            case null:
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"Cannot move {element.GetType().Name} from parent {parent.GetType().Name}.");
+        }
     }
 
     private static FrameworkElement BuildBrand()
