@@ -24,6 +24,21 @@ export class ApiRequestError extends Error {
   }
 }
 
+interface PagedEnvelope {
+  items: unknown[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+}
+
+const LEGACY_COMPLETE_LIST_PATHS = new Set([
+  '/api/employees',
+  '/api/projects',
+  '/api/tasks',
+  '/api/surveys',
+  '/api/website-work'
+]);
+
 let refreshPromise: Promise<AuthSession> | null = null;
 
 export function apiUrl(path: string): string {
@@ -169,6 +184,35 @@ export async function getValidAccessToken(): Promise<string> {
   return session.accessToken;
 }
 
+function isPagedEnvelope(value: unknown): value is PagedEnvelope {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<PagedEnvelope>;
+  return Array.isArray(candidate.items)
+    && typeof candidate.page === 'number'
+    && typeof candidate.pageSize === 'number'
+    && typeof candidate.totalCount === 'number';
+}
+
+function shouldLoadCompleteLegacyList(path: string, init: RequestInit): boolean {
+  const method = (init.method || 'GET').toUpperCase();
+  if (method !== 'GET') return false;
+
+  try {
+    const requestUrl = new URL(path, 'http://admin.local');
+    return LEGACY_COMPLETE_LIST_PATHS.has(requestUrl.pathname)
+      && requestUrl.searchParams.get('page') === '1'
+      && requestUrl.searchParams.get('pageSize') === '100';
+  } catch {
+    return false;
+  }
+}
+
+function withPage(path: string, page: number): string {
+  const requestUrl = new URL(path, 'http://admin.local');
+  requestUrl.searchParams.set('page', String(page));
+  return `${requestUrl.pathname}${requestUrl.search}`;
+}
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   let session = readSession();
   if (!session) throw new ApiRequestError(401, 'authentication_required', 'Please sign in again.');
@@ -204,5 +248,32 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
   if (!response.ok) throw await readError(response);
   if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+
+  const parsed = await response.json() as unknown;
+  if (!shouldLoadCompleteLegacyList(path, init) || !isPagedEnvelope(parsed) || parsed.items.length >= parsed.totalCount) {
+    return parsed as T;
+  }
+
+  // Several older management screens predate visible pagination and intentionally ask
+  // for page 1 with the server's maximum page size. Aggregate their remaining pages so
+  // record 101+ is never silently omitted while those screens are incrementally upgraded.
+  const pageSize = Math.max(1, parsed.pageSize);
+  const totalPages = Math.ceil(parsed.totalCount / pageSize);
+  const items = [...parsed.items];
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    const next = await apiFetch<PagedEnvelope>(withPage(path, page), init);
+    if (!isPagedEnvelope(next)) {
+      throw new ApiRequestError(500, 'invalid_paged_response', 'The server returned an invalid paged response.');
+    }
+    items.push(...next.items);
+    if (next.items.length === 0) break;
+  }
+
+  return {
+    ...parsed,
+    items,
+    page: 1,
+    totalCount: Math.max(parsed.totalCount, items.length)
+  } as T;
 }
