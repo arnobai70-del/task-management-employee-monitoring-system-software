@@ -4,7 +4,11 @@ on:
   pull_request:
     paths:
       - 'Start-Admin.cmd'
+      - 'Start-Admin-LAN-Test.cmd'
+      - 'Build-Employee-Test-Installer.cmd'
       - 'scripts/windows/start-admin-local.ps1'
+      - 'scripts/windows/build-employee-test-installer.ps1'
+      - 'scripts/windows/make-employee-setup-standalone.ps1'
       - 'src/EmployeeSetup/**'
       - 'scripts/windows/build-employee-release.ps1'
       - 'scripts/windows/test-employee-release.ps1'
@@ -16,7 +20,7 @@ permissions:
 
 jobs:
   validate:
-    name: Validate admin launcher and employee setup wizard
+    name: Validate admin launcher and standalone employee setup
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -33,7 +37,9 @@ jobs:
           foreach ($script in @(
             'scripts/windows/start-admin-local.ps1',
             'scripts/windows/build-employee-release.ps1',
-            'scripts/windows/test-employee-release.ps1'
+            'scripts/windows/test-employee-release.ps1',
+            'scripts/windows/make-employee-setup-standalone.ps1',
+            'scripts/windows/build-employee-test-installer.ps1'
           )) {
             $errors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$null, [ref]$errors)
@@ -49,7 +55,7 @@ jobs:
           dotnet restore src/EmployeeSetup/TaskMonitoring.EmployeeSetup/TaskMonitoring.EmployeeSetup.csproj
           dotnet build src/EmployeeSetup/TaskMonitoring.EmployeeSetup/TaskMonitoring.EmployeeSetup.csproj --configuration Release --no-restore
 
-      - name: Build preconfigured unsigned release bundle
+      - name: Build unsigned release bundle
         shell: pwsh
         run: |
           ./scripts/windows/build-employee-release.ps1 `
@@ -59,11 +65,25 @@ jobs:
             -OutputRoot '${{ runner.temp }}\employee-release' `
             -AllowUnsignedDevelopmentBuild
 
-      - name: Validate setup wizard is included in release bundle
+      - name: Rebuild setup as standalone development EXE
+        shell: pwsh
+        run: |
+          $release = '${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-0.0.0-win-x64'
+          ./scripts/windows/make-employee-setup-standalone.ps1 `
+            -ReleaseDirectory $release `
+            -ServerUrl 'http://127.0.0.1:5080' `
+            -DevelopmentSetup
+
+      - name: Validate standalone setup and release bundle
         shell: pwsh
         run: |
           $release = '${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-0.0.0-win-x64'
           ./scripts/windows/test-employee-release.ps1 -ReleaseDirectory $release -AllowUnsignedDevelopmentBuild
-          if (-not (Test-Path (Join-Path $release 'TaskMonitoring.EmployeeSetup.exe') -PathType Leaf)) {
+          $setup = Join-Path $release 'TaskMonitoring.EmployeeSetup.exe'
+          $runtime = Get-ChildItem $release -Filter 'TaskMonitoring.EmployeeRuntime-*.zip' | Select-Object -First 1
+          if (-not (Test-Path $setup -PathType Leaf)) {
             throw 'Employee setup executable is missing from the release bundle.'
+          }
+          if ($null -eq $runtime -or (Get-Item $setup).Length -le $runtime.Length) {
+            throw 'Standalone setup does not appear to contain the embedded employee payload.'
           }
