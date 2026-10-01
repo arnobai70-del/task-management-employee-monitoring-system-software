@@ -143,15 +143,47 @@ public sealed class SetupForm : Form
         var releaseDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
         var installer = Path.Combine(releaseDirectory, "install-employee-windows.ps1");
         var manifest = Path.Combine(releaseDirectory, "release.json");
-        if (!File.Exists(installer) || !File.Exists(manifest))
+        var signedScripts = new[]
+        {
+            installer,
+            Path.Combine(releaseDirectory, "deployment-common.ps1"),
+            Path.Combine(releaseDirectory, "uninstall-employee-windows.ps1"),
+            Path.Combine(releaseDirectory, "rollback-employee-windows.ps1"),
+            Path.Combine(releaseDirectory, "run-central-agent-update.ps1")
+        };
+        if (!File.Exists(manifest) || signedScripts.Any(path => !File.Exists(path)))
         {
             ShowError("This setup executable must remain inside the complete signed TaskMonitoring release bundle.");
             return;
         }
 
-        SetBusy(true, "Installing and verifying signed components...");
+        SetBusy(true, "Verifying publisher signatures and installing components...");
         try
         {
+            var verificationAndInstall = @"
+$ErrorActionPreference = 'Stop'
+$expected = $env:TM_PUBLISHER_SHA256
+$files = $env:TM_SIGNED_SCRIPTS -split [IO.Path]::PathSeparator
+foreach ($file in $files) {
+    $signature = Get-AuthenticodeSignature -FilePath $file
+    if ($signature.Status -ne [Management.Automation.SignatureStatus]::Valid -or $null -eq $signature.SignerCertificate) {
+        throw "Authenticode validation failed for '$file'. Status=$($signature.Status)."
+    }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $actual = (($sha.ComputeHash($signature.SignerCertificate.RawData) | ForEach-Object { $_.ToString('X2') }) -join '')
+    }
+    finally {
+        $sha.Dispose()
+    }
+    if ($actual -ne $expected) {
+        throw "Publisher certificate mismatch for '$file'."
+    }
+}
+& $env:TM_INSTALLER -ReleaseDirectory $env:TM_RELEASE_DIRECTORY -ServerUrl $env:TM_SERVER_URL -UpdateManifestUrl $env:TM_UPDATE_MANIFEST_URL -PublisherCertificateSha256 $expected
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+"@;
+
             var startInfo = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
@@ -160,20 +192,18 @@ public sealed class SetupForm : Form
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
-            foreach (var argument in new[]
-            {
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy", "AllSigned",
-                "-File", installer,
-                "-ReleaseDirectory", releaseDirectory,
-                "-ServerUrl", serverUrl,
-                "-UpdateManifestUrl", updateManifestUrl,
-                "-PublisherCertificateSha256", publisher
-            })
-            {
-                startInfo.ArgumentList.Add(argument);
-            }
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-NonInteractive");
+            startInfo.ArgumentList.Add("-ExecutionPolicy");
+            startInfo.ArgumentList.Add("Bypass");
+            startInfo.ArgumentList.Add("-Command");
+            startInfo.ArgumentList.Add(verificationAndInstall);
+            startInfo.Environment["TM_PUBLISHER_SHA256"] = publisher;
+            startInfo.Environment["TM_SIGNED_SCRIPTS"] = string.Join(Path.PathSeparator, signedScripts);
+            startInfo.Environment["TM_INSTALLER"] = installer;
+            startInfo.Environment["TM_RELEASE_DIRECTORY"] = releaseDirectory;
+            startInfo.Environment["TM_SERVER_URL"] = serverUrl;
+            startInfo.Environment["TM_UPDATE_MANIFEST_URL"] = updateManifestUrl;
 
             using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the signed installer.");
             var outputTask = process.StandardOutput.ReadToEndAsync();
@@ -213,7 +243,10 @@ public sealed class SetupForm : Form
         {
             if (!IsDisposed)
             {
-                SetBusy(false, statusLabel.Text);
+                installButton.Enabled = true;
+                backButton.Enabled = true;
+                cancelButton.Enabled = true;
+                UseWaitCursor = false;
             }
         }
     }
