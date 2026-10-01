@@ -160,7 +160,7 @@ public sealed class SetupForm : Form
         SetBusy(true, "Verifying publisher signatures and installing components...");
         try
         {
-            var verificationAndInstall = @"
+            var verificationAndInstall = """
 $ErrorActionPreference = 'Stop'
 $expected = $env:TM_PUBLISHER_SHA256
 $files = $env:TM_SIGNED_SCRIPTS -split [IO.Path]::PathSeparator
@@ -182,7 +182,7 @@ foreach ($file in $files) {
 }
 & $env:TM_INSTALLER -ReleaseDirectory $env:TM_RELEASE_DIRECTORY -ServerUrl $env:TM_SERVER_URL -UpdateManifestUrl $env:TM_UPDATE_MANIFEST_URL -PublisherCertificateSha256 $expected
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-"@;
+""";
 
             var startInfo = new ProcessStartInfo
             {
