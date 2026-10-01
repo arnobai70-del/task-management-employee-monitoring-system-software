@@ -23,6 +23,11 @@ public sealed class RealtimeHub(AppDbContext dbContext) : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.OperationsReaders);
         }
 
+        if (Context.User?.Claims.Any(x => x.Type == "permission" && x.Value == PermissionCatalog.AuditRead) == true)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.SecurityAlertReaders);
+        }
+
         if (Context.User?.Claims.Any(x =>
                 x.Type == "permission" &&
                 (x.Value == PermissionCatalog.TasksRead || x.Value == PermissionCatalog.TasksManage)) == true)
@@ -56,6 +61,7 @@ public static class RealtimeGroups
     public const string PresenceReaders = "presence-readers";
     public const string TaskManagers = "task-managers";
     public const string OperationsReaders = "operations-readers";
+    public const string SecurityAlertReaders = "security-alert-readers";
 
     public static string Employee(Guid employeeId) => $"employee:{employeeId:N}";
     public static string User(Guid userId) => $"user:{userId:N}";
