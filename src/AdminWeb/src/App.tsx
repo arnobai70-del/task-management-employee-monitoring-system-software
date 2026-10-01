@@ -267,7 +267,7 @@ function DashboardPage() {
           <article className="panel table-panel">
             <div className="panel-heading"><div><h2>Highest open workload</h2><p>Tasks and active survey assignments</p></div><NavLink className="text-link" to="/employees">Employees →</NavLink></div>
             <div className="table-wrap"><table><thead><tr><th>Employee</th><th>Department</th><th>Open tasks</th><th>Urgent</th><th>Overdue</th><th>Survey work</th><th>Total</th></tr></thead><tbody>
-              {(workload.data || []).map(item => <tr key={item.employeeId}><td><strong>{item.fullName}</strong><small>{item.employeeCode} · {item.email}</small></td><td>{item.departmentName || '—'}</td><td>{item.openTasks}</td><td>{item.urgentOpenTasks}</td><td>{item.overdueTasks}</td><td>{item.activeSurveyAssignments}</td><td><strong>{item.totalOpenItems}</strong></td></tr>)}
+              {(workload.data || []).map(item => <tr key={item.employeeId}><td><strong>{item.fullName}</strong><small>{item.employeeCode}</small></td><td>{item.departmentName || '—'}</td><td>{item.openTasks}</td><td>{item.urgentOpenTasks}</td><td>{item.overdueTasks}</td><td>{item.activeSurveyAssignments}</td><td><strong>{item.totalOpenItems}</strong></td></tr>)}
               {!workload.data?.length && <EmptyRow colSpan={7} />}
             </tbody></table></div>
           </article>
