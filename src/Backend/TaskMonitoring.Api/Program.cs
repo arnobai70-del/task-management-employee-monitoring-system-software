@@ -105,6 +105,9 @@ builder.Services.AddOptions<SecurityObservabilityOptions>()
     .Validate(options => options.RateLimitThreshold is >= 2 and <= 1000, "SecurityObservability:RateLimitThreshold must be between 2 and 1000.")
     .Validate(options => options.MinimumAuditRetentionDays is >= 1 and <= 3650, "SecurityObservability:MinimumAuditRetentionDays must be between 1 and 3650.")
     .Validate(options => options.ExportMaxRecords is >= 100 and <= 100000, "SecurityObservability:ExportMaxRecords must be between 100 and 100000.")
+    .Validate(options => options.AlertScanIntervalSeconds is >= 30 and <= 3600, "SecurityObservability:AlertScanIntervalSeconds must be between 30 and 3600.")
+    .Validate(options => options.AlertEscalationAfterMinutes is >= 1 and <= 1440, "SecurityObservability:AlertEscalationAfterMinutes must be between 1 and 1440.")
+    .Validate(options => options.AlertReopenCooldownMinutes is >= 1 and <= 1440, "SecurityObservability:AlertReopenCooldownMinutes must be between 1 and 1440.")
     .ValidateOnStart();
 builder.Services.AddScoped<TaskNotificationInterceptor>();
 builder.Services.AddScoped<SurveyNotificationInterceptor>();
@@ -147,14 +150,17 @@ builder.Services.AddScoped<IAgentUpdateService, AgentUpdateService>();
 builder.Services.AddScoped<IAgentUpdateIncidentBridge, AgentUpdateIncidentBridge>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<ISecurityObservabilityService, SecurityObservabilityService>();
+builder.Services.AddScoped<ISecurityAlertService, SecurityAlertService>();
 builder.Services.AddSingleton<IRealtimeEventPublisher, SignalRRealtimeEventPublisher>();
 builder.Services.AddSingleton<IWebsiteWorkRealtimePublisher, SignalRWebsiteWorkRealtimePublisher>();
 builder.Services.AddSingleton<IAdminNotificationRealtimePublisher, SignalRAdminNotificationRealtimePublisher>();
 builder.Services.AddSingleton<IOperationsIncidentRealtimePublisher, SignalROperationsIncidentRealtimePublisher>();
+builder.Services.AddSingleton<ISecurityAlertRealtimePublisher, SignalRSecurityAlertRealtimePublisher>();
 builder.Services.AddHostedService<MonitoringRetentionHostedService>();
 builder.Services.AddHostedService<FollowUpReminderHostedService>();
 builder.Services.AddHostedService<OperationsIncidentHostedService>();
 builder.Services.AddHostedService<AgentUpdateIncidentHostedService>();
+builder.Services.AddHostedService<SecurityAlertHostedService>();
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, PermissionAuthorizationHandler>();
 
