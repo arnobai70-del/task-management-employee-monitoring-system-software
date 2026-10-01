@@ -63,8 +63,8 @@ for header in \
 done
 
 openapi_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 "$app_root/openapi/v1.json")"
-if [[ "$openapi_status" != "404" ]]; then
-  echo "Production OpenAPI endpoint must not be exposed; received HTTP $openapi_status." >&2
+if [[ "$openapi_status" != "401" && "$openapi_status" != "404" ]]; then
+  echo "Production OpenAPI endpoint must not be anonymously exposed; received HTTP $openapi_status." >&2
   exit 1
 fi
 
