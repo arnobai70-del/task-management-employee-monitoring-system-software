@@ -203,6 +203,15 @@ public sealed class WebsiteWorkService(
             return OperationResult<WebsiteWorkResponse>.Conflict("website_work_project_locked", "Move work to another project by creating a new assignment.");
         }
 
+        if (request.EmployeeId != Guid.Empty &&
+            request.EmployeeId != task.AssigneeEmployeeId &&
+            task.Activities.Any(activity => activity.Action == StartedAction))
+        {
+            return OperationResult<WebsiteWorkResponse>.Conflict(
+                "website_work_assignee_locked",
+                "Website work that has already started cannot be reassigned. Create a new assignment for the other employee so work history remains accurate.");
+        }
+
         var validation = await ValidateRequestAsync(request, task.Id, cancellationToken);
         if (validation.Error is not null)
         {
