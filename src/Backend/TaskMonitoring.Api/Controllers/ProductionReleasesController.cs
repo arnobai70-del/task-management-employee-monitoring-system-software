@@ -2,7 +2,10 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using TaskMonitoring.Api.Configuration;
 using TaskMonitoring.Api.Contracts;
+using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Security;
 using TaskMonitoring.Api.Services;
 
@@ -11,8 +14,24 @@ namespace TaskMonitoring.Api.Controllers;
 [ApiController]
 [Authorize(Policy = PermissionCatalog.ReportsRead)]
 [Route("api/production-releases")]
-public sealed class ProductionReleasesController(IProductionReleaseControlService releaseControlService) : ControllerBase
+public sealed class ProductionReleasesController(
+    AppDbContext dbContext,
+    IOperationsHealthService operationsHealthService,
+    IOperationsIncidentService operationsIncidentService,
+    ISecurityAlertService securityAlertService,
+    IAgentUpdateService agentUpdateService,
+    IOptions<OperationsOptions> operationsOptions,
+    TimeProvider timeProvider) : ControllerBase
 {
+    private readonly IProductionReleaseControlService releaseControlService = new ProductionReleaseControlService(
+        dbContext,
+        operationsHealthService,
+        operationsIncidentService,
+        securityAlertService,
+        agentUpdateService,
+        operationsOptions,
+        timeProvider);
+
     [HttpGet("dashboard")]
     public async Task<ActionResult<ProductionReleaseDashboardResponse>> GetDashboard(CancellationToken cancellationToken)
         => Ok(await releaseControlService.GetDashboardAsync(cancellationToken));
