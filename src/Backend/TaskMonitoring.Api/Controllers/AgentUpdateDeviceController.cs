@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Services;
 
@@ -11,6 +12,7 @@ namespace TaskMonitoring.Api.Controllers;
 public sealed class AgentUpdateDeviceController(IAgentUpdateService service) : ControllerBase
 {
     [HttpPost("register")]
+    [EnableRateLimiting("agent-enrollment")]
     public async Task<ActionResult<AgentUpdateDeviceRegisterResponse>> Register(
         AgentUpdateDeviceRegisterRequest request,
         CancellationToken cancellationToken)
@@ -20,6 +22,7 @@ public sealed class AgentUpdateDeviceController(IAgentUpdateService service) : C
             cancellationToken));
 
     [HttpGet("{deviceId:guid}/plan")]
+    [EnableRateLimiting("agent-device")]
     public async Task<ActionResult<AgentUpdateDevicePlanResponse>> GetPlan(
         Guid deviceId,
         CancellationToken cancellationToken)
@@ -29,6 +32,7 @@ public sealed class AgentUpdateDeviceController(IAgentUpdateService service) : C
             cancellationToken));
 
     [HttpPost("{deviceId:guid}/status")]
+    [EnableRateLimiting("agent-device")]
     public async Task<ActionResult<AgentUpdateDeviceStatusResponse>> RecordStatus(
         Guid deviceId,
         AgentUpdateDeviceStatusRequest request,
