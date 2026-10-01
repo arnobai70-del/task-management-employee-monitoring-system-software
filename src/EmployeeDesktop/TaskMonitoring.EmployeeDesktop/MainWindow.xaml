@@ -7,13 +7,18 @@
         Background="{StaticResource AppBackgroundBrush}"
         Closing="Window_Closing">
   <Window.Resources>
-    <Style x:Key="CockpitCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
-      <Setter Property="CornerRadius" Value="20" />
-      <Setter Property="BorderBrush" Value="#D9E5F4" />
-      <Setter Property="Background" Value="#FCFDFF" />
+    <Style x:Key="WorkspaceSurfaceStyle" TargetType="Border">
+      <Setter Property="Background" Value="#FFFFFF" />
+      <Setter Property="BorderBrush" Value="#DCE5F1" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="16" />
+      <Setter Property="Padding" Value="20" />
     </Style>
-    <Style x:Key="CockpitElevatedStyle" TargetType="Border" BasedOn="{StaticResource ElevatedCardStyle}">
-      <Setter Property="CornerRadius" Value="22" />
+
+    <Style x:Key="TopNavItemStyle" TargetType="TabItem" BasedOn="{StaticResource SubTabItemStyle}">
+      <Setter Property="Margin" Value="0,0,8,0" />
+      <Setter Property="Padding" Value="14,9" />
+      <Setter Property="FontSize" Value="12" />
     </Style>
   </Window.Resources>
 
@@ -29,466 +34,290 @@
                   VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled"
                   HorizontalContentAlignment="Stretch">
-      <Grid MinHeight="520" Margin="22">
-        <Border Width="500"
-                MaxWidth="500"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Style="{StaticResource CockpitElevatedStyle}"
-                Padding="32">
-          <StackPanel>
-            <Grid Margin="0,0,0,24">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-              </Grid.ColumnDefinitions>
-              <Border Width="50" Height="50" CornerRadius="15">
-                <Border.Background>
-                  <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                    <GradientStop Color="#22C1DC" Offset="0" />
-                    <GradientStop Color="#4F46E5" Offset="1" />
-                  </LinearGradientBrush>
-                </Border.Background>
+      <Grid MinHeight="560">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" MinWidth="280" />
+          <ColumnDefinition Width="480" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Margin="24" CornerRadius="24" Padding="42">
+          <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+              <GradientStop Color="#07111F" Offset="0" />
+              <GradientStop Color="#10243D" Offset="0.58" />
+              <GradientStop Color="#163A59" Offset="1" />
+            </LinearGradientBrush>
+          </Border.Background>
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Orientation="Horizontal">
+              <Border Width="48" Height="48" CornerRadius="14" Background="#2F6FED">
                 <TextBlock Text="TM" Foreground="White" FontWeight="Bold" FontSize="15"
                            HorizontalAlignment="Center" VerticalAlignment="Center" />
               </Border>
-              <StackPanel Grid.Column="1" Margin="13,3,0,0">
-                <TextBlock Text="TaskMonitoring" FontSize="17" FontWeight="SemiBold" />
-                <TextBlock Text="Employee Workspace" Foreground="{StaticResource MutedTextBrush}" FontSize="11.5" Margin="0,3,0,0" />
+              <StackPanel Margin="13,3,0,0">
+                <TextBlock Text="TaskMonitoring" Foreground="White" FontWeight="SemiBold" FontSize="17" />
+                <TextBlock Text="Employee desktop" Foreground="#93A9C4" FontSize="11" Margin="0,3,0,0" />
               </StackPanel>
-              <Border Grid.Column="2" Background="#ECFDF3" BorderBrush="#D1FADF" BorderThickness="1"
-                      CornerRadius="14" Padding="9,5" VerticalAlignment="Center">
-                <TextBlock Text="SECURE" Foreground="#027A48" FontWeight="Bold" FontSize="9.5" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="1" VerticalAlignment="Center" MaxWidth="620">
+              <TextBlock Text="A quieter place to run your workday."
+                         Foreground="White" FontSize="36" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock Text="Attendance, assigned work, notifications and company access stay organized without turning your desktop into a wall of dashboard cards."
+                         Foreground="#B9C9DD" FontSize="13" TextWrapping="Wrap" LineHeight="21" Margin="0,14,0,0" />
+              <Border Background="#102E48" BorderBrush="#244B68" BorderThickness="1"
+                      CornerRadius="14" Padding="14" Margin="0,24,0,0">
+                <StackPanel Orientation="Horizontal">
+                  <Ellipse Width="8" Height="8" Fill="#34D399" Margin="0,1,9,0" VerticalAlignment="Top" />
+                  <TextBlock Text="Monitoring scope remains visible and policy-controlled. No keystrokes, screenshots, microphone or camera capture."
+                             Foreground="#D7E6F4" FontSize="11" TextWrapping="Wrap" />
+                </StackPanel>
               </Border>
-            </Grid>
+            </StackPanel>
 
-            <Border Background="#F0F7FF" BorderBrush="#D8E9FF" BorderThickness="1"
-                    CornerRadius="18" Padding="16" Margin="0,0,0,22">
-              <StackPanel>
-                <TextBlock Text="EMPLOYEE ACCESS" Foreground="#2F6FED" FontSize="10" FontWeight="Bold" />
-                <TextBlock Text="Your workday starts here" FontSize="28" FontWeight="SemiBold" Margin="0,7,0,0" />
-                <TextBlock Text="Sign in once to manage attendance, assigned work, notifications and company access."
-                           Foreground="{StaticResource MutedTextBrush}" FontSize="12" TextWrapping="Wrap"
-                           LineHeight="18" Margin="0,6,0,0" />
-              </StackPanel>
-            </Border>
-
-            <TextBlock Text="EMAIL" Foreground="{StaticResource MutedTextBrush}" FontSize="10" FontWeight="Bold" />
-            <TextBox x:Name="EmailBox" Margin="0,5,0,14" />
-            <TextBlock Text="PASSWORD" Foreground="{StaticResource MutedTextBrush}" FontSize="10" FontWeight="Bold" />
-            <PasswordBox x:Name="PasswordBox" Margin="0,5,0,18" />
-            <Button x:Name="LoginButton" Content="Sign in to workspace"
-                    Style="{StaticResource PrimaryButtonStyle}" Height="46" Click="LoginButton_Click" />
-
-            <Expander Header="Connection settings" Margin="0,18,0,0" Foreground="#475467">
-              <StackPanel Margin="0,12,0,0">
-                <TextBlock Text="SERVER URL" Foreground="{StaticResource MutedTextBrush}" FontSize="10" FontWeight="Bold" />
-                <TextBox x:Name="ServerUrlBox" Text="http://127.0.0.1:5080" Margin="0,5,0,0"
-                         ToolTip="Your organization server address" />
-              </StackPanel>
-            </Expander>
-
-            <Border Background="#F8FAFC" BorderBrush="#E4E7EC" BorderThickness="1"
-                    CornerRadius="12" Padding="12" Margin="0,18,0,0">
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Ellipse Width="7" Height="7" Fill="#12B76A" Margin="0,4,9,0" VerticalAlignment="Top" />
-                <TextBlock Grid.Column="1"
-                           Text="Session tokens stay in memory and are not written to plaintext files or logs."
-                           Foreground="#667085" FontSize="10.8" TextWrapping="Wrap" />
-              </Grid>
-            </Border>
-          </StackPanel>
+            <TextBlock Grid.Row="2" Text="TaskMonitoring · organization workspace" Foreground="#6F87A4" FontSize="10.5" />
+          </Grid>
         </Border>
+
+        <Grid Grid.Column="1" Margin="18,24,24,24">
+          <Border Style="{StaticResource ElevatedCardStyle}" Padding="32" VerticalAlignment="Center">
+            <StackPanel>
+              <TextBlock Text="EMPLOYEE SIGN IN" Foreground="#2F6FED" FontSize="10" FontWeight="Bold" />
+              <TextBlock Text="Open your workspace" FontSize="27" FontWeight="SemiBold" Margin="0,7,0,0" />
+              <TextBlock Text="Use your organization account to continue."
+                         Foreground="{StaticResource MutedTextBrush}" FontSize="11.5" Margin="0,5,0,22" />
+
+              <TextBlock Text="EMAIL" Foreground="{StaticResource MutedTextBrush}" FontSize="10" FontWeight="Bold" />
+              <TextBox x:Name="EmailBox" Margin="0,5,0,14" />
+              <TextBlock Text="PASSWORD" Foreground="{StaticResource MutedTextBrush}" FontSize="10" FontWeight="Bold" />
+              <PasswordBox x:Name="PasswordBox" Margin="0,5,0,18" />
+              <Button x:Name="LoginButton" Content="Sign in" Style="{StaticResource PrimaryButtonStyle}"
+                      Height="46" Click="LoginButton_Click" />
+
+              <Expander Header="Connection settings" Margin="0,18,0,0" Foreground="#475467">
+                <StackPanel Margin="0,12,0,0">
+                  <TextBlock Text="SERVER URL" Foreground="{StaticResource MutedTextBrush}" FontSize="10" FontWeight="Bold" />
+                  <TextBox x:Name="ServerUrlBox" Text="http://127.0.0.1:5080" Margin="0,5,0,0"
+                           ToolTip="Your organization server address" />
+                </StackPanel>
+              </Expander>
+
+              <TextBlock Text="Session tokens remain in memory and are not written to plaintext files or logs."
+                         Foreground="#667085" FontSize="10.5" TextWrapping="Wrap" Margin="0,18,0,0" />
+            </StackPanel>
+          </Border>
+        </Grid>
       </Grid>
     </ScrollViewer>
 
-    <!-- AUTHENTICATED WORKSPACE -->
-    <Grid x:Name="WorkspaceShell" Grid.Row="0" Visibility="Collapsed">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="224" />
-        <ColumnDefinition Width="*" />
-      </Grid.ColumnDefinitions>
+    <!-- AUTHENTICATED WORKSPACE: horizontal desktop layout -->
+    <Grid x:Name="WorkspaceShell" Grid.Row="0" Visibility="Collapsed" Background="#F4F6F9">
       <Grid.RowDefinitions>
-        <RowDefinition Height="76" />
+        <RowDefinition Height="72" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
-      <!-- SIDEBAR -->
-      <Border Grid.Column="0" Grid.RowSpan="2" Background="{StaticResource SidebarBrush}">
-        <Grid Margin="14">
-          <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-          </Grid.RowDefinitions>
-
-          <StackPanel>
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-              </Grid.ColumnDefinitions>
-              <Border Width="44" Height="44" CornerRadius="13">
-                <Border.Background>
-                  <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                    <GradientStop Color="#22C1DC" Offset="0" />
-                    <GradientStop Color="#4F46E5" Offset="1" />
-                  </LinearGradientBrush>
-                </Border.Background>
-                <TextBlock Text="TM" Foreground="White" FontWeight="Bold"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-              </Border>
-              <StackPanel Grid.Column="1" Margin="11,2,0,0">
-                <TextBlock Text="TaskMonitoring" Foreground="White" FontWeight="SemiBold" FontSize="14" />
-                <TextBlock Text="Employee workspace" Foreground="#8EA6C7" FontSize="10.5" Margin="0,3,0,0" />
-              </StackPanel>
-            </Grid>
-
-            <Border Background="#102943" BorderBrush="#244968" BorderThickness="1"
-                    CornerRadius="15" Padding="12" Margin="0,20,0,0">
-              <StackPanel>
-                <TextBlock Text="WORKSPACE MODE" Foreground="#67E8F9" FontSize="9.5" FontWeight="Bold" />
-                <TextBlock Text="Focused workday" Foreground="#F8FAFC" FontSize="12.5" FontWeight="SemiBold" Margin="0,5,0,0" />
-                <TextBlock Text="Attendance, work queues and approved access stay in one desktop."
-                           Foreground="#8EA6C7" FontSize="10" TextWrapping="Wrap" LineHeight="15" Margin="0,5,0,0" />
-              </StackPanel>
-            </Border>
-          </StackPanel>
-
-          <StackPanel Grid.Row="2">
-            <Border Background="#0D2239" BorderBrush="#274663" BorderThickness="1"
-                    CornerRadius="14" Padding="12" Margin="0,0,0,9">
-              <StackPanel>
-                <StackPanel Orientation="Horizontal">
-                  <Ellipse Width="8" Height="8" Fill="#34D399" Margin="0,0,8,0" VerticalAlignment="Center" />
-                  <TextBlock Text="Live connection" Foreground="#E5EEF9" FontWeight="SemiBold" FontSize="11" />
-                </StackPanel>
-                <TextBlock Text="Presence sync runs while signed in"
-                           Foreground="#8299B7" FontSize="10" Margin="0,6,0,0" TextWrapping="Wrap" />
-              </StackPanel>
-            </Border>
-            <Border Background="#11283D" CornerRadius="12" Padding="10">
-              <TextBlock Text="Privacy boundary: no keystrokes, screenshots, mic or camera."
-                         Foreground="#80CDE0" FontSize="9.5" TextWrapping="Wrap" />
-            </Border>
-          </StackPanel>
-        </Grid>
-      </Border>
-
-      <!-- TOPBAR -->
-      <Border Grid.Column="1" Grid.Row="0" Background="#FFFFFF" BorderBrush="#DDE6F0" BorderThickness="0,0,0,1">
+      <!-- Full-width command bar; no permanent sidebar -->
+      <Border Grid.Row="0" Background="#0B1320" BorderBrush="#1E2B3A" BorderThickness="0,0,0,1">
         <Grid Margin="22,0">
           <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
-          <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="Employee Command Center" FontSize="20" FontWeight="SemiBold" />
-            <TextBlock Text="A clear view of today’s work, status and approved company access."
-                       Foreground="{StaticResource MutedTextBrush}" FontSize="10.8" Margin="0,3,0,0"
-                       TextTrimming="CharacterEllipsis" />
+
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Border Width="40" Height="40" CornerRadius="12" Background="#2F6FED">
+              <TextBlock Text="TM" Foreground="White" FontWeight="Bold"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <StackPanel Margin="11,1,0,0">
+              <TextBlock Text="TaskMonitoring" Foreground="White" FontWeight="SemiBold" FontSize="14" />
+              <TextBlock Text="Employee workspace" Foreground="#8194AA" FontSize="10" Margin="0,2,0,0" />
+            </StackPanel>
           </StackPanel>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-            <Border Background="#ECFDF3" BorderBrush="#D1FADF" BorderThickness="1"
-                    CornerRadius="16" Padding="9,5" Margin="0,0,8,0">
-              <StackPanel Orientation="Horizontal">
-                <Ellipse Width="6" Height="6" Fill="#12B76A" Margin="0,0,6,0" VerticalAlignment="Center" />
-                <TextBlock Text="Online" Foreground="#027A48" FontWeight="SemiBold" FontSize="10.5" />
-              </StackPanel>
-            </Border>
-            <Border Background="#F8FAFC" BorderBrush="#E4E7EC" BorderThickness="1"
-                    CornerRadius="16" Padding="9,5" Margin="0,0,8,0">
-              <TextBlock x:Name="SessionIdentityText" Text="Employee session" Foreground="#475467"
-                         FontWeight="SemiBold" FontSize="10.5" MaxWidth="145" TextTrimming="CharacterEllipsis" />
-            </Border>
-            <Button x:Name="LogoutButton" Content="Sign out" Width="84" Height="36"
+
+          <StackPanel Grid.Column="1" Margin="36,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="Workday" Foreground="#E7EDF5" FontSize="17" FontWeight="SemiBold" />
+            <TextBlock Text="Focus on the next action, not the dashboard."
+                       Foreground="#8294AA" FontSize="10.5" Margin="0,2,0,0" />
+          </StackPanel>
+
+          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel Margin="0,0,14,0" VerticalAlignment="Center">
+              <TextBlock Text="ONLINE" Foreground="#6EE7B7" FontSize="9" FontWeight="Bold" HorizontalAlignment="Right" />
+              <TextBlock x:Name="SessionIdentityText" Text="Employee session" Foreground="#DCE6F3"
+                         FontSize="10.5" MaxWidth="190" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <Button x:Name="LogoutButton" Content="Sign out" Width="88" Height="36"
                     Style="{StaticResource DangerButtonStyle}" IsEnabled="False" Click="LogoutButton_Click" />
           </StackPanel>
         </Grid>
       </Border>
 
-      <!-- NAV + CONTENT -->
-      <TabControl Grid.Column="0" Grid.ColumnSpan="2" Grid.Row="1"
-                  TabStripPlacement="Left"
+      <TabControl Grid.Row="1"
+                  TabStripPlacement="Top"
                   Background="Transparent"
                   BorderThickness="0"
-                  Margin="10,12,18,14"
+                  Margin="20,14,20,18"
                   HorizontalContentAlignment="Stretch"
                   VerticalContentAlignment="Stretch">
         <TabControl.Resources>
-          <Style TargetType="TabItem" BasedOn="{StaticResource NavTabItemStyle}">
-            <Setter Property="Width" Value="194" />
-            <Setter Property="Margin" Value="0,0,0,7" />
-            <Setter Property="Padding" Value="12,10" />
-            <Setter Property="FontSize" Value="12.5" />
-          </Style>
+          <Style TargetType="TabItem" BasedOn="{StaticResource TopNavItemStyle}" />
         </TabControl.Resources>
 
-        <!-- ATTENDANCE DASHBOARD -->
-        <TabItem Header="●  Attendance">
+        <!-- ATTENDANCE -->
+        <TabItem Header="Attendance">
           <ScrollViewer VerticalScrollBarVisibility="Auto"
                         HorizontalScrollBarVisibility="Disabled"
                         HorizontalContentAlignment="Stretch">
-            <Grid Margin="22,2,2,16" HorizontalAlignment="Stretch">
+            <Grid Margin="0,18,0,4">
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
               </Grid.RowDefinitions>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.65*" />
+                <ColumnDefinition Width="18" />
+                <ColumnDefinition Width="1*" />
+              </Grid.ColumnDefinitions>
 
-              <!-- Hero -->
-              <Border Grid.Row="0" CornerRadius="24" Padding="24" Margin="0,0,0,14">
-                <Border.Background>
-                  <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                    <GradientStop Color="#071B33" Offset="0" />
-                    <GradientStop Color="#123D73" Offset="0.54" />
-                    <GradientStop Color="#4C3FCF" Offset="1" />
-                  </LinearGradientBrush>
-                </Border.Background>
-                <Grid>
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="6" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                  </Grid.ColumnDefinitions>
-                  <Border Width="6" CornerRadius="3" Background="#22D3EE" />
-                  <StackPanel Grid.Column="1" Margin="18,0,18,0">
-                    <TextBlock Text="WORKDAY CONTROL CENTER" Foreground="#67E8F9" FontSize="9.5" FontWeight="Bold" />
-                    <TextBlock Text="Run today’s session from one place"
-                               Foreground="White" FontSize="27" FontWeight="SemiBold"
-                               Margin="0,7,0,0" TextWrapping="Wrap" />
-                    <TextBlock Text="See attendance state, connection health and approved monitoring scope before taking action."
-                               Foreground="#D7E8FF" FontSize="12" TextWrapping="Wrap"
-                               LineHeight="18" Margin="0,6,0,0" MaxWidth="700" />
-                  </StackPanel>
-                  <Border Grid.Column="2" Background="#1AFFFFFF" BorderBrush="#44FFFFFF" BorderThickness="1"
-                          CornerRadius="16" Padding="12,7" VerticalAlignment="Top">
-                    <StackPanel Orientation="Horizontal">
-                      <Ellipse Width="8" Height="8" Fill="#6EE7B7" Margin="0,0,7,0" VerticalAlignment="Center" />
-                      <TextBlock Text="LIVE" Foreground="White" FontWeight="Bold" FontSize="9.5" />
-                    </StackPanel>
-                  </Border>
-                </Grid>
-              </Border>
-
-              <!-- Pulse strip -->
-              <Grid Grid.Row="1" Margin="0,0,0,14">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="1.15*" />
-                  <ColumnDefinition Width="1*" />
-                  <ColumnDefinition Width="1*" />
-                </Grid.ColumnDefinitions>
-
-                <Border Grid.Column="0" Style="{StaticResource CockpitElevatedStyle}" Padding="18" Margin="0,0,7,0">
-                  <StackPanel>
-                    <Grid>
-                      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                      <Border Width="38" Height="38" CornerRadius="11" Background="#ECFDF3">
-                        <TextBlock Text="✓" Foreground="#039855" FontSize="18" FontWeight="Bold"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                      </Border>
-                      <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="Attendance" FontSize="14" FontWeight="SemiBold" />
-                        <TextBlock Text="Current work-session state" Foreground="{StaticResource MutedTextBrush}" FontSize="9.8" />
-                      </StackPanel>
-                    </Grid>
-                    <Border Background="#F8FAFC" BorderBrush="#E5E7EB" BorderThickness="1"
-                            CornerRadius="11" Padding="12" Margin="0,13,0,0">
-                      <TextBlock x:Name="AttendanceStatusText"
-                                 Text="Sign in to load your attendance status."
-                                 TextWrapping="Wrap" FontWeight="SemiBold" FontSize="11.5" LineHeight="17" />
-                    </Border>
-                  </StackPanel>
-                </Border>
-
-                <Border Grid.Column="1" Style="{StaticResource CockpitCardStyle}" Padding="18" Margin="7,0">
-                  <StackPanel>
-                    <Grid>
-                      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                      <Border Width="38" Height="38" CornerRadius="11" Background="#EFF6FF">
-                        <TextBlock Text="↔" Foreground="#2563EB" FontSize="16" FontWeight="Bold"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                      </Border>
-                      <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="Connection" FontSize="14" FontWeight="SemiBold" />
-                        <TextBlock Text="Server + realtime" Foreground="{StaticResource MutedTextBrush}" FontSize="9.8" />
-                      </StackPanel>
-                    </Grid>
-                    <TextBlock x:Name="ConnectionStatusText" Text="Server: not connected"
-                               FontWeight="SemiBold" Margin="0,13,0,0" TextWrapping="Wrap" FontSize="10.8" />
-                    <TextBlock x:Name="RealtimeStatusText" Text="Notifications: disconnected"
-                               Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0"
-                               TextWrapping="Wrap" FontSize="10.5" />
-                  </StackPanel>
-                </Border>
-
-                <Border Grid.Column="2" Style="{StaticResource CockpitCardStyle}" Padding="18" Margin="7,0,0,0">
-                  <StackPanel>
-                    <Grid>
-                      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                      <Border Width="38" Height="38" CornerRadius="11" Background="#F5F3FF">
-                        <TextBlock Text="◈" Foreground="#6D5CE7" FontSize="16" FontWeight="Bold"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                      </Border>
-                      <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="Monitoring" FontSize="14" FontWeight="SemiBold" />
-                        <TextBlock Text="Approved policy only" Foreground="{StaticResource MutedTextBrush}" FontSize="9.8" />
-                      </StackPanel>
-                    </Grid>
-                    <TextBlock x:Name="MonitoringStatusText"
-                               Text="Approved activity monitoring: sign in to load policy"
-                               FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,13,0,0" FontSize="10.8" />
-                  </StackPanel>
-                </Border>
-              </Grid>
-
-              <!-- Primary action dock: full width removes narrow-layout clipping -->
-              <Border Grid.Row="2" Style="{StaticResource CockpitElevatedStyle}" Padding="20" Margin="0,0,0,14">
+              <!-- Main shift surface -->
+              <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="26">
                 <StackPanel>
+                  <TextBlock Text="TODAY · ATTENDANCE" Foreground="#2F6FED" FontSize="10" FontWeight="Bold" />
+                  <TextBlock Text="Current shift" FontSize="30" FontWeight="SemiBold" Margin="0,7,0,0" />
+                  <TextBlock Text="Your attendance state and controls live together here."
+                             Foreground="{StaticResource MutedTextBrush}" FontSize="11.5" Margin="0,5,0,22" />
+
+                  <TextBlock x:Name="AttendanceStatusText"
+                             Text="Sign in to load your attendance status."
+                             TextWrapping="Wrap" FontSize="16" FontWeight="SemiBold" LineHeight="23" />
+
+                  <Border Height="1" Background="#E5EAF1" Margin="0,24,0,20" />
+
                   <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
                     <StackPanel>
-                      <TextBlock Text="Attendance action dock" FontSize="18" FontWeight="SemiBold" />
-                      <TextBlock Text="The main workday controls stay together and wrap safely on smaller effective screen widths."
-                                 Foreground="{StaticResource MutedTextBrush}" FontSize="10.8"
-                                 Margin="0,4,12,0" TextWrapping="Wrap" />
+                      <TextBlock Text="Shift controls" FontSize="14" FontWeight="SemiBold" />
+                      <TextBlock Text="Use explicit actions so your session stays accurate."
+                                 Foreground="{StaticResource MutedTextBrush}" FontSize="10.5" Margin="0,3,0,0" />
                     </StackPanel>
-                    <Button Grid.Column="1" Content="Refresh status" Width="108" Height="36"
-                            Click="RefreshAttendanceButton_Click" />
+                    <Button Grid.Column="1" Content="Refresh" Width="90" Height="36" Click="RefreshAttendanceButton_Click" />
                   </Grid>
 
-                  <WrapPanel Margin="0,18,0,0">
+                  <WrapPanel Margin="0,16,0,0">
                     <Button Content="Check in" Style="{StaticResource SuccessButtonStyle}"
-                            Width="132" Height="46" Margin="0,0,10,10" Click="CheckInButton_Click" />
-                    <Button Content="Start break" Width="132" Height="46"
+                            Width="122" Height="44" Margin="0,0,10,10" Click="CheckInButton_Click" />
+                    <Button Content="Start break" Width="122" Height="44"
                             Margin="0,0,10,10" Click="StartBreakButton_Click" />
-                    <Button Content="End break" Width="132" Height="46"
+                    <Button Content="End break" Width="122" Height="44"
                             Margin="0,0,10,10" Click="EndBreakButton_Click" />
                     <Button Content="Check out" Style="{StaticResource DangerButtonStyle}"
-                            Width="132" Height="46" Margin="0,0,10,10" Click="CheckOutButton_Click" />
+                            Width="122" Height="44" Margin="0,0,10,10" Click="CheckOutButton_Click" />
                   </WrapPanel>
                 </StackPanel>
               </Border>
 
-              <!-- Guidance + privacy -->
-              <Grid Grid.Row="3">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="1.2*" />
-                  <ColumnDefinition Width="1*" />
-                </Grid.ColumnDefinitions>
+              <!-- Live system column -->
+              <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="24">
+                <StackPanel>
+                  <TextBlock Text="LIVE SYSTEM" Foreground="#64748B" FontSize="10" FontWeight="Bold" />
+                  <TextBlock Text="Connection" FontSize="18" FontWeight="SemiBold" Margin="0,8,0,0" />
+                  <TextBlock x:Name="ConnectionStatusText" Text="Server: not connected"
+                             FontWeight="SemiBold" TextWrapping="Wrap" FontSize="11" Margin="0,12,0,0" />
+                  <TextBlock x:Name="RealtimeStatusText" Text="Notifications: disconnected"
+                             Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" FontSize="10.5" Margin="0,6,0,0" />
 
-                <Border Grid.Column="0" Style="{StaticResource CockpitCardStyle}" Padding="18" Margin="0,0,7,0">
-                  <StackPanel>
-                    <TextBlock Text="Session rail" Foreground="#2F6FED" FontSize="9.5" FontWeight="Bold" />
-                    <TextBlock Text="A simple, explicit workday flow" FontSize="15" FontWeight="SemiBold" Margin="0,5,0,12" />
+                  <Border Height="1" Background="#E5EAF1" Margin="0,20,0,18" />
 
-                    <Border Background="#F7FAFF" BorderBrush="#E2EAF4" BorderThickness="1"
-                            CornerRadius="11" Padding="11" Margin="0,0,0,7">
-                      <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Border Width="28" Height="28" CornerRadius="14" Background="#E0F2FE">
-                          <TextBlock Text="1" Foreground="#0369A1" FontWeight="Bold"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                          <TextBlock Text="Check in" FontWeight="SemiBold" FontSize="11.5" />
-                          <TextBlock Text="Start the active work session." Foreground="{StaticResource MutedTextBrush}" FontSize="10" />
-                        </StackPanel>
-                      </Grid>
-                    </Border>
+                  <TextBlock Text="Monitoring policy" FontSize="14" FontWeight="SemiBold" />
+                  <TextBlock x:Name="MonitoringStatusText"
+                             Text="Approved activity monitoring: sign in to load policy"
+                             TextWrapping="Wrap" FontSize="10.8" LineHeight="17" Margin="0,9,0,0" />
 
-                    <Border Background="#F7FAFF" BorderBrush="#E2EAF4" BorderThickness="1"
-                            CornerRadius="11" Padding="11" Margin="0,0,0,7">
-                      <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Border Width="28" Height="28" CornerRadius="14" Background="#EDE9FE">
-                          <TextBlock Text="2" Foreground="#6D28D9" FontWeight="Bold"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                          <TextBlock Text="Manage breaks" FontWeight="SemiBold" FontSize="11.5" />
-                          <TextBlock Text="Start and end breaks explicitly." Foreground="{StaticResource MutedTextBrush}" FontSize="10" />
-                        </StackPanel>
-                      </Grid>
-                    </Border>
+                  <Border Background="#F0F7FF" BorderBrush="#D7E7FA" BorderThickness="1"
+                          CornerRadius="10" Padding="11" Margin="0,18,0,0">
+                    <TextBlock Text="Privacy boundary: no keystrokes, passwords, screenshots, microphone or camera capture."
+                               Foreground="#3F5872" FontSize="10.2" TextWrapping="Wrap" />
+                  </Border>
+                </StackPanel>
+              </Border>
 
-                    <Border Background="#F7FAFF" BorderBrush="#E2EAF4" BorderThickness="1"
-                            CornerRadius="11" Padding="11">
-                      <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Border Width="28" Height="28" CornerRadius="14" Background="#DCFCE7">
-                          <TextBlock Text="3" Foreground="#15803D" FontWeight="Bold"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                          <TextBlock Text="Check out" FontWeight="SemiBold" FontSize="11.5" />
-                          <TextBlock Text="Close the work session when finished." Foreground="{StaticResource MutedTextBrush}" FontSize="10" />
-                        </StackPanel>
-                      </Grid>
-                    </Border>
+              <!-- Full-width workday rail -->
+              <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                      Style="{StaticResource WorkspaceSurfaceStyle}" Padding="18" Margin="0,18,0,0">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="210" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="WORKDAY FLOW" Foreground="#2F6FED" FontSize="9.5" FontWeight="Bold" />
+                    <TextBlock Text="Three explicit steps" FontSize="14" FontWeight="SemiBold" Margin="0,5,0,0" />
                   </StackPanel>
-                </Border>
-
-                <Border Grid.Column="1" Style="{StaticResource CockpitCardStyle}" Padding="18" Margin="7,0,0,0">
-                  <StackPanel>
-                    <Border Width="40" Height="40" CornerRadius="12" Background="#ECFDF3" HorizontalAlignment="Left">
-                      <TextBlock Text="✓" Foreground="#039855" FontSize="18" FontWeight="Bold"
-                                 HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
-                    <TextBlock Text="Privacy-safe by design" FontSize="15" FontWeight="SemiBold" Margin="0,12,0,0" />
-                    <TextBlock Text="Only organization-approved activity rules are synchronized. The complete scope remains visible in Privacy."
-                               Foreground="#475467" FontSize="10.8" TextWrapping="Wrap"
-                               LineHeight="17" Margin="0,8,0,0" />
-                    <Border Background="#EFF6FF" BorderBrush="#DBEAFE" BorderThickness="1"
-                            CornerRadius="11" Padding="11" Margin="0,12,0,0">
-                      <TextBlock Text="No keystrokes, passwords, screenshots, microphone or camera capture."
-                                 Foreground="#334155" FontSize="10.5" TextWrapping="Wrap" />
-                    </Border>
+                  <StackPanel Grid.Column="1" Margin="18,0,12,0">
+                    <TextBlock Text="01  Check in" FontWeight="SemiBold" />
+                    <TextBlock Text="Start the active work session." Foreground="{StaticResource MutedTextBrush}" FontSize="10.5" Margin="0,4,0,0" />
                   </StackPanel>
-                </Border>
-              </Grid>
+                  <StackPanel Grid.Column="2" Margin="18,0,12,0">
+                    <TextBlock Text="02  Manage breaks" FontWeight="SemiBold" />
+                    <TextBlock Text="Start and end breaks explicitly." Foreground="{StaticResource MutedTextBrush}" FontSize="10.5" Margin="0,4,0,0" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="3" Margin="18,0,0,0">
+                    <TextBlock Text="03  Check out" FontWeight="SemiBold" />
+                    <TextBlock Text="Close the session when finished." Foreground="{StaticResource MutedTextBrush}" FontSize="10.5" Margin="0,4,0,0" />
+                  </StackPanel>
+                </Grid>
+              </Border>
             </Grid>
           </ScrollViewer>
         </TabItem>
 
         <!-- TASKS -->
-        <TabItem Header="☷  My Tasks">
-          <Grid Margin="22,2,2,16">
-            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <TabItem Header="My Tasks">
+          <Grid Margin="0,18,0,4">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
             <Grid Margin="0,0,0,14">
               <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="My assigned tasks" FontSize="25" FontWeight="SemiBold"/>
-                <TextBlock Text="Project work, priorities, due dates and discussion activity in one queue."
-                           Foreground="{StaticResource MutedTextBrush}" Margin="0,5,12,0" TextWrapping="Wrap"/>
+                <TextBlock Text="My assigned tasks" FontSize="26" FontWeight="SemiBold" />
+                <TextBlock Text="Project work, priorities, due dates and discussion activity."
+                           Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
               </StackPanel>
-              <Border Grid.Column="1" Background="#F8FAFC" BorderBrush="#E4E7EC" BorderThickness="1"
-                      CornerRadius="13" Padding="12,7" VerticalAlignment="Center">
-                <CheckBox x:Name="IncludeClosedTasksBox" Content="Include done/cancelled"/>
-              </Border>
+              <CheckBox Grid.Column="1" x:Name="IncludeClosedTasksBox" Content="Include done/cancelled" VerticalAlignment="Center" />
             </Grid>
-            <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="12" Margin="0,0,0,12">
+            <Border Grid.Row="1" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="12" Margin="0,0,0,12">
               <Grid>
                 <TextBlock Text="Select a task row to review its current status and project context."
-                           Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,124,0"/>
-                <Button Content="Refresh tasks" Width="112" Height="38" HorizontalAlignment="Right" Click="RefreshTasksButton_Click"/>
+                           Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,124,0" />
+                <Button Content="Refresh tasks" Width="112" Height="38" HorizontalAlignment="Right" Click="RefreshTasksButton_Click" />
               </Grid>
             </Border>
-            <Border Grid.Row="2" Style="{StaticResource ElevatedCardStyle}" Padding="0">
+            <Border Grid.Row="2" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="0">
               <DataGrid x:Name="TasksGrid">
                 <DataGrid.Columns>
-                  <DataGridTextColumn Header="PROJECT" Binding="{Binding ProjectName}" Width="1.3*"/>
-                  <DataGridTextColumn Header="TASK" Binding="{Binding Title}" Width="2*"/>
-                  <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="110"/>
-                  <DataGridTextColumn Header="PRIORITY" Binding="{Binding Priority}" Width="100"/>
-                  <DataGridTextColumn Header="DUE" Binding="{Binding DueDate}" Width="110"/>
-                  <DataGridTextColumn Header="COMMENTS" Binding="{Binding CommentCount}" Width="90"/>
+                  <DataGridTextColumn Header="PROJECT" Binding="{Binding ProjectName}" Width="1.3*" />
+                  <DataGridTextColumn Header="TASK" Binding="{Binding Title}" Width="2*" />
+                  <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="110" />
+                  <DataGridTextColumn Header="PRIORITY" Binding="{Binding Priority}" Width="100" />
+                  <DataGridTextColumn Header="DUE" Binding="{Binding DueDate}" Width="110" />
+                  <DataGridTextColumn Header="COMMENTS" Binding="{Binding CommentCount}" Width="90" />
                 </DataGrid.Columns>
               </DataGrid>
             </Border>
@@ -496,40 +325,38 @@
         </TabItem>
 
         <!-- WEBSITE WORK -->
-        <TabItem Header="◎  Website Work">
-          <Grid Margin="22,2,2,16">
+        <TabItem Header="Website Work">
+          <Grid Margin="0,18,0,4">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid Margin="0,0,0,14">
               <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Website work queue" FontSize="25" FontWeight="SemiBold"/>
-                <TextBlock Text="Open approved work targets and mark them complete when assigned work is finished."
-                           Foreground="{StaticResource MutedTextBrush}" Margin="0,5,12,0" TextWrapping="Wrap"/>
+                <TextBlock Text="Website work" FontSize="26" FontWeight="SemiBold" />
+                <TextBlock Text="Open approved work targets and mark them complete when finished."
+                           Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
               </StackPanel>
-              <Border Grid.Column="1" Background="#F8FAFC" BorderBrush="#E4E7EC" BorderThickness="1"
-                      CornerRadius="13" Padding="12,7" VerticalAlignment="Center">
-                <TextBlock x:Name="WebsiteWorkCountText" Text="0 website work item(s)" Foreground="#475467" FontWeight="SemiBold"/>
-              </Border>
+              <TextBlock Grid.Column="1" x:Name="WebsiteWorkCountText" Text="0 website work item(s)"
+                         Foreground="#475467" FontWeight="SemiBold" VerticalAlignment="Center" />
             </Grid>
-            <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="12" Margin="0,0,0,12">
+            <Border Grid.Row="1" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="12" Margin="0,0,0,12">
               <WrapPanel>
-                <Button Content="Refresh work" Width="106" Height="38" Margin="0,0,8,8" Click="RefreshWebsiteWorkButton_Click"/>
+                <Button Content="Refresh work" Width="106" Height="38" Margin="0,0,8,8" Click="RefreshWebsiteWorkButton_Click" />
                 <Button Content="Start / Open selected" Style="{StaticResource PrimaryButtonStyle}" Width="158" Height="38"
-                        Margin="0,0,8,8" Click="OpenWebsiteWorkButton_Click"/>
+                        Margin="0,0,8,8" Click="OpenWebsiteWorkButton_Click" />
                 <Button Content="Mark complete" Style="{StaticResource SuccessButtonStyle}" Width="126" Height="38"
-                        Margin="0,0,14,8" Click="CompleteWebsiteWorkButton_Click"/>
-                <CheckBox x:Name="IncludeClosedWebsiteWorkBox" Content="Include completed/cancelled" Margin="0,0,0,8"/>
+                        Margin="0,0,14,8" Click="CompleteWebsiteWorkButton_Click" />
+                <CheckBox x:Name="IncludeClosedWebsiteWorkBox" Content="Include completed/cancelled" Margin="0,0,0,8" />
               </WrapPanel>
             </Border>
-            <Border Grid.Row="2" Style="{StaticResource ElevatedCardStyle}" Padding="0">
+            <Border Grid.Row="2" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="0">
               <DataGrid x:Name="WebsiteWorkGrid">
                 <DataGrid.Columns>
-                  <DataGridTextColumn Header="TARGET" Binding="{Binding Title}" Width="1.7*"/>
-                  <DataGridTextColumn Header="WEBSITE URL" Binding="{Binding Url}" Width="2*"/>
-                  <DataGridTextColumn Header="PROJECT" Binding="{Binding ProjectName}" Width="1.2*"/>
-                  <DataGridTextColumn Header="STATUS" Binding="{Binding StatusLabel}" Width="95"/>
-                  <DataGridTextColumn Header="DUE" Binding="{Binding DueDate}" Width="105"/>
-                  <DataGridTextColumn Header="INSTRUCTIONS" Binding="{Binding Instructions}" Width="2*"/>
+                  <DataGridTextColumn Header="TARGET" Binding="{Binding Title}" Width="1.7*" />
+                  <DataGridTextColumn Header="WEBSITE URL" Binding="{Binding Url}" Width="2*" />
+                  <DataGridTextColumn Header="PROJECT" Binding="{Binding ProjectName}" Width="1.2*" />
+                  <DataGridTextColumn Header="STATUS" Binding="{Binding StatusLabel}" Width="95" />
+                  <DataGridTextColumn Header="DUE" Binding="{Binding DueDate}" Width="105" />
+                  <DataGridTextColumn Header="INSTRUCTIONS" Binding="{Binding Instructions}" Width="2*" />
                 </DataGrid.Columns>
               </DataGrid>
             </Border>
@@ -537,38 +364,36 @@
         </TabItem>
 
         <!-- SURVEYS -->
-        <TabItem Header="◈  Survey Work">
-          <Grid Margin="22,2,2,16">
+        <TabItem Header="Survey Work">
+          <Grid Margin="0,18,0,4">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid Margin="0,0,0,14">
               <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Survey assignments" FontSize="25" FontWeight="SemiBold"/>
+                <TextBlock Text="Survey assignments" FontSize="26" FontWeight="SemiBold" />
                 <TextBlock Text="Launch organization-assigned surveys without collecting form content or answers in this app."
-                           Foreground="{StaticResource MutedTextBrush}" Margin="0,5,12,0" TextWrapping="Wrap"/>
+                           Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
               </StackPanel>
-              <Border Grid.Column="1" Background="#F8FAFC" BorderBrush="#E4E7EC" BorderThickness="1"
-                      CornerRadius="13" Padding="12,7" VerticalAlignment="Center">
-                <TextBlock x:Name="SurveyCountText" Text="0 survey assignment(s)" Foreground="#475467" FontWeight="SemiBold"/>
-              </Border>
+              <TextBlock Grid.Column="1" x:Name="SurveyCountText" Text="0 survey assignment(s)"
+                         Foreground="#475467" FontWeight="SemiBold" VerticalAlignment="Center" />
             </Grid>
-            <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="12" Margin="0,0,0,12">
+            <Border Grid.Row="1" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="12" Margin="0,0,0,12">
               <WrapPanel>
-                <Button Content="Refresh surveys" Width="116" Height="38" Margin="0,0,8,8" Click="RefreshSurveysButton_Click"/>
+                <Button Content="Refresh surveys" Width="116" Height="38" Margin="0,0,8,8" Click="RefreshSurveysButton_Click" />
                 <Button Content="Open selected survey" Style="{StaticResource PrimaryButtonStyle}" Width="158" Height="38"
-                        Margin="0,0,14,8" Click="OpenSurveyButton_Click"/>
-                <CheckBox x:Name="IncludeInactiveSurveysBox" Content="Include inactive history" Margin="0,0,0,8"/>
+                        Margin="0,0,14,8" Click="OpenSurveyButton_Click" />
+                <CheckBox x:Name="IncludeInactiveSurveysBox" Content="Include inactive history" Margin="0,0,0,8" />
               </WrapPanel>
             </Border>
-            <Border Grid.Row="2" Style="{StaticResource ElevatedCardStyle}" Padding="0">
+            <Border Grid.Row="2" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="0">
               <DataGrid x:Name="SurveyGrid">
                 <DataGrid.Columns>
-                  <DataGridTextColumn Header="SURVEY" Binding="{Binding Title}" Width="1.3*"/>
-                  <DataGridTextColumn Header="WEBSITE URL" Binding="{Binding Url}" Width="2.2*"/>
-                  <DataGridTextColumn Header="STARTS" Binding="{Binding StartsOn}" Width="105"/>
-                  <DataGridTextColumn Header="DUE" Binding="{Binding DueDate}" Width="105"/>
-                  <DataGridTextColumn Header="STATUS" Binding="{Binding Availability}" Width="95"/>
-                  <DataGridTextColumn Header="INSTRUCTIONS" Binding="{Binding Instructions}" Width="2*"/>
+                  <DataGridTextColumn Header="SURVEY" Binding="{Binding Title}" Width="1.3*" />
+                  <DataGridTextColumn Header="WEBSITE URL" Binding="{Binding Url}" Width="2.2*" />
+                  <DataGridTextColumn Header="STARTS" Binding="{Binding StartsOn}" Width="105" />
+                  <DataGridTextColumn Header="DUE" Binding="{Binding DueDate}" Width="105" />
+                  <DataGridTextColumn Header="STATUS" Binding="{Binding Availability}" Width="95" />
+                  <DataGridTextColumn Header="INSTRUCTIONS" Binding="{Binding Instructions}" Width="2*" />
                 </DataGrid.Columns>
               </DataGrid>
             </Border>
@@ -576,38 +401,36 @@
         </TabItem>
 
         <!-- NOTIFICATIONS -->
-        <TabItem Header="◉  Notifications">
-          <Grid Margin="22,2,2,16">
+        <TabItem Header="Notifications">
+          <Grid Margin="0,18,0,4">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid Margin="0,0,0,14">
               <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Notifications" FontSize="25" FontWeight="SemiBold"/>
+                <TextBlock Text="Notifications" FontSize="26" FontWeight="SemiBold" />
                 <TextBlock Text="Realtime organization updates and work-related messages."
-                           Foreground="{StaticResource MutedTextBrush}" Margin="0,5,12,0" TextWrapping="Wrap"/>
+                           Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
               </StackPanel>
-              <Border Grid.Column="1" Background="#F8FAFC" BorderBrush="#E4E7EC" BorderThickness="1"
-                      CornerRadius="13" Padding="12,7" VerticalAlignment="Center">
-                <TextBlock x:Name="NotificationsCountText" Text="0 notifications" Foreground="#475467" FontWeight="SemiBold"/>
-              </Border>
+              <TextBlock Grid.Column="1" x:Name="NotificationsCountText" Text="0 notifications"
+                         Foreground="#475467" FontWeight="SemiBold" VerticalAlignment="Center" />
             </Grid>
-            <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="12" Margin="0,0,0,12">
+            <Border Grid.Row="1" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="12" Margin="0,0,0,12">
               <WrapPanel>
-                <Button Content="Refresh" Width="90" Height="38" Margin="0,0,8,8" Click="RefreshNotificationsButton_Click"/>
+                <Button Content="Refresh" Width="90" Height="38" Margin="0,0,8,8" Click="RefreshNotificationsButton_Click" />
                 <Button Content="Mark selected read" Style="{StaticResource PrimaryButtonStyle}" Width="148" Height="38"
-                        Margin="0,0,14,8" Click="MarkNotificationReadButton_Click"/>
-                <CheckBox x:Name="UnreadNotificationsOnlyBox" Content="Unread only" Margin="0,0,0,8"/>
+                        Margin="0,0,14,8" Click="MarkNotificationReadButton_Click" />
+                <CheckBox x:Name="UnreadNotificationsOnlyBox" Content="Unread only" Margin="0,0,0,8" />
               </WrapPanel>
             </Border>
-            <Border Grid.Row="2" Style="{StaticResource ElevatedCardStyle}" Padding="0">
+            <Border Grid.Row="2" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="0">
               <DataGrid x:Name="NotificationsGrid">
                 <DataGrid.Columns>
-                  <DataGridTextColumn Header="STATE" Binding="{Binding ReadState}" Width="80"/>
-                  <DataGridTextColumn Header="TYPE" Binding="{Binding Kind}" Width="130"/>
-                  <DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="1.2*"/>
-                  <DataGridTextColumn Header="MESSAGE" Binding="{Binding Message}" Width="2.5*"/>
-                  <DataGridTextColumn Header="CREATED" Binding="{Binding CreatedAtUtc}" Width="170"/>
-                  <DataGridTextColumn Header="READ" Binding="{Binding ReadAtUtc}" Width="170"/>
+                  <DataGridTextColumn Header="STATE" Binding="{Binding ReadState}" Width="80" />
+                  <DataGridTextColumn Header="TYPE" Binding="{Binding Kind}" Width="130" />
+                  <DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="1.2*" />
+                  <DataGridTextColumn Header="MESSAGE" Binding="{Binding Message}" Width="2.5*" />
+                  <DataGridTextColumn Header="CREATED" Binding="{Binding CreatedAtUtc}" Width="170" />
+                  <DataGridTextColumn Header="READ" Binding="{Binding ReadAtUtc}" Width="170" />
                 </DataGrid.Columns>
               </DataGrid>
             </Border>
@@ -615,70 +438,70 @@
         </TabItem>
 
         <!-- ACCESS -->
-        <TabItem Header="◆  My Access">
-          <Grid Margin="22,2,2,16">
+        <TabItem Header="My Access">
+          <Grid Margin="0,18,0,4">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <StackPanel Margin="0,0,0,14">
-              <TextBlock Text="Company-provided access" FontSize="25" FontWeight="SemiBold"/>
+              <TextBlock Text="Company-provided access" FontSize="26" FontWeight="SemiBold" />
               <TextBlock Text="View assigned RDP, IP and website access without exposing managed passwords inside this client."
-                         Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                         Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
             </StackPanel>
-            <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="12" Margin="0,0,0,12">
+            <Border Grid.Row="1" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="12" Margin="0,0,0,12">
               <WrapPanel>
-                <Button Content="Refresh access" Width="112" Height="38" Margin="0,0,14,8" Click="RefreshAccessButton_Click"/>
-                <CheckBox x:Name="IncludeInactiveAccessBox" Content="Include inactive/released history" Margin="0,0,0,8"/>
+                <Button Content="Refresh access" Width="112" Height="38" Margin="0,0,14,8" Click="RefreshAccessButton_Click" />
+                <CheckBox x:Name="IncludeInactiveAccessBox" Content="Include inactive/released history" Margin="0,0,0,8" />
               </WrapPanel>
             </Border>
-            <Border Grid.Row="2" Style="{StaticResource ElevatedCardStyle}" Padding="14">
+            <Border Grid.Row="2" Style="{StaticResource WorkspaceSurfaceStyle}" Padding="14">
               <TabControl TabStripPlacement="Top" Background="Transparent" BorderThickness="0">
                 <TabControl.Resources>
-                  <Style TargetType="TabItem" BasedOn="{StaticResource SubTabItemStyle}"/>
+                  <Style TargetType="TabItem" BasedOn="{StaticResource SubTabItemStyle}" />
                 </TabControl.Resources>
                 <TabItem Header="RDP">
                   <DataGrid x:Name="RdpGrid" Margin="0,12,0,0">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="NAME" Binding="{Binding Name}" Width="1.2*"/>
-                      <DataGridTextColumn Header="HOST" Binding="{Binding Host}" Width="1.4*"/>
-                      <DataGridTextColumn Header="PORT" Binding="{Binding Port}" Width="70"/>
-                      <DataGridTextColumn Header="USERNAME REFERENCE" Binding="{Binding UsernameReference}" Width="1.2*"/>
-                      <DataGridTextColumn Header="CREDENTIAL REFERENCE" Binding="{Binding CredentialReference}" Width="1.4*"/>
-                      <DataGridTextColumn Header="EXPIRES" Binding="{Binding ExpiresOn}" Width="110"/>
-                      <DataGridCheckBoxColumn Header="ACTIVE" Binding="{Binding IsActive}" Width="70"/>
+                      <DataGridTextColumn Header="NAME" Binding="{Binding Name}" Width="1.2*" />
+                      <DataGridTextColumn Header="HOST" Binding="{Binding Host}" Width="1.4*" />
+                      <DataGridTextColumn Header="PORT" Binding="{Binding Port}" Width="70" />
+                      <DataGridTextColumn Header="USERNAME REFERENCE" Binding="{Binding UsernameReference}" Width="1.2*" />
+                      <DataGridTextColumn Header="CREDENTIAL REFERENCE" Binding="{Binding CredentialReference}" Width="1.4*" />
+                      <DataGridTextColumn Header="EXPIRES" Binding="{Binding ExpiresOn}" Width="110" />
+                      <DataGridCheckBoxColumn Header="ACTIVE" Binding="{Binding IsActive}" Width="70" />
                     </DataGrid.Columns>
                   </DataGrid>
                 </TabItem>
                 <TabItem Header="IP">
                   <DataGrid x:Name="IpGrid" Margin="0,12,0,0">
                     <DataGrid.Columns>
-                      <DataGridTextColumn Header="IP ADDRESS" Binding="{Binding IpAddress}" Width="1.2*"/>
-                      <DataGridTextColumn Header="DEVICE" Binding="{Binding DeviceName}" Width="1.5*"/>
-                      <DataGridTextColumn Header="MAC" Binding="{Binding MacAddress}" Width="1.3*"/>
-                      <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="100"/>
-                      <DataGridTextColumn Header="ASSIGNED" Binding="{Binding AssignedOn}" Width="110"/>
-                      <DataGridTextColumn Header="RELEASED" Binding="{Binding ReleasedOn}" Width="110"/>
+                      <DataGridTextColumn Header="IP ADDRESS" Binding="{Binding IpAddress}" Width="1.2*" />
+                      <DataGridTextColumn Header="DEVICE" Binding="{Binding DeviceName}" Width="1.5*" />
+                      <DataGridTextColumn Header="MAC" Binding="{Binding MacAddress}" Width="1.3*" />
+                      <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="100" />
+                      <DataGridTextColumn Header="ASSIGNED" Binding="{Binding AssignedOn}" Width="110" />
+                      <DataGridTextColumn Header="RELEASED" Binding="{Binding ReleasedOn}" Width="110" />
                     </DataGrid.Columns>
                   </DataGrid>
                 </TabItem>
                 <TabItem Header="Website">
                   <Grid Margin="0,12,0,0">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <Border Style="{StaticResource CardStyle}" Padding="11" Margin="0,0,0,10">
+                    <Border Style="{StaticResource WorkspaceSurfaceStyle}" Padding="11" Margin="0,0,0,10">
                       <WrapPanel>
                         <Button Content="Open selected website" Style="{StaticResource PrimaryButtonStyle}" Width="158"
-                                Height="38" Margin="0,0,12,8" Click="OpenWebsiteButton_Click"/>
+                                Height="38" Margin="0,0,12,8" Click="OpenWebsiteButton_Click" />
                         <TextBlock Text="Only the approved hostname is recorded for company-assigned website launches."
                                    Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"
-                                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                   TextWrapping="Wrap" Margin="0,0,0,8" />
                       </WrapPanel>
                     </Border>
                     <DataGrid Grid.Row="1" x:Name="WebsiteGrid">
                       <DataGrid.Columns>
-                        <DataGridTextColumn Header="NAME" Binding="{Binding Name}" Width="1.2*"/>
-                        <DataGridTextColumn Header="URL" Binding="{Binding Url}" Width="2*"/>
-                        <DataGridTextColumn Header="USERNAME REFERENCE" Binding="{Binding UsernameReference}" Width="1.2*"/>
-                        <DataGridTextColumn Header="ACCESS" Binding="{Binding AccessLevel}" Width="90"/>
-                        <DataGridTextColumn Header="EXPIRES" Binding="{Binding ExpiresOn}" Width="110"/>
-                        <DataGridCheckBoxColumn Header="ACTIVE" Binding="{Binding IsActive}" Width="70"/>
+                        <DataGridTextColumn Header="NAME" Binding="{Binding Name}" Width="1.2*" />
+                        <DataGridTextColumn Header="URL" Binding="{Binding Url}" Width="2*" />
+                        <DataGridTextColumn Header="USERNAME REFERENCE" Binding="{Binding UsernameReference}" Width="1.2*" />
+                        <DataGridTextColumn Header="ACCESS" Binding="{Binding AccessLevel}" Width="90" />
+                        <DataGridTextColumn Header="EXPIRES" Binding="{Binding ExpiresOn}" Width="110" />
+                        <DataGridCheckBoxColumn Header="ACTIVE" Binding="{Binding IsActive}" Width="70" />
                       </DataGrid.Columns>
                     </DataGrid>
                   </Grid>
@@ -689,25 +512,21 @@
         </TabItem>
 
         <!-- PRIVACY -->
-        <TabItem Header="▣  Privacy">
+        <TabItem Header="Privacy">
           <ScrollViewer VerticalScrollBarVisibility="Auto"
                         HorizontalScrollBarVisibility="Disabled"
                         HorizontalContentAlignment="Stretch">
-            <StackPanel Margin="22,2,2,16">
-              <TextBlock Text="Transparency &amp; privacy" FontSize="25" FontWeight="SemiBold" />
+            <StackPanel Margin="0,18,0,4">
+              <TextBlock Text="Transparency &amp; privacy" FontSize="26" FontWeight="SemiBold" />
               <TextBlock Text="Clear boundaries for what the employee client does and does not collect."
-                         Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,16" TextWrapping="Wrap" />
+                         Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,16" />
 
               <Grid Margin="0,0,0,14">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,7,0">
+                <Border Grid.Column="0" Style="{StaticResource WorkspaceSurfaceStyle}" Margin="0,0,8,0">
                   <StackPanel>
-                    <Border Width="42" Height="42" CornerRadius="12" Background="#EFF6FF" HorizontalAlignment="Left">
-                      <TextBlock Text="✓" Foreground="#2563EB" FontWeight="Bold" FontSize="17"
-                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBlock Text="Visible to authorized administrators" FontSize="16" FontWeight="SemiBold" Margin="0,13,0,0"/>
-                    <TextBlock Margin="0,9,0,0" TextWrapping="Wrap" Foreground="#475467" LineHeight="19">
+                    <TextBlock Text="Visible to authorized administrators" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#475467" LineHeight="19">
                       Presence, last-seen and attendance-derived work state are synchronized while you are signed in.
                     </TextBlock>
                     <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#475467" LineHeight="19">
@@ -718,14 +537,10 @@
                     </TextBlock>
                   </StackPanel>
                 </Border>
-                <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="7,0,0,0">
+                <Border Grid.Column="1" Style="{StaticResource WorkspaceSurfaceStyle}" Margin="8,0,0,0">
                   <StackPanel>
-                    <Border Width="42" Height="42" CornerRadius="12" Background="#ECFDF3" HorizontalAlignment="Left">
-                      <TextBlock Text="—" Foreground="#039855" FontWeight="Bold" FontSize="17"
-                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBlock Text="Never collected by this client" FontSize="16" FontWeight="SemiBold" Margin="0,13,0,0"/>
-                    <TextBlock Margin="0,9,0,0" TextWrapping="Wrap" Foreground="#475467" LineHeight="19">
+                    <TextBlock Text="Never collected by this client" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#475467" LineHeight="19">
                       No keystrokes, passwords, screenshots, microphone audio, camera video or unrelated personal files are collected.
                     </TextBlock>
                     <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#475467" LineHeight="19">
@@ -738,24 +553,23 @@
                 </Border>
               </Grid>
 
-              <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1"
-                      CornerRadius="16" Padding="17" Margin="0,0,0,14">
+              <Border Style="{StaticResource WorkspaceSurfaceStyle}" Margin="0,0,0,14">
                 <Grid>
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                   <StackPanel>
-                    <TextBlock Text="Current monitoring disclosure" Foreground="#1E3A8A" FontWeight="SemiBold" FontSize="15"/>
+                    <TextBlock Text="Current monitoring disclosure" FontWeight="SemiBold" FontSize="15" />
                     <TextBlock x:Name="MonitoringDisclosureText" Margin="0,8,20,0" TextWrapping="Wrap"
-                               Foreground="#334155"
-                               Text="Monitoring disclosure is loaded from the company server after sign-in."/>
+                               Foreground="#475467"
+                               Text="Monitoring disclosure is loaded from the company server after sign-in." />
                   </StackPanel>
                   <Button Grid.Column="1" Content="Refresh policy" Width="118" Height="38"
-                          VerticalAlignment="Center" Click="RefreshMonitoringPolicyButton_Click"/>
+                          VerticalAlignment="Center" Click="RefreshMonitoringPolicyButton_Click" />
                 </Grid>
               </Border>
 
-              <Border Style="{StaticResource CardStyle}">
+              <Border Style="{StaticResource WorkspaceSurfaceStyle}">
                 <StackPanel>
-                  <TextBlock Text="Assigned work and survey boundaries" FontSize="16" FontWeight="SemiBold"/>
+                  <TextBlock Text="Assigned work and survey boundaries" FontSize="16" FontWeight="SemiBold" />
                   <TextBlock Margin="0,9,0,0" TextWrapping="Wrap" Foreground="#475467" LineHeight="19">
                     Website Work records when you start/open an assigned target and when you explicitly mark it complete. The client does not inspect the external page or credentials.
                   </TextBlock>
@@ -774,10 +588,10 @@
     <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#E4E7EC" BorderThickness="1,1,1,0" Padding="10,7">
       <Grid Margin="10,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <Ellipse Width="7" Height="7" Fill="{StaticResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+        <Ellipse Width="7" Height="7" Fill="{StaticResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
         <TextBlock Grid.Column="1" x:Name="MessageText"
                    Text="Ready. Sign in to connect your workspace."
-                   TextWrapping="Wrap" Foreground="#475467" FontSize="10.8"/>
+                   TextWrapping="Wrap" Foreground="#475467" FontSize="10.8" />
       </Grid>
     </Border>
   </Grid>
