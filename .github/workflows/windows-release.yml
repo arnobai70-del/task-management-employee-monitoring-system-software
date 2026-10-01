@@ -16,12 +16,12 @@ on:
           - stable
           - beta
       server_url:
-        description: Optional HTTPS TaskMonitoring application URL embedded in the signed setup wizard
-        required: false
+        description: HTTPS TaskMonitoring application URL embedded in the signed standalone setup wizard
+        required: true
         type: string
       package_base_url:
-        description: Optional HTTPS base URL where release.json and runtime ZIP will be hosted; also preconfigures the setup wizard
-        required: false
+        description: HTTPS base URL where release.json and runtime ZIP will be hosted
+        required: true
         type: string
 
 permissions:
@@ -64,20 +64,26 @@ jobs:
       - name: Build signed release bundle
         shell: pwsh
         run: |
-          $args = @(
-            '-Version', '${{ inputs.version }}',
-            '-Channel', '${{ inputs.channel }}',
-            '-OutputRoot', '${{ runner.temp }}\employee-release',
-            '-PfxPath', '${{ steps.signing.outputs.pfx }}',
-            '-PfxPassword', $env:WINDOWS_SIGNING_PFX_PASSWORD
-          )
-          if (-not [string]::IsNullOrWhiteSpace('${{ inputs.server_url }}')) {
-            $args += @('-ServerUrl', '${{ inputs.server_url }}')
-          }
-          if (-not [string]::IsNullOrWhiteSpace('${{ inputs.package_base_url }}')) {
-            $args += @('-PackageBaseUrl', '${{ inputs.package_base_url }}')
-          }
-          & ./scripts/windows/build-employee-release.ps1 @args
+          ./scripts/windows/build-employee-release.ps1 `
+            -Version '${{ inputs.version }}' `
+            -Channel '${{ inputs.channel }}' `
+            -ServerUrl '${{ inputs.server_url }}' `
+            -PackageBaseUrl '${{ inputs.package_base_url }}' `
+            -OutputRoot '${{ runner.temp }}\employee-release' `
+            -PfxPath '${{ steps.signing.outputs.pfx }}' `
+            -PfxPassword $env:WINDOWS_SIGNING_PFX_PASSWORD
+
+      - name: Build signed standalone setup EXE
+        shell: pwsh
+        run: |
+          $release = '${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-${{ inputs.version }}-win-x64'
+          $manifestUrl = '${{ inputs.package_base_url }}'.TrimEnd('/') + '/release.json'
+          ./scripts/windows/make-employee-setup-standalone.ps1 `
+            -ReleaseDirectory $release `
+            -ServerUrl '${{ inputs.server_url }}' `
+            -UpdateManifestUrl $manifestUrl `
+            -PfxPath '${{ steps.signing.outputs.pfx }}' `
+            -PfxPassword $env:WINDOWS_SIGNING_PFX_PASSWORD
 
       - name: Validate signed release bundle
         shell: pwsh
@@ -85,6 +91,15 @@ jobs:
           $release = '${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-${{ inputs.version }}-win-x64'
           $fingerprint = (Get-Content (Join-Path $release 'publisher-certificate-sha256.txt') -Raw).Trim()
           ./scripts/windows/test-employee-release.ps1 -ReleaseDirectory $release -PublisherCertificateSha256 $fingerprint
+          $setup = Join-Path $release 'TaskMonitoring.EmployeeSetup.exe'
+          $signature = Get-AuthenticodeSignature -FilePath $setup
+          if ($signature.Status -ne [Management.Automation.SignatureStatus]::Valid) {
+            throw "Standalone setup signature is not valid. Status=$($signature.Status)"
+          }
+          $runtime = Get-ChildItem $release -Filter 'TaskMonitoring.EmployeeRuntime-*.zip' | Select-Object -First 1
+          if ($null -eq $runtime -or (Get-Item $setup).Length -le $runtime.Length) {
+            throw 'Standalone setup does not appear to contain the embedded employee payload.'
+          }
 
       - name: Remove signing certificate
         if: always()
@@ -96,5 +111,13 @@ jobs:
         with:
           name: TaskMonitoring.EmployeeRelease-${{ inputs.version }}-${{ inputs.channel }}
           path: ${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-${{ inputs.version }}-win-x64
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload signed standalone installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskMonitoring.EmployeeSetup-${{ inputs.version }}-${{ inputs.channel }}
+          path: ${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-${{ inputs.version }}-win-x64\TaskMonitoring.EmployeeSetup.exe
           if-no-files-found: error
           retention-days: 30
