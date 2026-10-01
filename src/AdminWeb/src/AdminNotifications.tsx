@@ -126,6 +126,12 @@ export default function AdminNotificationsPage({ embedded = false }: { embedded?
 
   const pageCount = Math.max(1, Math.ceil((data?.totalCount ?? 0) / 50));
 
+  useEffect(() => {
+    if (data && page > pageCount) {
+      setPage(pageCount);
+    }
+  }, [data, page, pageCount]);
+
   return (
     <section id="notifications">
       {embedded ? (
