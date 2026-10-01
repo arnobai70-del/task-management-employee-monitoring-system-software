@@ -10,6 +10,7 @@ param(
     [string]$Runtime = 'win-x64',
     [string]$OutputRoot,
     [string]$PackageBaseUrl,
+    [string]$ServerUrl,
 
     [ValidatePattern('^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$')]
     [string]$UpdaterVersion = '1.0.0',
@@ -26,6 +27,20 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+function Assert-OptionalHttpsUrl {
+    param([string]$Value, [string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return
+    }
+    $uri = $null
+    if (-not [Uri]::TryCreate($Value.Trim(), [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne [Uri]::UriSchemeHttps) {
+        throw "$Name must be an absolute HTTPS URL when supplied."
+    }
+}
+
+Assert-OptionalHttpsUrl -Value $PackageBaseUrl -Name 'PackageBaseUrl'
+Assert-OptionalHttpsUrl -Value $ServerUrl -Name 'ServerUrl'
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = Join-Path $repoRoot 'artifacts\employee-release'
@@ -37,13 +52,15 @@ $runtimeRoot = Join-Path $OutputRoot '.runtime'
 $desktopPublish = Join-Path $publishRoot 'desktop'
 $servicePublish = Join-Path $publishRoot 'service'
 $updaterPublish = Join-Path $publishRoot 'updater'
+$setupPublish = Join-Path $publishRoot 'setup'
 
 Remove-Item -Recurse -Force $releaseRoot, $publishRoot, $runtimeRoot -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $releaseRoot, $desktopPublish, $servicePublish, $updaterPublish, $runtimeRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $releaseRoot, $desktopPublish, $servicePublish, $updaterPublish, $setupPublish, $runtimeRoot | Out-Null
 
 $desktopProject = Join-Path $repoRoot 'src\EmployeeDesktop\TaskMonitoring.EmployeeDesktop\TaskMonitoring.EmployeeDesktop.csproj'
 $serviceProject = Join-Path $repoRoot 'src\EmployeeService\TaskMonitoring.EmployeeService\TaskMonitoring.EmployeeService.csproj'
 $updaterProject = Join-Path $repoRoot 'src\EmployeeUpdater\TaskMonitoring.EmployeeUpdater\TaskMonitoring.EmployeeUpdater.csproj'
+$setupProject = Join-Path $repoRoot 'src\EmployeeSetup\TaskMonitoring.EmployeeSetup\TaskMonitoring.EmployeeSetup.csproj'
 
 function Publish-SingleFileApplication {
     param(
@@ -83,22 +100,9 @@ Publish-SingleFileApplication -Project $desktopProject -Destination $desktopPubl
 Publish-SingleFileApplication -Project $serviceProject -Destination $servicePublish -ApplicationVersion $Version
 Publish-SingleFileApplication -Project $updaterProject -Destination $updaterPublish -ApplicationVersion $UpdaterVersion
 
-Remove-Item (Join-Path $servicePublish 'appsettings*.json') -Force -ErrorAction SilentlyContinue
-Get-ChildItem -Path $publishRoot -Recurse -Filter '*.pdb' | Remove-Item -Force
-
-$primaryExecutables = @(
-    (Join-Path $desktopPublish 'TaskMonitoring.EmployeeDesktop.exe'),
-    (Join-Path $servicePublish 'TaskMonitoring.EmployeeService.exe'),
-    (Join-Path $updaterPublish 'TaskMonitoring.EmployeeUpdater.exe')
-)
-foreach ($exe in $primaryExecutables) {
-    if (-not (Test-Path $exe -PathType Leaf)) {
-        throw "Expected published executable was not found: $exe"
-    }
-}
-
 $signingCertificate = $null
-$publisherFingerprint = $null
+$publisherFingerprint = ''
+$signTool = $null
 if ([string]::IsNullOrWhiteSpace($PfxPath)) {
     if (-not $AllowUnsignedDevelopmentBuild) {
         throw 'Production release packaging requires -PfxPath. Use -AllowUnsignedDevelopmentBuild only for CI/development validation.'
@@ -122,7 +126,45 @@ else {
         throw 'The supplied PFX does not contain a private key.'
     }
     $publisherFingerprint = Get-CertificateSha256 -Certificate $signingCertificate
+}
 
+$setupManifestUrl = if ([string]::IsNullOrWhiteSpace($PackageBaseUrl)) { '' } else { $PackageBaseUrl.TrimEnd('/') + '/release.json' }
+$setupServerUrl = if ([string]::IsNullOrWhiteSpace($ServerUrl)) { '' } else { $ServerUrl.TrimEnd('/') }
+
+dotnet publish $setupProject `
+    --configuration $Configuration `
+    --runtime $Runtime `
+    --self-contained true `
+    --output $setupPublish `
+    -p:Version=$Version `
+    -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:DebugType=None `
+    -p:DebugSymbols=false `
+    "-p:TaskMonitoringServerUrl=$setupServerUrl" `
+    "-p:TaskMonitoringUpdateManifestUrl=$setupManifestUrl" `
+    "-p:TaskMonitoringPublisherSha256=$publisherFingerprint"
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet publish failed for $setupProject"
+}
+
+Remove-Item (Join-Path $servicePublish 'appsettings*.json') -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path $publishRoot -Recurse -Filter '*.pdb' | Remove-Item -Force
+
+$setupExe = Join-Path $setupPublish 'TaskMonitoring.EmployeeSetup.exe'
+$primaryExecutables = @(
+    (Join-Path $desktopPublish 'TaskMonitoring.EmployeeDesktop.exe'),
+    (Join-Path $servicePublish 'TaskMonitoring.EmployeeService.exe'),
+    (Join-Path $updaterPublish 'TaskMonitoring.EmployeeUpdater.exe'),
+    $setupExe
+)
+foreach ($exe in $primaryExecutables) {
+    if (-not (Test-Path $exe -PathType Leaf)) {
+        throw "Expected published executable was not found: $exe"
+    }
+}
+
+if ($null -ne $signingCertificate) {
     foreach ($exe in $primaryExecutables) {
         & $signTool.FullName sign /fd SHA256 /td SHA256 /tr $TimestampUrl /f $resolvedPfx /p $PfxPassword $exe
         if ($LASTEXITCODE -ne 0) {
@@ -144,6 +186,7 @@ Compress-Archive -Path (Join-Path $runtimeRoot '*') -DestinationPath $packagePat
 $updaterDestination = Join-Path $releaseRoot 'updater'
 New-Item -ItemType Directory -Force -Path $updaterDestination | Out-Null
 Copy-Item -Path (Join-Path $updaterPublish '*') -Destination $updaterDestination -Recurse -Force
+Copy-Item -Path $setupExe -Destination (Join-Path $releaseRoot 'TaskMonitoring.EmployeeSetup.exe') -Force
 
 $packageUrl = $null
 if (-not [string]::IsNullOrWhiteSpace($PackageBaseUrl)) {
@@ -197,6 +240,7 @@ if ($null -ne $signingCertificate) {
 }
 
 Write-Host "Release bundle: $releaseRoot"
+Write-Host "Employee setup: $(Join-Path $releaseRoot 'TaskMonitoring.EmployeeSetup.exe')"
 Write-Host "Runtime package: $packagePath"
 Write-Host "Manifest SHA-256: $((Get-FileHash -Algorithm SHA256 -Path $manifestPath).Hash)"
 if ($publisherFingerprint) {
