@@ -15,13 +15,17 @@ public sealed class SetupForm : Form
     private readonly Button installButton = new() { Text = "Install", Width = 110, Height = 34 };
     private readonly Button backButton = new() { Text = "Back", Width = 90, Height = 34 };
     private readonly Button cancelButton = new() { Text = "Cancel", Width = 90, Height = 34 };
+    private readonly bool developmentMode;
+    private ExtractedPayload? extractedPayload;
 
     public SetupForm()
     {
-        Text = "TaskMonitoring Employee Setup";
+        developmentMode = string.Equals(GetMetadata("TaskMonitoring.DevelopmentSetup"), "true", StringComparison.OrdinalIgnoreCase);
+
+        Text = developmentMode ? "TaskMonitoring Employee Setup - DEVELOPMENT TEST" : "TaskMonitoring Employee Setup";
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(620, 430);
-        MinimumSize = new Size(620, 430);
+        ClientSize = new Size(620, 450);
+        MinimumSize = new Size(620, 450);
         MaximizeBox = false;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         Font = new Font("Segoe UI", 10F);
@@ -38,10 +42,12 @@ public sealed class SetupForm : Form
         serverUrlText.ReadOnly = serverUrlText.TextLength > 0;
         updateManifestText.ReadOnly = updateManifestText.TextLength > 0;
         publisherText.ReadOnly = publisherText.TextLength > 0;
+        publisherText.Enabled = !developmentMode;
 
         installButton.Click += InstallButton_Click;
         backButton.Click += (_, _) => ShowWelcome();
         cancelButton.Click += (_, _) => Close();
+        FormClosed += (_, _) => CleanupPayload();
     }
 
     private void BuildWelcomePage()
@@ -51,46 +57,65 @@ public sealed class SetupForm : Form
             Text = "TaskMonitoring Employee Workspace",
             Font = new Font(Font.FontFamily, 18F, FontStyle.Bold),
             AutoSize = true,
-            Location = new Point(42, 48)
+            Location = new Point(42, 42)
         };
         var description = new Label
         {
-            Text = "This wizard installs the employee Desktop, visible Windows Service, automatic updater, shortcuts and rollback support for your organization.\n\nThe installer verifies the signed release package and the organization's pinned publisher certificate before activation.",
+            Text = "This wizard installs the employee Desktop, visible Windows Service, automatic updater, shortcuts and rollback support for your organization.\n\nThe production installer verifies the signed release package and the organization's pinned publisher certificate before activation.",
             AutoSize = true,
             MaximumSize = new Size(520, 0),
-            Location = new Point(46, 112)
+            Location = new Point(46, 104)
         };
-        var next = new Button { Text = "Next", Width = 110, Height = 34, Location = new Point(452, 340) };
-        var cancel = new Button { Text = "Cancel", Width = 90, Height = 34, Location = new Point(350, 340) };
+        welcomePanel.Controls.AddRange([title, description]);
+
+        if (developmentMode)
+        {
+            var warning = new Label
+            {
+                Text = "DEVELOPMENT TEST BUILD: unsigned packages and HTTP are allowed. Do not use this installer for production deployment.",
+                ForeColor = Color.DarkRed,
+                Font = new Font(Font, FontStyle.Bold),
+                AutoSize = true,
+                MaximumSize = new Size(520, 0),
+                Location = new Point(46, 242)
+            };
+            welcomePanel.Controls.Add(warning);
+        }
+
+        var next = new Button { Text = "Next", Width = 110, Height = 34, Location = new Point(452, 362) };
+        var cancel = new Button { Text = "Cancel", Width = 90, Height = 34, Location = new Point(350, 362) };
         next.Click += (_, _) => ShowInstall();
         cancel.Click += (_, _) => Close();
-        welcomePanel.Controls.AddRange([title, description, cancel, next]);
+        welcomePanel.Controls.AddRange([cancel, next]);
     }
 
     private void BuildInstallPage()
     {
         var title = new Label
         {
-            Text = "Ready to install",
+            Text = developmentMode ? "Ready to install development test" : "Ready to install",
             Font = new Font(Font.FontFamily, 16F, FontStyle.Bold),
             AutoSize = true,
-            Location = new Point(38, 30)
+            Location = new Point(38, 24)
         };
         var explanation = new Label
         {
-            Text = "Confirm the organization endpoints and publisher identity, then choose Install.",
+            Text = developmentMode
+                ? "Confirm the test server URL. Auto-update is disabled when no update manifest URL is supplied."
+                : "Confirm the organization endpoints and publisher identity, then choose Install.",
             AutoSize = true,
-            Location = new Point(41, 72)
+            MaximumSize = new Size(530, 0),
+            Location = new Point(41, 66)
         };
 
-        AddField("Server URL", serverUrlText, 112);
-        AddField("Update manifest URL", updateManifestText, 177);
-        AddField("Publisher certificate SHA-256", publisherText, 242);
+        AddField("Server URL", serverUrlText, 108);
+        AddField("Update manifest URL", updateManifestText, 173);
+        AddField("Publisher certificate SHA-256", publisherText, 238);
 
-        statusLabel.Location = new Point(42, 305);
-        installButton.Location = new Point(452, 350);
-        backButton.Location = new Point(250, 350);
-        cancelButton.Location = new Point(350, 350);
+        statusLabel.Location = new Point(42, 303);
+        installButton.Location = new Point(452, 370);
+        backButton.Location = new Point(250, 370);
+        cancelButton.Location = new Point(350, 370);
 
         installPanel.Controls.AddRange([title, explanation, statusLabel, installButton, backButton, cancelButton]);
     }
@@ -124,23 +149,44 @@ public sealed class SetupForm : Form
         var updateManifestUrl = updateManifestText.Text.Trim();
         var publisher = NormalizeFingerprint(publisherText.Text);
 
-        if (!IsHttpsUrl(serverUrl))
+        if (!IsAllowedUrl(serverUrl, developmentMode))
         {
-            ShowError("Server URL must be an absolute HTTPS URL.");
+            ShowError(developmentMode
+                ? "Server URL must be an absolute HTTP or HTTPS URL."
+                : "Server URL must be an absolute HTTPS URL.");
             return;
         }
-        if (!IsHttpsUrl(updateManifestUrl))
+        if (!string.IsNullOrWhiteSpace(updateManifestUrl) && !IsAllowedUrl(updateManifestUrl, developmentMode))
         {
-            ShowError("Update manifest URL must be an absolute HTTPS URL.");
+            ShowError(developmentMode
+                ? "Update manifest URL must be an absolute HTTP or HTTPS URL when supplied."
+                : "Update manifest URL must be an absolute HTTPS URL.");
             return;
         }
-        if (!Regex.IsMatch(publisher, "^[0-9A-F]{64}$", RegexOptions.CultureInvariant))
+        if (!developmentMode && string.IsNullOrWhiteSpace(updateManifestUrl))
+        {
+            ShowError("Production installation requires an HTTPS update manifest URL.");
+            return;
+        }
+        if (!developmentMode && !Regex.IsMatch(publisher, "^[0-9A-F]{64}$", RegexOptions.CultureInvariant))
         {
             ShowError("Publisher certificate SHA-256 must contain exactly 64 hexadecimal characters.");
             return;
         }
 
-        var releaseDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        string releaseDirectory;
+        try
+        {
+            CleanupPayload();
+            extractedPayload = SetupPayload.ExtractEmbeddedPayload();
+            releaseDirectory = extractedPayload?.DirectoryPath ?? AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Could not unpack the installer payload. {ex.Message}");
+            return;
+        }
+
         var installer = Path.Combine(releaseDirectory, "install-employee-windows.ps1");
         var manifest = Path.Combine(releaseDirectory, "release.json");
         var signedScripts = new[]
@@ -153,34 +199,58 @@ public sealed class SetupForm : Form
         };
         if (!File.Exists(manifest) || signedScripts.Any(path => !File.Exists(path)))
         {
-            ShowError("This setup executable must remain inside the complete signed TaskMonitoring release bundle.");
+            ShowError(SetupPayload.HasEmbeddedPayload
+                ? "The embedded TaskMonitoring installer payload is incomplete."
+                : "This setup executable must remain inside the complete TaskMonitoring release bundle.");
+            CleanupPayload();
             return;
         }
 
-        SetBusy(true, "Verifying publisher signatures and installing components...");
+        SetBusy(true, developmentMode ? "Installing development test components..." : "Verifying publisher signatures and installing components...");
         try
         {
             var verificationAndInstall = """
 $ErrorActionPreference = 'Stop'
+$development = $env:TM_DEVELOPMENT_SETUP -eq '1'
 $expected = $env:TM_PUBLISHER_SHA256
 $files = $env:TM_SIGNED_SCRIPTS -split [IO.Path]::PathSeparator
-foreach ($file in $files) {
-    $signature = Get-AuthenticodeSignature -FilePath $file
-    if ($signature.Status -ne [Management.Automation.SignatureStatus]::Valid -or $null -eq $signature.SignerCertificate) {
-        throw "Authenticode validation failed for '$file'. Status=$($signature.Status)."
-    }
-    $sha = [Security.Cryptography.SHA256]::Create()
-    try {
-        $actual = (($sha.ComputeHash($signature.SignerCertificate.RawData) | ForEach-Object { $_.ToString('X2') }) -join '')
-    }
-    finally {
-        $sha.Dispose()
-    }
-    if ($actual -ne $expected) {
-        throw "Publisher certificate mismatch for '$file'."
+if (-not $development) {
+    foreach ($file in $files) {
+        $signature = Get-AuthenticodeSignature -FilePath $file
+        if ($signature.Status -ne [Management.Automation.SignatureStatus]::Valid -or $null -eq $signature.SignerCertificate) {
+            throw "Authenticode validation failed for '$file'. Status=$($signature.Status)."
+        }
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            $actual = (($sha.ComputeHash($signature.SignerCertificate.RawData) | ForEach-Object { $_.ToString('X2') }) -join '')
+        }
+        finally {
+            $sha.Dispose()
+        }
+        if ($actual -ne $expected) {
+            throw "Publisher certificate mismatch for '$file'."
+        }
     }
 }
-& $env:TM_INSTALLER -ReleaseDirectory $env:TM_RELEASE_DIRECTORY -ServerUrl $env:TM_SERVER_URL -UpdateManifestUrl $env:TM_UPDATE_MANIFEST_URL -PublisherCertificateSha256 $expected
+
+$args = @{
+    ReleaseDirectory = $env:TM_RELEASE_DIRECTORY
+    ServerUrl = $env:TM_SERVER_URL
+}
+if ($development) {
+    $args.AllowUnsignedDevelopmentBuild = $true
+    $args.AllowHttpForDevelopment = $true
+}
+else {
+    $args.PublisherCertificateSha256 = $expected
+}
+if ([string]::IsNullOrWhiteSpace($env:TM_UPDATE_MANIFEST_URL)) {
+    $args.DisableAutoUpdate = $true
+}
+else {
+    $args.UpdateManifestUrl = $env:TM_UPDATE_MANIFEST_URL
+}
+& $env:TM_INSTALLER @args
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 """;
 
@@ -198,6 +268,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             startInfo.ArgumentList.Add("Bypass");
             startInfo.ArgumentList.Add("-Command");
             startInfo.ArgumentList.Add(verificationAndInstall);
+            startInfo.Environment["TM_DEVELOPMENT_SETUP"] = developmentMode ? "1" : "0";
             startInfo.Environment["TM_PUBLISHER_SHA256"] = publisher;
             startInfo.Environment["TM_SIGNED_SCRIPTS"] = string.Join(Path.PathSeparator, signedScripts);
             startInfo.Environment["TM_INSTALLER"] = installer;
@@ -205,7 +276,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             startInfo.Environment["TM_SERVER_URL"] = serverUrl;
             startInfo.Environment["TM_UPDATE_MANIFEST_URL"] = updateManifestUrl;
 
-            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the signed installer.");
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the installer.");
             var outputTask = process.StandardOutput.ReadToEndAsync();
             var errorTask = process.StandardError.ReadToEndAsync();
             await process.WaitForExitAsync();
@@ -229,7 +300,9 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             statusLabel.Text = "Installation completed successfully.";
             MessageBox.Show(
                 this,
-                "TaskMonitoring Employee Workspace was installed successfully. Use the Desktop or Start Menu shortcut to sign in.",
+                developmentMode
+                    ? "TaskMonitoring Employee Workspace development test was installed successfully. Use the Desktop or Start Menu shortcut to sign in."
+                    : "TaskMonitoring Employee Workspace was installed successfully. Use the Desktop or Start Menu shortcut to sign in.",
                 "Installation complete",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -241,6 +314,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
         finally
         {
+            CleanupPayload();
             if (!IsDisposed)
             {
                 installButton.Enabled = true;
@@ -249,6 +323,12 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
                 UseWaitCursor = false;
             }
         }
+    }
+
+    private void CleanupPayload()
+    {
+        extractedPayload?.Dispose();
+        extractedPayload = null;
     }
 
     private void SetBusy(bool busy, string message)
@@ -267,10 +347,15 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         statusLabel.Text = message;
     }
 
-    private static bool IsHttpsUrl(string value) =>
-        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-        string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
-        !string.IsNullOrWhiteSpace(uri.Host);
+    private static bool IsAllowedUrl(string value, bool allowHttp)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host))
+        {
+            return false;
+        }
+        return string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+               (allowHttp && string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase));
+    }
 
     private static string NormalizeFingerprint(string value) =>
         Regex.Replace(value ?? string.Empty, "[^0-9A-Fa-f]", string.Empty).ToUpperInvariant();
