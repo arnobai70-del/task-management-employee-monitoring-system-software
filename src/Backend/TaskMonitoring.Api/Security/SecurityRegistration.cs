@@ -80,9 +80,9 @@ public static class SecurityRegistration
         return address;
     }
 
-    private static IPNetwork ParseNetwork(string value)
+    private static System.Net.IPNetwork ParseNetwork(string value)
     {
-        if (!IPNetwork.TryParse(value, out var network))
+        if (!System.Net.IPNetwork.TryParse(value, out var network))
         {
             throw new InvalidOperationException($"ReverseProxy:KnownNetworks contains an invalid CIDR network: {value}");
         }
