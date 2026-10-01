@@ -32,9 +32,11 @@ function Assert-DevServerUrl([string]$Value) {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$lanServerFile = Join-Path $repoRoot '.local\employee-test-server.txt'
 $detected = Get-LanIpv4
 if ([string]::IsNullOrWhiteSpace($ServerUrl)) {
-    $suggestion = if ($detected) { "http://$detected`:5080" } else { 'http://127.0.0.1:5080' }
+    $recorded = if (Test-Path $lanServerFile -PathType Leaf) { (Get-Content $lanServerFile -Raw).Trim() } else { '' }
+    $suggestion = if ($recorded) { $recorded } elseif ($detected) { "http://$detected`:5080" } else { 'http://127.0.0.1:5080' }
     Write-Host ''
     Write-Host 'TaskMonitoring Employee TEST Installer Builder' -ForegroundColor Cyan
     Write-Warning 'This creates an unsigned development-only installer. Use the signed production release for real deployment.'
@@ -54,9 +56,12 @@ $finalRoot = Join-Path $repoRoot 'artifacts\employee-test-installer'
 Remove-Item -Recurse -Force $outputRoot, $finalRoot -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $finalRoot | Out-Null
 
+# The base release builder deliberately accepts HTTPS only. Its setup executable is replaced below
+# with an explicitly marked development setup that may use the requested HTTP LAN URL.
+$baseBuildServerUrl = if ($ServerUrl.StartsWith('https://', [StringComparison]::OrdinalIgnoreCase)) { $ServerUrl } else { 'https://development.invalid' }
 & (Join-Path $PSScriptRoot 'build-employee-release.ps1') `
     -Version $Version `
-    -ServerUrl $ServerUrl `
+    -ServerUrl $baseBuildServerUrl `
     -OutputRoot $outputRoot `
     -AllowUnsignedDevelopmentBuild
 if ($LASTEXITCODE -ne 0) {
