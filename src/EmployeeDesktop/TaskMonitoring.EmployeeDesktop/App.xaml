@@ -3,30 +3,26 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
   <Application.Resources>
-    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F5F7FB" />
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F4F7FB" />
     <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
     <SolidColorBrush x:Key="SurfaceMutedBrush" Color="#F8FAFC" />
-    <SolidColorBrush x:Key="LineBrush" Color="#E2E8F0" />
-    <SolidColorBrush x:Key="TextBrush" Color="#111827" />
+    <SolidColorBrush x:Key="LineBrush" Color="#E4E7EC" />
+    <SolidColorBrush x:Key="TextBrush" Color="#101828" />
     <SolidColorBrush x:Key="MutedTextBrush" Color="#667085" />
-    <SolidColorBrush x:Key="AccentBrush" Color="#3B82F6" />
-    <SolidColorBrush x:Key="AccentHoverBrush" Color="#2563EB" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#2563EB" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#1D4ED8" />
     <SolidColorBrush x:Key="AccentSoftBrush" Color="#EFF6FF" />
-    <SolidColorBrush x:Key="SidebarBrush" Color="#0B1220" />
-    <SolidColorBrush x:Key="SidebarSoftBrush" Color="#111B2E" />
-    <SolidColorBrush x:Key="SidebarMutedBrush" Color="#94A3B8" />
-    <SolidColorBrush x:Key="SuccessBrush" Color="#10B981" />
-    <SolidColorBrush x:Key="SuccessSoftBrush" Color="#ECFDF5" />
-    <SolidColorBrush x:Key="WarningBrush" Color="#F59E0B" />
-    <SolidColorBrush x:Key="DangerBrush" Color="#EF4444" />
-    <SolidColorBrush x:Key="DangerSoftBrush" Color="#FEF2F2" />
+    <SolidColorBrush x:Key="SidebarBrush" Color="#0C1424" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="#039855" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#D92D20" />
 
-    <DropShadowEffect x:Key="CardShadow" BlurRadius="24" Direction="270" ShadowDepth="6" Opacity="0.09" Color="#0F172A" />
-    <DropShadowEffect x:Key="FloatingShadow" BlurRadius="30" Direction="270" ShadowDepth="10" Opacity="0.16" Color="#0F172A" />
+    <DropShadowEffect x:Key="CardShadow" BlurRadius="22" Direction="270" ShadowDepth="5" Opacity="0.09" Color="#101828" />
 
     <Style TargetType="Window">
       <Setter Property="FontFamily" Value="Segoe UI" />
       <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+      <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
     </Style>
 
     <Style TargetType="TextBlock">
@@ -45,29 +41,39 @@
       <Setter Property="Effect" Value="{StaticResource CardShadow}" />
     </Style>
 
+    <!-- DPI-safe text input. The content host is vertically centered instead of using
+         top/bottom margins, which avoids glyph clipping at 125%/150% Windows scaling. -->
     <Style x:Key="InputTextBoxStyle" TargetType="TextBox">
-      <Setter Property="Height" Value="46" />
-      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="Height" Value="44" />
+      <Setter Property="Padding" Value="14,0" />
       <Setter Property="Background" Value="#FFFFFF" />
       <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
       <Setter Property="BorderBrush" Value="#D0D5DD" />
       <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="FontSize" Value="13" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
-      <Setter Property="FontSize" Value="13.5" />
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="TextBox">
-            <Border x:Name="InputBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
-              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+            <Border x:Name="InputBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="10">
+              <ScrollViewer x:Name="PART_ContentHost"
+                            Margin="{TemplateBinding Padding}"
+                            VerticalAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            HorizontalScrollBarVisibility="Hidden"
+                            VerticalScrollBarVisibility="Hidden" />
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsKeyboardFocused" Value="True">
                 <Setter TargetName="InputBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-                <Setter TargetName="InputBorder" Property="BorderThickness" Value="1.5" />
+                <Setter TargetName="InputBorder" Property="BorderThickness" Value="2" />
               </Trigger>
               <Trigger Property="IsReadOnly" Value="True">
                 <Setter TargetName="InputBorder" Property="Background" Value="#F8FAFC" />
-                <Setter Property="Foreground" Value="#475467" />
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
                 <Setter TargetName="InputBorder" Property="Opacity" Value="0.55" />
@@ -81,24 +87,33 @@
     <Style TargetType="TextBox" BasedOn="{StaticResource InputTextBoxStyle}" />
 
     <Style TargetType="PasswordBox">
-      <Setter Property="Height" Value="46" />
-      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="Height" Value="44" />
+      <Setter Property="Padding" Value="14,0" />
       <Setter Property="Background" Value="#FFFFFF" />
       <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
       <Setter Property="BorderBrush" Value="#D0D5DD" />
       <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="FontSize" Value="13" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
-      <Setter Property="FontSize" Value="13.5" />
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="PasswordBox">
-            <Border x:Name="InputBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
-              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+            <Border x:Name="InputBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="10">
+              <ScrollViewer x:Name="PART_ContentHost"
+                            Margin="{TemplateBinding Padding}"
+                            VerticalAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            HorizontalScrollBarVisibility="Hidden"
+                            VerticalScrollBarVisibility="Hidden" />
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsKeyboardFocused" Value="True">
                 <Setter TargetName="InputBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-                <Setter TargetName="InputBorder" Property="BorderThickness" Value="1.5" />
+                <Setter TargetName="InputBorder" Property="BorderThickness" Value="2" />
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
                 <Setter TargetName="InputBorder" Property="Opacity" Value="0.55" />
@@ -123,12 +138,20 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}">
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <Border x:Name="ButtonBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="10"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                RecognizesAccessKey="True"
+                                TextElement.Foreground="{TemplateBinding Foreground}" />
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.9" />
+                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.90" />
               </Trigger>
               <Trigger Property="IsPressed" Value="True">
                 <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.76" />
@@ -163,13 +186,6 @@
       <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}" />
     </Style>
 
-    <Style x:Key="GhostSidebarButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButtonStyle}">
-      <Setter Property="Background" Value="#162238" />
-      <Setter Property="Foreground" Value="#DCE6F5" />
-      <Setter Property="BorderBrush" Value="#24354F" />
-      <Setter Property="Height" Value="38" />
-    </Style>
-
     <Style TargetType="CheckBox">
       <Setter Property="Foreground" Value="#475467" />
       <Setter Property="FontSize" Value="12.5" />
@@ -177,9 +193,9 @@
     </Style>
 
     <Style x:Key="NavTabItemStyle" TargetType="TabItem">
-      <Setter Property="Width" Value="206" />
-      <Setter Property="Margin" Value="0,0,0,7" />
-      <Setter Property="Padding" Value="15,12" />
+      <Setter Property="Width" Value="204" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+      <Setter Property="Padding" Value="15,11" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="#AAB8CC" />
       <Setter Property="FontWeight" Value="SemiBold" />
@@ -188,8 +204,8 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="TabItem">
-            <Border x:Name="TabBorder" Background="{TemplateBinding Background}" CornerRadius="11" Padding="{TemplateBinding Padding}">
-              <ContentPresenter ContentSource="Header" VerticalAlignment="Center" />
+            <Border x:Name="TabBorder" Background="{TemplateBinding Background}" CornerRadius="10" Padding="{TemplateBinding Padding}">
+              <ContentPresenter ContentSource="Header" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsSelected" Value="True">
@@ -208,14 +224,14 @@
 
     <Style x:Key="SubTabItemStyle" TargetType="TabItem">
       <Setter Property="Margin" Value="0,0,8,0" />
-      <Setter Property="Padding" Value="16,9" />
+      <Setter Property="Padding" Value="15,8" />
       <Setter Property="Foreground" Value="#667085" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="TabItem">
-            <Border x:Name="SubTabBorder" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="9" Padding="{TemplateBinding Padding}">
-              <ContentPresenter ContentSource="Header" />
+            <Border x:Name="SubTabBorder" Background="#F8FAFC" BorderBrush="#E4E7EC" BorderThickness="1" CornerRadius="9" Padding="{TemplateBinding Padding}">
+              <ContentPresenter ContentSource="Header" TextElement.Foreground="{TemplateBinding Foreground}" />
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsSelected" Value="True">
@@ -261,20 +277,20 @@
       <Setter Property="Foreground" Value="#667085" />
       <Setter Property="BorderBrush" Value="#E4E7EC" />
       <Setter Property="BorderThickness" Value="0,0,0,1" />
-      <Setter Property="Padding" Value="12,11" />
-      <Setter Property="FontSize" Value="10.5" />
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="FontSize" Value="11" />
       <Setter Property="FontWeight" Value="Bold" />
     </Style>
 
     <Style TargetType="DataGridCell">
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Padding" Value="11,10" />
+      <Setter Property="Padding" Value="10,8" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
       <Setter Property="Foreground" Value="#344054" />
     </Style>
 
     <Style TargetType="DataGridRow">
-      <Setter Property="MinHeight" Value="46" />
+      <Setter Property="MinHeight" Value="40" />
       <Style.Triggers>
         <Trigger Property="IsSelected" Value="True">
           <Setter Property="Background" Value="#EFF6FF" />
