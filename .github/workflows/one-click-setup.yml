@@ -1,0 +1,69 @@
+name: One-click setup tooling
+
+on:
+  pull_request:
+    paths:
+      - 'Start-Admin.cmd'
+      - 'scripts/windows/start-admin-local.ps1'
+      - 'src/EmployeeSetup/**'
+      - 'scripts/windows/build-employee-release.ps1'
+      - 'scripts/windows/test-employee-release.ps1'
+      - '.github/workflows/windows-release.yml'
+      - '.github/workflows/one-click-setup.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate admin launcher and employee setup wizard
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Parse PowerShell launch and release scripts
+        shell: pwsh
+        run: |
+          foreach ($script in @(
+            'scripts/windows/start-admin-local.ps1',
+            'scripts/windows/build-employee-release.ps1',
+            'scripts/windows/test-employee-release.ps1'
+          )) {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$null, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              throw "PowerShell parse failed: $script"
+            }
+          }
+
+      - name: Build employee setup wizard
+        shell: pwsh
+        run: |
+          dotnet restore src/EmployeeSetup/TaskMonitoring.EmployeeSetup/TaskMonitoring.EmployeeSetup.csproj
+          dotnet build src/EmployeeSetup/TaskMonitoring.EmployeeSetup/TaskMonitoring.EmployeeSetup.csproj --configuration Release --no-restore
+
+      - name: Build preconfigured unsigned release bundle
+        shell: pwsh
+        run: |
+          ./scripts/windows/build-employee-release.ps1 `
+            -Version '0.0.0' `
+            -ServerUrl 'https://task.example.invalid' `
+            -PackageBaseUrl 'https://updates.example.invalid/stable' `
+            -OutputRoot '${{ runner.temp }}\employee-release' `
+            -AllowUnsignedDevelopmentBuild
+
+      - name: Validate setup wizard is included in release bundle
+        shell: pwsh
+        run: |
+          $release = '${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-0.0.0-win-x64'
+          ./scripts/windows/test-employee-release.ps1 -ReleaseDirectory $release -AllowUnsignedDevelopmentBuild
+          if (-not (Test-Path (Join-Path $release 'TaskMonitoring.EmployeeSetup.exe') -PathType Leaf)) {
+            throw 'Employee setup executable is missing from the release bundle.'
+          }
