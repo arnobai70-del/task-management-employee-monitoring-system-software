@@ -15,8 +15,12 @@ on:
         options:
           - stable
           - beta
+      server_url:
+        description: Optional HTTPS TaskMonitoring application URL embedded in the signed setup wizard
+        required: false
+        type: string
       package_base_url:
-        description: Optional HTTPS base URL where release.json and runtime ZIP will be hosted
+        description: Optional HTTPS base URL where release.json and runtime ZIP will be hosted; also preconfigures the setup wizard
         required: false
         type: string
 
@@ -67,6 +71,9 @@ jobs:
             '-PfxPath', '${{ steps.signing.outputs.pfx }}',
             '-PfxPassword', $env:WINDOWS_SIGNING_PFX_PASSWORD
           )
+          if (-not [string]::IsNullOrWhiteSpace('${{ inputs.server_url }}')) {
+            $args += @('-ServerUrl', '${{ inputs.server_url }}')
+          }
           if (-not [string]::IsNullOrWhiteSpace('${{ inputs.package_base_url }}')) {
             $args += @('-PackageBaseUrl', '${{ inputs.package_base_url }}')
           }
