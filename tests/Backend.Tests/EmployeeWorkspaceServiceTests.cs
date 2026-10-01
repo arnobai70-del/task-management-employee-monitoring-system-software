@@ -7,6 +7,8 @@ namespace Backend.Tests;
 
 public sealed class EmployeeWorkspaceServiceTests
 {
+    private static readonly DateTimeOffset TestNow = DateTimeOffset.Parse("2026-10-02T00:00:00Z");
+
     [Fact]
     public async Task My_tasks_are_scoped_to_authenticated_employee_and_closed_tasks_are_hidden_by_default()
     {
@@ -58,7 +60,7 @@ public sealed class EmployeeWorkspaceServiceTests
 
         db.AddRange(first.User, first, second.User, second, project, openTask, closedTask, otherTask);
         await db.SaveChangesAsync(cancellationToken);
-        var service = new EmployeeWorkspaceService(db);
+        var service = CreateService(db);
 
         var current = await service.GetMyTasksAsync(new RequestActor(first.UserId, null, "tests"), false, 1, 50, cancellationToken);
         Assert.Equal(OperationStatus.Success, current.Status);
@@ -71,7 +73,7 @@ public sealed class EmployeeWorkspaceServiceTests
     }
 
     [Fact]
-    public async Task My_access_is_scoped_hides_inactive_and_keeps_survey_links_out_of_website_access()
+    public async Task My_access_is_scoped_hides_inactive_future_and_expired_assignments_and_keeps_surveys_out()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var db = CreateDbContext();
@@ -79,18 +81,22 @@ public sealed class EmployeeWorkspaceServiceTests
         var second = CreateEmployee("EMP-ACCESS2", "Access Two", "access2@example.com");
         db.AddRange(first.User, first, second.User, second);
 
-        var activeRdp = new RdpAssignment { EmployeeId = first.Id, Employee = first, Name = "Primary RDP", Host = "10.10.0.10", Port = 3389, IsActive = true };
+        var activeRdp = new RdpAssignment { EmployeeId = first.Id, Employee = first, Name = "Primary RDP", Host = "10.10.0.10", Port = 3389, ValidFrom = new DateOnly(2026, 10, 1), ExpiresOn = new DateOnly(2026, 10, 3), IsActive = true };
         var inactiveRdp = new RdpAssignment { EmployeeId = first.Id, Employee = first, Name = "Old RDP", Host = "10.10.0.11", Port = 3389, IsActive = false };
+        var futureRdp = new RdpAssignment { EmployeeId = first.Id, Employee = first, Name = "Future RDP", Host = "10.10.0.13", Port = 3389, ValidFrom = new DateOnly(2026, 10, 3), IsActive = true };
+        var expiredRdp = new RdpAssignment { EmployeeId = first.Id, Employee = first, Name = "Expired RDP", Host = "10.10.0.14", Port = 3389, ExpiresOn = new DateOnly(2026, 10, 1), IsActive = true };
         var otherRdp = new RdpAssignment { EmployeeId = second.Id, Employee = second, Name = "Other RDP", Host = "10.10.0.12", Port = 3389, IsActive = true };
         var activeIp = new IpAssignment { EmployeeId = first.Id, Employee = first, IpAddress = "192.168.50.10", DeviceName = "PC-1", Status = IpAssignmentStatus.Active };
         var releasedIp = new IpAssignment { EmployeeId = first.Id, Employee = first, IpAddress = "192.168.50.11", DeviceName = "OLD-PC", Status = IpAssignmentStatus.Released };
-        var activeWebsite = new WebsiteAssignment { EmployeeId = first.Id, Employee = first, Name = "CRM", Url = "https://crm.example.com", AccessLevel = WebsiteAccessLevel.Work, IsActive = true };
+        var activeWebsite = new WebsiteAssignment { EmployeeId = first.Id, Employee = first, Name = "CRM", Url = "https://crm.example.com", AccessLevel = WebsiteAccessLevel.Work, StartsOn = new DateOnly(2026, 10, 1), ExpiresOn = new DateOnly(2026, 10, 3), IsActive = true };
         var inactiveWebsite = new WebsiteAssignment { EmployeeId = first.Id, Employee = first, Name = "Legacy", Url = "https://legacy.example.com", AccessLevel = WebsiteAccessLevel.View, IsActive = false };
+        var futureWebsite = new WebsiteAssignment { EmployeeId = first.Id, Employee = first, Name = "Future", Url = "https://future.example.com", AccessLevel = WebsiteAccessLevel.Work, StartsOn = new DateOnly(2026, 10, 3), IsActive = true };
+        var expiredWebsite = new WebsiteAssignment { EmployeeId = first.Id, Employee = first, Name = "Expired", Url = "https://expired.example.com", AccessLevel = WebsiteAccessLevel.View, ExpiresOn = new DateOnly(2026, 10, 1), IsActive = true };
         var surveyWebsite = new WebsiteAssignment { EmployeeId = first.Id, Employee = first, Name = "Customer survey", Url = "https://survey.example.com/form", AccessLevel = WebsiteAccessLevel.Survey, IsActive = true };
-        db.AddRange(activeRdp, inactiveRdp, otherRdp, activeIp, releasedIp, activeWebsite, inactiveWebsite, surveyWebsite);
+        db.AddRange(activeRdp, inactiveRdp, futureRdp, expiredRdp, otherRdp, activeIp, releasedIp, activeWebsite, inactiveWebsite, futureWebsite, expiredWebsite, surveyWebsite);
         await db.SaveChangesAsync(cancellationToken);
 
-        var service = new EmployeeWorkspaceService(db);
+        var service = CreateService(db);
         var current = await service.GetMyAccessAsync(new RequestActor(first.UserId, null, "tests"), false, cancellationToken);
 
         Assert.Equal(OperationStatus.Success, current.Status);
@@ -103,9 +109,9 @@ public sealed class EmployeeWorkspaceServiceTests
         Assert.DoesNotContain(current.Value.WebsiteAssignments, x => x.Id == surveyWebsite.Id);
 
         var history = await service.GetMyAccessAsync(new RequestActor(first.UserId, null, "tests"), true, cancellationToken);
-        Assert.Equal(2, history.Value!.RdpAssignments.Count);
+        Assert.Equal(4, history.Value!.RdpAssignments.Count);
         Assert.Equal(2, history.Value.IpAssignments.Count);
-        Assert.Equal(2, history.Value.WebsiteAssignments.Count);
+        Assert.Equal(4, history.Value.WebsiteAssignments.Count);
         Assert.DoesNotContain(history.Value.RdpAssignments, x => x.Id == otherRdp.Id);
         Assert.DoesNotContain(history.Value.WebsiteAssignments, x => x.Id == surveyWebsite.Id);
     }
@@ -115,7 +121,7 @@ public sealed class EmployeeWorkspaceServiceTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var db = CreateDbContext();
-        var service = new EmployeeWorkspaceService(db);
+        var service = CreateService(db);
 
         var missing = await service.GetMyTasksAsync(new RequestActor(Guid.NewGuid(), null, "tests"), false, 1, 20, cancellationToken);
         Assert.Equal(OperationStatus.NotFound, missing.Status);
@@ -129,6 +135,9 @@ public sealed class EmployeeWorkspaceServiceTests
         Assert.Equal(OperationStatus.Invalid, blocked.Status);
         Assert.Equal("employee_inactive", blocked.ErrorCode);
     }
+
+    private static EmployeeWorkspaceService CreateService(AppDbContext db)
+        => new(db, new FixedTimeProvider(TestNow));
 
     private static AppDbContext CreateDbContext()
     {
@@ -158,5 +167,10 @@ public sealed class EmployeeWorkspaceServiceTests
             JobTitle = "Employee",
             IsActive = isActive
         };
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }
