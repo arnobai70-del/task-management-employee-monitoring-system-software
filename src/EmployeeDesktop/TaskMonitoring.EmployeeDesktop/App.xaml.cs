@@ -11,14 +11,18 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
 
         var deploymentSettings = DesktopDeploymentSettings.Load();
-        if (deploymentSettings is null)
-        {
-            return;
-        }
 
         _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
-            if (Current.MainWindow?.FindName("ServerUrlBox") is not TextBox serverUrlBox)
+            if (Current.MainWindow is not Window mainWindow)
+            {
+                return;
+            }
+
+            EmployeeLoginExperience.Apply(mainWindow);
+
+            if (deploymentSettings is null ||
+                mainWindow.FindName("ServerUrlBox") is not TextBox serverUrlBox)
             {
                 return;
             }
