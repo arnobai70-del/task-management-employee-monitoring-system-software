@@ -63,7 +63,13 @@ public sealed class TasksController(
     {
         if (await IsWebsiteWorkAsync(id, cancellationToken))
         {
-            return Conflict(WebsiteWorkManagedSeparatelyError());
+            // The Website Work admin screen historically used the generic status endpoint
+            // for its explicit Cancel action. Keep only that safe compatibility path while
+            // continuing to reject arbitrary Website Work status mutation through Tasks.
+            if (request.Status != ProjectTaskStatus.Cancelled)
+            {
+                return Conflict(WebsiteWorkManagedSeparatelyError());
+            }
         }
 
         return ToActionResult(await projectTaskCoreService.ChangeTaskStatusAsync(id, request, Actor(), cancellationToken));
