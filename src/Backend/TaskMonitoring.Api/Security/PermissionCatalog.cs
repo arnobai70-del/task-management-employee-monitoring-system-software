@@ -34,6 +34,7 @@ public static class PermissionCatalog
     public const string AccessAssignmentsManage = "access.assignments.manage";
     public const string AuditRead = "audit.read";
     public const string AuditExport = "audit.export";
+    public const string SecurityAlertsManage = "security.alerts.manage";
 
     public static readonly IReadOnlyDictionary<string, string> Definitions = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -68,7 +69,8 @@ public static class PermissionCatalog
         [AccessAssignmentsRead] = "View employee RDP, IP, and website access assignments.",
         [AccessAssignmentsManage] = "Create, update, deactivate, release, and reserve employee RDP, IP, and website access assignments.",
         [AuditRead] = "View security and administrative audit logs.",
-        [AuditExport] = "Export audit/compliance records with integrity metadata."
+        [AuditExport] = "Export audit/compliance records with integrity metadata.",
+        [SecurityAlertsManage] = "Acknowledge, assign, and resolve automated security alerts."
     };
 
     public static IEnumerable<string> All => Definitions.Keys;
