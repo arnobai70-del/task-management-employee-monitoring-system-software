@@ -96,7 +96,9 @@ public sealed class SecurityHardeningTests
             "AgentUpdateDeviceController.RecordStatus",
             "AgentUpdateDeviceController.Register",
             "AuthController.Login",
-            "AuthController.Refresh"
+            "AuthController.Refresh",
+            "AuthController.WebLogin",
+            "AuthController.WebRefresh"
         ];
 
         Assert.Equal(expected, actual);
