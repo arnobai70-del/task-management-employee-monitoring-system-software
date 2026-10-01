@@ -28,7 +28,71 @@ public sealed class TasksController(
         int page = 1,
         int pageSize = 50,
         CancellationToken cancellationToken = default)
-        => Ok(await projectTaskCoreService.GetTasksAsync(projectId, search, status, priority, assigneeEmployeeId, page, pageSize, cancellationToken));
+    {
+        page = Math.Clamp(page, 1, 1_000_000);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        // Website Work is a specialized ProjectTask workflow with its own admin module.
+        // Keep it out of the generic Tasks listing so the generic UI never presents actions
+        // that are intentionally blocked for Website Work.
+        var query = dbContext.ProjectTasks
+            .AsNoTracking()
+            .Where(task => !task.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction));
+
+        if (projectId.HasValue)
+        {
+            query = query.Where(task => task.ProjectId == projectId.Value);
+        }
+
+        if (status.HasValue)
+        {
+            query = query.Where(task => task.Status == status.Value);
+        }
+
+        if (priority.HasValue)
+        {
+            query = query.Where(task => task.Priority == priority.Value);
+        }
+
+        if (assigneeEmployeeId.HasValue)
+        {
+            query = query.Where(task => task.AssigneeEmployeeId == assigneeEmployeeId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalized = search.Trim().ToUpperInvariant();
+            query = query.Where(task => task.NormalizedTitle.Contains(normalized));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderBy(task => task.Status == ProjectTaskStatus.Done || task.Status == ProjectTaskStatus.Cancelled)
+            .ThenByDescending(task => task.Priority)
+            .ThenBy(task => task.DueDate)
+            .ThenBy(task => task.NormalizedTitle)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(task => new ProjectTaskResponse(
+                task.Id,
+                task.ProjectId,
+                task.Project.Code,
+                task.Project.Name,
+                task.Title,
+                task.Description,
+                task.Status,
+                task.Priority,
+                task.AssigneeEmployeeId,
+                task.AssigneeEmployee == null ? null : task.AssigneeEmployee.FullName,
+                task.DueDate,
+                task.CompletedAtUtc,
+                task.Comments.Count,
+                task.CreatedAtUtc,
+                task.UpdatedAtUtc))
+            .ToListAsync(cancellationToken);
+
+        return Ok(new PagedResponse<ProjectTaskResponse>(items, page, pageSize, totalCount));
+    }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ProjectTaskResponse>> GetById(Guid id, CancellationToken cancellationToken)
