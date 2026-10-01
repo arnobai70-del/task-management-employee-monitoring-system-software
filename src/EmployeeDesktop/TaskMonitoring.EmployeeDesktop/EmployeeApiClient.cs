@@ -34,17 +34,34 @@ public sealed class EmployeeApiClient : IDisposable
 
     public async Task LogoutAsync(CancellationToken cancellationToken = default)
     {
-        var refreshToken = _refreshToken;
         try
         {
-            if (!string.IsNullOrWhiteSpace(refreshToken))
+            if (string.IsNullOrWhiteSpace(_refreshToken))
             {
-                using var response = await _http.PostAsJsonAsync("api/auth/logout", new { refreshToken }, cancellationToken);
-                await EnsureSuccessAsync(response, cancellationToken);
+                return;
             }
+
+            // The logout endpoint is authorized. Refresh first if necessary, then snapshot
+            // the current (possibly rotated) refresh token so the token sent in the body
+            // matches the authenticated session being revoked.
+            await EnsureFreshAccessTokenAsync(cancellationToken);
+            var refreshToken = _refreshToken;
+            if (string.IsNullOrWhiteSpace(refreshToken))
+            {
+                return;
+            }
+
+            using var content = JsonContent.Create(new { refreshToken });
+            using var response = await SendAuthorizedOnceAsync(
+                HttpMethod.Post,
+                "api/auth/logout",
+                content,
+                cancellationToken);
+            await EnsureSuccessAsync(response, cancellationToken);
         }
         finally
         {
+            // Local sign-out must always complete even if the network/server is unavailable.
             ClearSession();
         }
     }
@@ -65,8 +82,8 @@ public sealed class EmployeeApiClient : IDisposable
     }
 
     public Task<PagedResponse<EmployeeTaskResponse>> GetMyTasksAsync(bool includeClosed = false, CancellationToken cancellationToken = default)
-        => GetAuthorizedAsync<PagedResponse<EmployeeTaskResponse>>(
-            $"api/me/tasks?includeClosed={includeClosed.ToString().ToLowerInvariant()}&page=1&pageSize=100",
+        => GetAllPagesAsync<EmployeeTaskResponse>(
+            page => $"api/me/tasks?includeClosed={includeClosed.ToString().ToLowerInvariant()}&page={page}&pageSize=100",
             cancellationToken);
 
     public Task<EmployeeAccessWorkspaceResponse> GetMyAccessAsync(bool includeInactive = false, CancellationToken cancellationToken = default)
@@ -127,8 +144,8 @@ public sealed class EmployeeApiClient : IDisposable
     }
 
     public Task<PagedResponse<EmployeeNotificationResponse>> GetMyNotificationsAsync(bool unreadOnly = false, CancellationToken cancellationToken = default)
-        => GetAuthorizedAsync<PagedResponse<EmployeeNotificationResponse>>(
-            $"api/me/notifications?unreadOnly={unreadOnly.ToString().ToLowerInvariant()}&page=1&pageSize=100",
+        => GetAllPagesAsync<EmployeeNotificationResponse>(
+            page => $"api/me/notifications?unreadOnly={unreadOnly.ToString().ToLowerInvariant()}&page={page}&pageSize=100",
             cancellationToken);
 
     public async Task MarkNotificationReadAsync(Guid notificationId, CancellationToken cancellationToken = default)
@@ -167,6 +184,32 @@ public sealed class EmployeeApiClient : IDisposable
         await EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<MonitoringIngestResponse>(JsonOptions, cancellationToken)
                ?? throw new InvalidOperationException("The server returned an empty monitoring response.");
+    }
+
+    private async Task<PagedResponse<T>> GetAllPagesAsync<T>(
+        Func<int, string> pathFactory,
+        CancellationToken cancellationToken)
+    {
+        const int pageSize = 100;
+        var page = 1;
+        var totalCount = 0;
+        var items = new List<T>();
+
+        while (true)
+        {
+            var result = await GetAuthorizedAsync<PagedResponse<T>>(pathFactory(page), cancellationToken);
+            totalCount = Math.Max(totalCount, result.TotalCount);
+            items.AddRange(result.Items);
+
+            if (result.Items.Count == 0 || result.Items.Count < pageSize || items.Count >= result.TotalCount)
+            {
+                break;
+            }
+
+            page++;
+        }
+
+        return new PagedResponse<T>(items, 1, pageSize, Math.Max(totalCount, items.Count));
     }
 
     private async Task<T> GetAuthorizedAsync<T>(string path, CancellationToken cancellationToken)
