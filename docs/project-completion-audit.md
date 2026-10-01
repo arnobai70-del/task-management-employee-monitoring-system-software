@@ -74,6 +74,15 @@ The final 4% is real-environment acceptance and cannot be truthfully completed b
 - production backup retention/off-site storage policy;
 - final business/security approval for employee monitoring deployment.
 
+Repository-side execution support for this gate is provided by:
+
+- `scripts/windows/collect-production-pilot-evidence.ps1` — verifies the real installed pilot version, Authenticode publisher identity, Windows Service health/recovery, updater task, signed-package enforcement, production URLs and explicit workflow/update/rollback/disclosure attestations;
+- `scripts/production/accept-real-production-launch.sh` — verifies real DNS/HTTPS reachability, production server acceptance, exact published bytes against the signed bundle, independent publisher fingerprint, independent backup-copy hash equality, pilot evidence, and required approval references;
+- `docs/real-production-launch-acceptance.md` — the final operator runbook;
+- `.github/workflows/production-launch-tooling.yml` — CI parsing/fail-closed validation for the acceptance tooling without pretending to provide real production evidence.
+
+Domain 25 moves from Pending to Complete only when `accept-real-production-launch.sh` succeeds against the real environment and emits a retained `TaskMonitoringRealProductionLaunchAcceptance` JSON evidence file plus SHA-256. The non-secret evidence reference and acceptance timestamp must then be recorded here.
+
 The project reaches **100%** only after those real-environment gates are executed and recorded.
 
 ## Change-control rule

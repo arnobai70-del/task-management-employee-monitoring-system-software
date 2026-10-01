@@ -1,0 +1,77 @@
+name: Production launch acceptance tooling
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/production/**'
+      - 'scripts/windows/collect-production-pilot-evidence.ps1'
+      - 'docs/real-production-launch-acceptance.md'
+      - '.github/workflows/production-launch-tooling.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-host-tooling:
+    name: Validate production-host acceptance tooling
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate shell syntax
+        shell: bash
+        run: |
+          bash -n scripts/production/accept-real-production-launch.sh
+          bash -n scripts/production/acceptance-server.sh
+          bash -n scripts/production/backup-postgres.sh
+          bash -n scripts/production/publish-windows-release.sh
+
+      - name: Prove fail-closed argument gate
+        shell: bash
+        run: |
+          set +e
+          bash scripts/production/accept-real-production-launch.sh >"${RUNNER_TEMP}/launch.out" 2>"${RUNNER_TEMP}/launch.err"
+          status=$?
+          set -e
+          test "$status" -eq 2
+          grep -q 'Missing required argument' "${RUNNER_TEMP}/launch.err"
+
+  windows-pilot-tooling:
+    name: Validate Windows pilot evidence collector
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Parse PowerShell without execution
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/windows/collect-production-pilot-evidence.ps1'),
+            [ref]$tokens,
+            [ref]$errors)
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'Production pilot evidence collector contains PowerShell parse errors.'
+          }
+
+      - name: Verify production-only guardrails are present
+        shell: pwsh
+        run: |
+          $content = Get-Content 'scripts/windows/collect-production-pilot-evidence.ps1' -Raw
+          foreach ($required in @(
+            'Assert-TaskMonitoringAuthenticodeSignature',
+            'requireSignedPackages',
+            'TaskMonitoringEmployeeService',
+            'TaskMonitoring Employee Auto Update',
+            'RollbackTestPassed',
+            'MonitoringDisclosureConfirmed'
+          )) {
+            if (-not $content.Contains($required)) {
+              throw "Required pilot acceptance guardrail is missing: $required"
+            }
+          }
