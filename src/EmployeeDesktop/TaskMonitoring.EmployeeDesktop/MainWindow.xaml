@@ -1,9 +1,12 @@
 <Window x:Class="TaskMonitoring.EmployeeDesktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Employee Workspace" Height="800" Width="1180" MinHeight="680" MinWidth="980"
+        Title="TaskMonitoring · Employee Workspace"
+        Height="860" Width="1320" MinHeight="720" MinWidth="1080"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource AppBackgroundBrush}"
         Closing="Window_Closing">
-  <Grid Margin="24">
+  <Grid Margin="22">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
@@ -11,230 +14,402 @@
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
-    <StackPanel>
-      <TextBlock Text="Employee Workspace" FontSize="28" FontWeight="SemiBold" />
-      <TextBlock Text="Attendance, assigned tasks, website target work, survey links, notifications, approved activity monitoring and company-provided access" Margin="0,6,0,0" Opacity="0.7" />
-    </StackPanel>
-
-    <Border Grid.Row="1" Margin="0,20,0,16" Padding="16" BorderBrush="#22000000" BorderThickness="1" CornerRadius="8">
+    <Border Grid.Row="0" CornerRadius="18" Padding="22,18" Margin="0,0,0,16">
+      <Border.Background>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+          <GradientStop Color="#0F172A" Offset="0" />
+          <GradientStop Color="#172554" Offset="0.55" />
+          <GradientStop Color="#1D4ED8" Offset="1" />
+        </LinearGradientBrush>
+      </Border.Background>
       <Grid>
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="2*" />
-          <ColumnDefinition Width="1.5*" />
-          <ColumnDefinition Width="1.5*" />
           <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <StackPanel>
-          <TextBlock Text="Server URL" FontWeight="SemiBold" />
-          <TextBox x:Name="ServerUrlBox" Margin="0,6,12,0" Text="https://localhost:5001" />
+        <Border Width="48" Height="48" CornerRadius="14" Background="#2563EB" VerticalAlignment="Center">
+          <TextBlock Text="TM" Foreground="#FFFFFF" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+        <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+          <TextBlock Text="Employee Workspace" Foreground="#FFFFFF" FontSize="26" FontWeight="SemiBold" />
+          <TextBlock Text="Your workday, assignments, company access and transparent activity status in one place"
+                     Foreground="#BFDBFE" Margin="0,4,0,0" FontSize="12.5" />
         </StackPanel>
-        <StackPanel Grid.Column="1">
-          <TextBlock Text="Email" FontWeight="SemiBold" />
-          <TextBox x:Name="EmailBox" Margin="0,6,12,0" />
-        </StackPanel>
-        <StackPanel Grid.Column="2">
-          <TextBlock Text="Password" FontWeight="SemiBold" />
-          <PasswordBox x:Name="PasswordBox" Margin="0,6,12,0" />
-        </StackPanel>
-        <Button Grid.Column="3" x:Name="LoginButton" Content="Sign in" Width="100" Height="34" Margin="0,0,8,0" VerticalAlignment="Bottom" Click="LoginButton_Click" />
-        <Button Grid.Column="4" x:Name="LogoutButton" Content="Sign out" Width="100" Height="34" VerticalAlignment="Bottom" IsEnabled="False" Click="LogoutButton_Click" />
+        <Border Grid.Column="2" Background="#1AFFFFFF" BorderBrush="#2AFFFFFF" BorderThickness="1" CornerRadius="20" Padding="12,7" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal">
+            <Ellipse Width="8" Height="8" Fill="#34D399" Margin="0,0,7,0" VerticalAlignment="Center" />
+            <TextBlock Text="Secure employee client" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11.5" />
+          </StackPanel>
+        </Border>
       </Grid>
     </Border>
 
-    <TabControl Grid.Row="2">
-      <TabItem Header="Attendance">
-        <Grid Margin="14">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1.2*" />
-            <ColumnDefinition Width="*" />
-          </Grid.ColumnDefinitions>
-          <Border Padding="18" BorderBrush="#22000000" BorderThickness="1" CornerRadius="8" Margin="0,0,10,0">
-            <StackPanel>
-              <TextBlock Text="Current attendance" FontSize="20" FontWeight="SemiBold" />
-              <TextBlock x:Name="AttendanceStatusText" Text="Sign in to load your attendance status." Margin="0,14,0,18" TextWrapping="Wrap" />
-              <WrapPanel>
-                <Button Content="Check in" Width="100" Margin="0,0,8,8" Click="CheckInButton_Click" />
-                <Button Content="Start break" Width="100" Margin="0,0,8,8" Click="StartBreakButton_Click" />
-                <Button Content="End break" Width="100" Margin="0,0,8,8" Click="EndBreakButton_Click" />
-                <Button Content="Check out" Width="100" Margin="0,0,8,8" Click="CheckOutButton_Click" />
-              </WrapPanel>
-              <Button Content="Refresh status" Width="120" HorizontalAlignment="Left" Margin="0,10,0,0" Click="RefreshAttendanceButton_Click" />
-            </StackPanel>
-          </Border>
-          <Border Grid.Column="1" Padding="18" BorderBrush="#22000000" BorderThickness="1" CornerRadius="8" Margin="10,0,0,0">
-            <StackPanel>
-              <TextBlock Text="Session &amp; connection" FontSize="20" FontWeight="SemiBold" />
-              <TextBlock x:Name="ConnectionStatusText" Margin="0,14,0,0" Text="Server: not connected" FontWeight="SemiBold" />
-              <TextBlock x:Name="RealtimeStatusText" Margin="0,6,0,0" Text="Notifications: disconnected" FontWeight="SemiBold" />
-              <TextBlock x:Name="MonitoringStatusText" Margin="0,6,0,0" Text="Approved activity monitoring: sign in to load policy" FontWeight="SemiBold" TextWrapping="Wrap" />
-              <TextBlock Margin="0,18,0,0" TextWrapping="Wrap" Opacity="0.75">Access and rotating refresh tokens are kept only in this app process. They are not written to plaintext files, registry values, or logs. Restarting the app requires sign-in again.</TextBlock>
-            </StackPanel>
-          </Border>
-        </Grid>
-      </TabItem>
+    <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="0,0,0,16" Padding="18">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="1.7*" />
+          <ColumnDefinition Width="1.4*" />
+          <ColumnDefinition Width="1.4*" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <StackPanel Margin="0,0,12,0">
+          <TextBlock Text="SERVER" Foreground="{StaticResource MutedTextBrush}" FontSize="10.5" FontWeight="Bold" />
+          <TextBox x:Name="ServerUrlBox" Margin="0,6,0,0" Text="http://127.0.0.1:5080" ToolTip="Your organization server address" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Margin="0,0,12,0">
+          <TextBlock Text="EMAIL" Foreground="{StaticResource MutedTextBrush}" FontSize="10.5" FontWeight="Bold" />
+          <TextBox x:Name="EmailBox" Margin="0,6,0,0" />
+        </StackPanel>
+        <StackPanel Grid.Column="2" Margin="0,0,12,0">
+          <TextBlock Text="PASSWORD" Foreground="{StaticResource MutedTextBrush}" FontSize="10.5" FontWeight="Bold" />
+          <PasswordBox x:Name="PasswordBox" Margin="0,6,0,0" />
+        </StackPanel>
+        <Button Grid.Column="3" x:Name="LoginButton" Content="Sign in" Style="{StaticResource PrimaryButtonStyle}" Width="108" Margin="0,19,8,0" VerticalAlignment="Top" Click="LoginButton_Click" />
+        <Button Grid.Column="4" x:Name="LogoutButton" Content="Sign out" Width="108" Margin="0,19,0,0" VerticalAlignment="Top" IsEnabled="False" Click="LogoutButton_Click" />
+      </Grid>
+    </Border>
 
-      <TabItem Header="My Tasks">
-        <DockPanel Margin="14">
-          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
-            <Button Content="Refresh tasks" Width="110" Margin="0,0,12,0" Click="RefreshTasksButton_Click" />
-            <CheckBox x:Name="IncludeClosedTasksBox" Content="Include done/cancelled" VerticalAlignment="Center" />
-          </StackPanel>
-          <DataGrid x:Name="TasksGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single">
-            <DataGrid.Columns>
-              <DataGridTextColumn Header="Project" Binding="{Binding ProjectName}" Width="1.3*" />
-              <DataGridTextColumn Header="Task" Binding="{Binding Title}" Width="2*" />
-              <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="110" />
-              <DataGridTextColumn Header="Priority" Binding="{Binding Priority}" Width="100" />
-              <DataGridTextColumn Header="Due" Binding="{Binding DueDate}" Width="110" />
-              <DataGridTextColumn Header="Comments" Binding="{Binding CommentCount}" Width="80" />
-            </DataGrid.Columns>
-          </DataGrid>
-        </DockPanel>
-      </TabItem>
+    <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="18" Padding="12" Effect="{StaticResource CardShadow}">
+      <TabControl TabStripPlacement="Left" Background="Transparent" BorderThickness="0">
+        <TabItem Header="●  Attendance">
+          <Grid Margin="20">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0" Margin="0,0,0,16">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="Today at a glance" FontSize="23" FontWeight="SemiBold" />
+                <TextBlock Text="Check in, manage breaks and keep your current work-session status visible." Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+              </StackPanel>
+              <Border Grid.Column="1" Background="{StaticResource AccentSoftBrush}" CornerRadius="14" Padding="12,7" VerticalAlignment="Center">
+                <TextBlock Text="LIVE SESSION" Foreground="{StaticResource AccentBrush}" FontWeight="Bold" FontSize="10.5" />
+              </Border>
+            </Grid>
 
-      <TabItem Header="Website Work">
-        <DockPanel Margin="14">
-          <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-            <WrapPanel>
-              <Button Content="Refresh work" Width="105" Margin="0,0,10,8" Click="RefreshWebsiteWorkButton_Click" />
-              <Button Content="Start / Open selected" Width="155" Margin="0,0,10,8" Click="OpenWebsiteWorkButton_Click" />
-              <Button Content="Mark Complete" Width="120" Margin="0,0,12,8" Click="CompleteWebsiteWorkButton_Click" />
-              <CheckBox x:Name="IncludeClosedWebsiteWorkBox" Content="Include completed/cancelled" VerticalAlignment="Center" Margin="0,0,16,8" />
-              <TextBlock x:Name="WebsiteWorkCountText" Text="0 website work item(s)" VerticalAlignment="Center" Margin="0,0,0,8" Opacity="0.7" />
-            </WrapPanel>
-            <TextBlock Text="Opening a target changes Ready to Working before the assigned website is launched. When the target is actually finished, return here and choose Mark Complete. Completion is sent to authorized managers with your name and the work target." TextWrapping="Wrap" Opacity="0.7" />
-          </StackPanel>
-          <DataGrid x:Name="WebsiteWorkGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single">
-            <DataGrid.Columns>
-              <DataGridTextColumn Header="Target" Binding="{Binding Title}" Width="1.7*" />
-              <DataGridTextColumn Header="Website URL" Binding="{Binding Url}" Width="2*" />
-              <DataGridTextColumn Header="Project" Binding="{Binding ProjectName}" Width="1.2*" />
-              <DataGridTextColumn Header="Status" Binding="{Binding StatusLabel}" Width="95" />
-              <DataGridTextColumn Header="Due" Binding="{Binding DueDate}" Width="105" />
-              <DataGridTextColumn Header="Instructions" Binding="{Binding Instructions}" Width="2*" />
-            </DataGrid.Columns>
-          </DataGrid>
-        </DockPanel>
-      </TabItem>
-
-      <TabItem Header="Survey Work">
-        <DockPanel Margin="14">
-          <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-            <WrapPanel>
-              <Button Content="Refresh surveys" Width="115" Margin="0,0,10,8" Click="RefreshSurveysButton_Click" />
-              <Button Content="Open selected survey" Width="150" Margin="0,0,12,8" Click="OpenSurveyButton_Click" />
-              <CheckBox x:Name="IncludeInactiveSurveysBox" Content="Include inactive history" VerticalAlignment="Center" Margin="0,0,16,8" />
-              <TextBlock x:Name="SurveyCountText" Text="0 survey assignment(s)" VerticalAlignment="Center" Margin="0,0,0,8" Opacity="0.7" />
-            </WrapPanel>
-            <TextBlock Text="Survey questions are hosted on the assigned external website. This app only shows the assignment and opens the approved URL; it does not read or store answers, page content, cookies, or form data." TextWrapping="Wrap" Opacity="0.7" />
-          </StackPanel>
-          <DataGrid x:Name="SurveyGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single">
-            <DataGrid.Columns>
-              <DataGridTextColumn Header="Survey" Binding="{Binding Title}" Width="1.3*" />
-              <DataGridTextColumn Header="Website URL" Binding="{Binding Url}" Width="2.2*" />
-              <DataGridTextColumn Header="Starts" Binding="{Binding StartsOn}" Width="105" />
-              <DataGridTextColumn Header="Due" Binding="{Binding DueDate}" Width="105" />
-              <DataGridTextColumn Header="Status" Binding="{Binding Availability}" Width="95" />
-              <DataGridTextColumn Header="Instructions" Binding="{Binding Instructions}" Width="2*" />
-            </DataGrid.Columns>
-          </DataGrid>
-        </DockPanel>
-      </TabItem>
-
-      <TabItem Header="Notifications">
-        <DockPanel Margin="14">
-          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
-            <Button Content="Refresh" Width="90" Margin="0,0,10,0" Click="RefreshNotificationsButton_Click" />
-            <Button Content="Mark selected read" Width="140" Margin="0,0,12,0" Click="MarkNotificationReadButton_Click" />
-            <CheckBox x:Name="UnreadNotificationsOnlyBox" Content="Unread only" VerticalAlignment="Center" Margin="0,0,16,0" />
-            <TextBlock x:Name="NotificationsCountText" Text="0 notifications" VerticalAlignment="Center" Opacity="0.7" />
-          </StackPanel>
-          <DataGrid x:Name="NotificationsGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single">
-            <DataGrid.Columns>
-              <DataGridTextColumn Header="State" Binding="{Binding ReadState}" Width="80" />
-              <DataGridTextColumn Header="Type" Binding="{Binding Kind}" Width="130" />
-              <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="1.2*" />
-              <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="2.5*" />
-              <DataGridTextColumn Header="Created" Binding="{Binding CreatedAtUtc}" Width="170" />
-              <DataGridTextColumn Header="Read" Binding="{Binding ReadAtUtc}" Width="170" />
-            </DataGrid.Columns>
-          </DataGrid>
-        </DockPanel>
-      </TabItem>
-
-      <TabItem Header="My Access">
-        <DockPanel Margin="14">
-          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
-            <Button Content="Refresh access" Width="110" Margin="0,0,12,0" Click="RefreshAccessButton_Click" />
-            <CheckBox x:Name="IncludeInactiveAccessBox" Content="Include inactive/released history" VerticalAlignment="Center" />
-          </StackPanel>
-          <TabControl>
-            <TabItem Header="RDP">
-              <DataGrid x:Name="RdpGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
-                <DataGrid.Columns>
-                  <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="1.2*" />
-                  <DataGridTextColumn Header="Host" Binding="{Binding Host}" Width="1.4*" />
-                  <DataGridTextColumn Header="Port" Binding="{Binding Port}" Width="70" />
-                  <DataGridTextColumn Header="Username reference" Binding="{Binding UsernameReference}" Width="1.2*" />
-                  <DataGridTextColumn Header="Credential reference" Binding="{Binding CredentialReference}" Width="1.4*" />
-                  <DataGridTextColumn Header="Expires" Binding="{Binding ExpiresOn}" Width="110" />
-                  <DataGridCheckBoxColumn Header="Active" Binding="{Binding IsActive}" Width="70" />
-                </DataGrid.Columns>
-              </DataGrid>
-            </TabItem>
-            <TabItem Header="IP">
-              <DataGrid x:Name="IpGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
-                <DataGrid.Columns>
-                  <DataGridTextColumn Header="IP address" Binding="{Binding IpAddress}" Width="1.2*" />
-                  <DataGridTextColumn Header="Device" Binding="{Binding DeviceName}" Width="1.5*" />
-                  <DataGridTextColumn Header="MAC" Binding="{Binding MacAddress}" Width="1.3*" />
-                  <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
-                  <DataGridTextColumn Header="Assigned" Binding="{Binding AssignedOn}" Width="110" />
-                  <DataGridTextColumn Header="Released" Binding="{Binding ReleasedOn}" Width="110" />
-                </DataGrid.Columns>
-              </DataGrid>
-            </TabItem>
-            <TabItem Header="Website">
-              <DockPanel>
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
-                  <Button Content="Open selected website" Width="155" Click="OpenWebsiteButton_Click" />
-                  <TextBlock Margin="12,3,0,0" Text="Only the hostname is recorded for company-assigned website launches; URL paths/query strings are not sent." TextWrapping="Wrap" Opacity="0.7" />
+            <Grid Grid.Row="1">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.25*" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Border Style="{StaticResource CardStyle}" Margin="0,0,9,0">
+                <StackPanel>
+                  <StackPanel Orientation="Horizontal">
+                    <Border Width="42" Height="42" CornerRadius="12" Background="{StaticResource SuccessSoftBrush}" Margin="0,0,12,0">
+                      <TextBlock Text="✓" Foreground="{StaticResource SuccessBrush}" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                      <TextBlock Text="Current attendance" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Text="Server-validated work session" Foreground="{StaticResource MutedTextBrush}" FontSize="11.5" Margin="0,2,0,0" />
+                    </StackPanel>
+                  </StackPanel>
+                  <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="10" Padding="14" Margin="0,18,0,16">
+                    <TextBlock x:Name="AttendanceStatusText" Text="Sign in to load your attendance status." TextWrapping="Wrap" FontSize="13" />
+                  </Border>
+                  <WrapPanel>
+                    <Button Content="Check in" Style="{StaticResource SuccessButtonStyle}" Width="108" Margin="0,0,8,8" Click="CheckInButton_Click" />
+                    <Button Content="Start break" Width="108" Margin="0,0,8,8" Click="StartBreakButton_Click" />
+                    <Button Content="End break" Width="108" Margin="0,0,8,8" Click="EndBreakButton_Click" />
+                    <Button Content="Check out" Style="{StaticResource DangerButtonStyle}" Width="108" Margin="0,0,8,8" Click="CheckOutButton_Click" />
+                  </WrapPanel>
+                  <Button Content="Refresh status" Width="122" HorizontalAlignment="Left" Margin="0,6,0,0" Click="RefreshAttendanceButton_Click" />
                 </StackPanel>
-                <DataGrid x:Name="WebsiteGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single">
+              </Border>
+
+              <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="9,0,0,0">
+                <StackPanel>
+                  <StackPanel Orientation="Horizontal">
+                    <Border Width="42" Height="42" CornerRadius="12" Background="{StaticResource AccentSoftBrush}" Margin="0,0,12,0">
+                      <TextBlock Text="↗" Foreground="{StaticResource AccentBrush}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                      <TextBlock Text="Connection &amp; policy" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Text="Live sync and approved monitoring status" Foreground="{StaticResource MutedTextBrush}" FontSize="11.5" Margin="0,2,0,0" />
+                    </StackPanel>
+                  </StackPanel>
+                  <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="10" Padding="14" Margin="0,18,0,0">
+                    <StackPanel>
+                      <TextBlock x:Name="ConnectionStatusText" Text="Server: not connected" FontWeight="SemiBold" />
+                      <TextBlock x:Name="RealtimeStatusText" Margin="0,8,0,0" Text="Notifications: disconnected" FontWeight="SemiBold" />
+                      <TextBlock x:Name="MonitoringStatusText" Margin="0,8,0,0" Text="Approved activity monitoring: sign in to load policy" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    </StackPanel>
+                  </Border>
+                  <TextBlock Margin="0,16,0,0" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" FontSize="11.5">Access and rotating refresh tokens stay only in this app process. They are not written to plaintext files, registry values, or logs. Restarting the app requires sign-in again.</TextBlock>
+                </StackPanel>
+              </Border>
+            </Grid>
+          </Grid>
+        </TabItem>
+
+        <TabItem Header="☷  My Tasks">
+          <Grid Margin="20">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid Margin="0,0,0,14">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="My assigned tasks" FontSize="23" FontWeight="SemiBold" />
+                <TextBlock Text="Keep track of project work, priority, due dates and discussion activity." Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <CheckBox x:Name="IncludeClosedTasksBox" Content="Include done/cancelled" Margin="0,0,12,0" />
+                <Button Content="Refresh tasks" Width="112" Click="RefreshTasksButton_Click" />
+              </StackPanel>
+            </Grid>
+            <DataGrid Grid.Row="1" x:Name="TasksGrid">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="PROJECT" Binding="{Binding ProjectName}" Width="1.3*" />
+                <DataGridTextColumn Header="TASK" Binding="{Binding Title}" Width="2*" />
+                <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="110" />
+                <DataGridTextColumn Header="PRIORITY" Binding="{Binding Priority}" Width="100" />
+                <DataGridTextColumn Header="DUE" Binding="{Binding DueDate}" Width="110" />
+                <DataGridTextColumn Header="COMMENTS" Binding="{Binding CommentCount}" Width="90" />
+              </DataGrid.Columns>
+            </DataGrid>
+          </Grid>
+        </TabItem>
+
+        <TabItem Header="◎  Website Work">
+          <Grid Margin="20">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid Margin="0,0,0,12">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="Website work queue" FontSize="23" FontWeight="SemiBold" />
+                <TextBlock Text="Open only approved work targets and mark them complete when the assigned work is finished." Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+              </StackPanel>
+              <TextBlock Grid.Column="1" x:Name="WebsiteWorkCountText" Text="0 website work item(s)" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+            </Grid>
+            <WrapPanel Grid.Row="1" Margin="0,0,0,12">
+              <Button Content="Refresh work" Width="108" Margin="0,0,8,8" Click="RefreshWebsiteWorkButton_Click" />
+              <Button Content="Start / Open selected" Style="{StaticResource PrimaryButtonStyle}" Width="160" Margin="0,0,8,8" Click="OpenWebsiteWorkButton_Click" />
+              <Button Content="Mark complete" Style="{StaticResource SuccessButtonStyle}" Width="126" Margin="0,0,14,8" Click="CompleteWebsiteWorkButton_Click" />
+              <CheckBox x:Name="IncludeClosedWebsiteWorkBox" Content="Include completed/cancelled" Margin="0,0,14,8" />
+            </WrapPanel>
+            <DataGrid Grid.Row="2" x:Name="WebsiteWorkGrid">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="TARGET" Binding="{Binding Title}" Width="1.7*" />
+                <DataGridTextColumn Header="WEBSITE URL" Binding="{Binding Url}" Width="2*" />
+                <DataGridTextColumn Header="PROJECT" Binding="{Binding ProjectName}" Width="1.2*" />
+                <DataGridTextColumn Header="STATUS" Binding="{Binding StatusLabel}" Width="95" />
+                <DataGridTextColumn Header="DUE" Binding="{Binding DueDate}" Width="105" />
+                <DataGridTextColumn Header="INSTRUCTIONS" Binding="{Binding Instructions}" Width="2*" />
+              </DataGrid.Columns>
+            </DataGrid>
+          </Grid>
+        </TabItem>
+
+        <TabItem Header="◈  Survey Work">
+          <Grid Margin="20">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid Margin="0,0,0,12">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="Survey assignments" FontSize="23" FontWeight="SemiBold" />
+                <TextBlock Text="Launch organization-assigned surveys without collecting page content, form data or answers in this app." Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" TextWrapping="Wrap" />
+              </StackPanel>
+              <TextBlock Grid.Column="1" x:Name="SurveyCountText" Text="0 survey assignment(s)" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+            </Grid>
+            <WrapPanel Grid.Row="1" Margin="0,0,0,12">
+              <Button Content="Refresh surveys" Width="118" Margin="0,0,8,8" Click="RefreshSurveysButton_Click" />
+              <Button Content="Open selected survey" Style="{StaticResource PrimaryButtonStyle}" Width="158" Margin="0,0,14,8" Click="OpenSurveyButton_Click" />
+              <CheckBox x:Name="IncludeInactiveSurveysBox" Content="Include inactive history" Margin="0,0,14,8" />
+            </WrapPanel>
+            <DataGrid Grid.Row="2" x:Name="SurveyGrid">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="SURVEY" Binding="{Binding Title}" Width="1.3*" />
+                <DataGridTextColumn Header="WEBSITE URL" Binding="{Binding Url}" Width="2.2*" />
+                <DataGridTextColumn Header="STARTS" Binding="{Binding StartsOn}" Width="105" />
+                <DataGridTextColumn Header="DUE" Binding="{Binding DueDate}" Width="105" />
+                <DataGridTextColumn Header="STATUS" Binding="{Binding Availability}" Width="95" />
+                <DataGridTextColumn Header="INSTRUCTIONS" Binding="{Binding Instructions}" Width="2*" />
+              </DataGrid.Columns>
+            </DataGrid>
+          </Grid>
+        </TabItem>
+
+        <TabItem Header="◉  Notifications">
+          <Grid Margin="20">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid Margin="0,0,0,12">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="Notifications" FontSize="23" FontWeight="SemiBold" />
+                <TextBlock Text="Realtime organization updates and work-related messages." Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+              </StackPanel>
+              <TextBlock Grid.Column="1" x:Name="NotificationsCountText" Text="0 notifications" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+            </Grid>
+            <WrapPanel Grid.Row="1" Margin="0,0,0,12">
+              <Button Content="Refresh" Width="92" Margin="0,0,8,8" Click="RefreshNotificationsButton_Click" />
+              <Button Content="Mark selected read" Style="{StaticResource PrimaryButtonStyle}" Width="148" Margin="0,0,14,8" Click="MarkNotificationReadButton_Click" />
+              <CheckBox x:Name="UnreadNotificationsOnlyBox" Content="Unread only" Margin="0,0,14,8" />
+            </WrapPanel>
+            <DataGrid Grid.Row="2" x:Name="NotificationsGrid">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="STATE" Binding="{Binding ReadState}" Width="80" />
+                <DataGridTextColumn Header="TYPE" Binding="{Binding Kind}" Width="130" />
+                <DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="1.2*" />
+                <DataGridTextColumn Header="MESSAGE" Binding="{Binding Message}" Width="2.5*" />
+                <DataGridTextColumn Header="CREATED" Binding="{Binding CreatedAtUtc}" Width="170" />
+                <DataGridTextColumn Header="READ" Binding="{Binding ReadAtUtc}" Width="170" />
+              </DataGrid.Columns>
+            </DataGrid>
+          </Grid>
+        </TabItem>
+
+        <TabItem Header="◆  My Access">
+          <Grid Margin="20">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Margin="0,0,0,12">
+              <TextBlock Text="Company-provided access" FontSize="23" FontWeight="SemiBold" />
+              <TextBlock Text="View assigned RDP, IP and website access without exposing managed passwords inside this client." Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+            </StackPanel>
+            <WrapPanel Grid.Row="1" Margin="0,0,0,12">
+              <Button Content="Refresh access" Width="114" Margin="0,0,12,8" Click="RefreshAccessButton_Click" />
+              <CheckBox x:Name="IncludeInactiveAccessBox" Content="Include inactive/released history" Margin="0,0,14,8" />
+            </WrapPanel>
+            <TabControl Grid.Row="2" TabStripPlacement="Top">
+              <TabItem Header="RDP">
+                <DataGrid x:Name="RdpGrid" Margin="10">
                   <DataGrid.Columns>
-                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="1.2*" />
-                    <DataGridTextColumn Header="URL" Binding="{Binding Url}" Width="2*" />
-                    <DataGridTextColumn Header="Username reference" Binding="{Binding UsernameReference}" Width="1.2*" />
-                    <DataGridTextColumn Header="Access" Binding="{Binding AccessLevel}" Width="90" />
-                    <DataGridTextColumn Header="Expires" Binding="{Binding ExpiresOn}" Width="110" />
-                    <DataGridCheckBoxColumn Header="Active" Binding="{Binding IsActive}" Width="70" />
+                    <DataGridTextColumn Header="NAME" Binding="{Binding Name}" Width="1.2*" />
+                    <DataGridTextColumn Header="HOST" Binding="{Binding Host}" Width="1.4*" />
+                    <DataGridTextColumn Header="PORT" Binding="{Binding Port}" Width="70" />
+                    <DataGridTextColumn Header="USERNAME REFERENCE" Binding="{Binding UsernameReference}" Width="1.2*" />
+                    <DataGridTextColumn Header="CREDENTIAL REFERENCE" Binding="{Binding CredentialReference}" Width="1.4*" />
+                    <DataGridTextColumn Header="EXPIRES" Binding="{Binding ExpiresOn}" Width="110" />
+                    <DataGridCheckBoxColumn Header="ACTIVE" Binding="{Binding IsActive}" Width="70" />
                   </DataGrid.Columns>
                 </DataGrid>
-              </DockPanel>
-            </TabItem>
-          </TabControl>
-        </DockPanel>
-      </TabItem>
+              </TabItem>
+              <TabItem Header="IP">
+                <DataGrid x:Name="IpGrid" Margin="10">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn Header="IP ADDRESS" Binding="{Binding IpAddress}" Width="1.2*" />
+                    <DataGridTextColumn Header="DEVICE" Binding="{Binding DeviceName}" Width="1.5*" />
+                    <DataGridTextColumn Header="MAC" Binding="{Binding MacAddress}" Width="1.3*" />
+                    <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="100" />
+                    <DataGridTextColumn Header="ASSIGNED" Binding="{Binding AssignedOn}" Width="110" />
+                    <DataGridTextColumn Header="RELEASED" Binding="{Binding ReleasedOn}" Width="110" />
+                  </DataGrid.Columns>
+                </DataGrid>
+              </TabItem>
+              <TabItem Header="Website">
+                <Grid Margin="10">
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                  </Grid.RowDefinitions>
+                  <WrapPanel Margin="0,0,0,10">
+                    <Button Content="Open selected website" Style="{StaticResource PrimaryButtonStyle}" Width="160" Margin="0,0,12,8" Click="OpenWebsiteButton_Click" />
+                    <TextBlock Text="Only the hostname is recorded for company-assigned website launches; URL paths/query strings are not sent."
+                               TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" Margin="0,2,0,8" />
+                  </WrapPanel>
+                  <DataGrid Grid.Row="1" x:Name="WebsiteGrid">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="NAME" Binding="{Binding Name}" Width="1.2*" />
+                      <DataGridTextColumn Header="URL" Binding="{Binding Url}" Width="2*" />
+                      <DataGridTextColumn Header="USERNAME REFERENCE" Binding="{Binding UsernameReference}" Width="1.2*" />
+                      <DataGridTextColumn Header="ACCESS" Binding="{Binding AccessLevel}" Width="90" />
+                      <DataGridTextColumn Header="EXPIRES" Binding="{Binding ExpiresOn}" Width="110" />
+                      <DataGridCheckBoxColumn Header="ACTIVE" Binding="{Binding IsActive}" Width="70" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+                </Grid>
+              </TabItem>
+            </TabControl>
+          </Grid>
+        </TabItem>
 
-      <TabItem Header="Privacy">
-        <Border Margin="14" Padding="20" BorderBrush="#22000000" BorderThickness="1" CornerRadius="8">
-          <StackPanel>
-            <TextBlock Text="Transparency &amp; privacy" FontSize="22" FontWeight="SemiBold" />
-            <TextBlock Margin="0,14,0,0" TextWrapping="Wrap">While you are signed in, this client sends a periodic presence heartbeat so authorized administrators can see online/offline, last-seen and current attendance-derived Working/On Break state.</TextBlock>
-            <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">Foreground application activity is submitted only when the process name matches an active administrator-approved application rule. A window title is read only when that specific rule explicitly enables title capture.</TextBlock>
-            <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">Business website activity is recorded only as an approved hostname. This client does not inspect browser history or send URL paths, query strings, page content, form content or unrelated browsing.</TextBlock>
-            <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">Website Work records when you start/open an assigned target and when you explicitly mark it complete. The assigned work URL is stored as work configuration, but this app does not read the external page, passwords, cookies, form fields, earnings, or other page content.</TextBlock>
-            <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">Opening a survey assignment records that the assigned survey link was opened, using hostname-only audit metadata. Survey questions and answers stay on the external survey website and are not collected by this app.</TextBlock>
-            <TextBlock x:Name="MonitoringDisclosureText" Margin="0,14,0,0" Padding="12" TextWrapping="Wrap" Background="#0D000000" Text="Monitoring disclosure is loaded from the company server after sign-in." />
-            <Button Content="Refresh monitoring policy" Width="170" HorizontalAlignment="Left" Margin="0,12,0,0" Click="RefreshMonitoringPolicyButton_Click" />
-            <TextBlock Margin="0,14,0,0" TextWrapping="Wrap">It does not record keystrokes or passwords, capture screenshots, microphone audio or camera video, or collect unrelated personal files.</TextBlock>
-            <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">RDP and website passwords are not stored or displayed by this application. Credential references may point to an approved external credential manager.</TextBlock>
-          </StackPanel>
-        </Border>
-      </TabItem>
-    </TabControl>
+        <TabItem Header="▣  Privacy">
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="20">
+              <TextBlock Text="Transparency &amp; privacy" FontSize="23" FontWeight="SemiBold" />
+              <TextBlock Text="Clear boundaries for what the employee client does and does not collect." Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,16" />
 
-    <TextBlock Grid.Row="3" x:Name="MessageText" Margin="0,16,0,0" TextWrapping="Wrap" />
+              <Border Style="{StaticResource CardStyle}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="What is visible to authorized administrators" FontSize="16" FontWeight="SemiBold" />
+                  <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#475569">While you are signed in, this client sends a periodic presence heartbeat so authorized administrators can see online/offline, last-seen and current attendance-derived Working/On Break state.</TextBlock>
+                  <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#475569">Foreground application activity is submitted only when the process name matches an active administrator-approved application rule. A window title is read only when that specific rule explicitly enables title capture.</TextBlock>
+                  <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#475569">Business website activity is recorded only as an approved hostname. This client does not inspect browser history or send URL paths, query strings, page content, form content or unrelated browsing.</TextBlock>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource CardStyle}" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="Assigned work &amp; surveys" FontSize="16" FontWeight="SemiBold" />
+                  <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#475569">Website Work records when you start/open an assigned target and when you explicitly mark it complete. The assigned work URL is stored as work configuration, but this app does not read the external page, passwords, cookies, form fields, earnings, or other page content.</TextBlock>
+                  <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#475569">Opening a survey assignment records that the assigned survey link was opened, using hostname-only audit metadata. Survey questions and answers stay on the external survey website and are not collected by this app.</TextBlock>
+                </StackPanel>
+              </Border>
+
+              <Border Background="{StaticResource AccentSoftBrush}" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="12" Padding="15" Margin="0,0,0,12">
+                <StackPanel>
+                  <TextBlock Text="Current monitoring disclosure" Foreground="#1E3A8A" FontWeight="SemiBold" />
+                  <TextBlock x:Name="MonitoringDisclosureText" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#334155" Text="Monitoring disclosure is loaded from the company server after sign-in." />
+                  <Button Content="Refresh monitoring policy" Width="178" HorizontalAlignment="Left" Margin="0,12,0,0" Click="RefreshMonitoringPolicyButton_Click" />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                  <TextBlock Text="Never collected by this client" FontSize="16" FontWeight="SemiBold" />
+                  <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#475569">It does not record keystrokes or passwords, capture screenshots, microphone audio or camera video, or collect unrelated personal files.</TextBlock>
+                  <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#475569">RDP and website passwords are not stored or displayed by this application. Credential references may point to an approved external credential manager.</TextBlock>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+      </TabControl>
+    </Border>
+
+    <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="12" Padding="12,9" Margin="0,14,0,0">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Ellipse Width="8" Height="8" Fill="{StaticResource AccentBrush}" Margin="0,0,9,0" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" x:Name="MessageText" Text="Ready. Sign in to connect your workspace." TextWrapping="Wrap" Foreground="#475569" FontSize="11.5" />
+      </Grid>
+    </Border>
   </Grid>
 </Window>
