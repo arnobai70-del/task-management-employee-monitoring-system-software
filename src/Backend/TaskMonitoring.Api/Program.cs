@@ -95,6 +95,17 @@ builder.Services.AddOptions<AgentUpdateOptions>()
     .Validate(options => options.MaxRolloutWindowHours is >= 1 and <= 720,
         "AgentUpdates:MaxRolloutWindowHours must be between 1 and 720.")
     .ValidateOnStart();
+builder.Services.AddOptions<SecurityObservabilityOptions>()
+    .Bind(builder.Configuration.GetSection(SecurityObservabilityOptions.SectionName))
+    .Validate(options => options.DefaultWindowHours is >= 1 and <= 168, "SecurityObservability:DefaultWindowHours must be between 1 and 168.")
+    .Validate(options => options.MaxWindowHours is >= 1 and <= 720, "SecurityObservability:MaxWindowHours must be between 1 and 720.")
+    .Validate(options => options.DefaultWindowHours <= options.MaxWindowHours, "SecurityObservability:DefaultWindowHours cannot exceed MaxWindowHours.")
+    .Validate(options => options.CorrelationWindowMinutes is >= 1 and <= 1440, "SecurityObservability:CorrelationWindowMinutes must be between 1 and 1440.")
+    .Validate(options => options.FailedLoginThreshold is >= 2 and <= 1000, "SecurityObservability:FailedLoginThreshold must be between 2 and 1000.")
+    .Validate(options => options.RateLimitThreshold is >= 2 and <= 1000, "SecurityObservability:RateLimitThreshold must be between 2 and 1000.")
+    .Validate(options => options.MinimumAuditRetentionDays is >= 1 and <= 3650, "SecurityObservability:MinimumAuditRetentionDays must be between 1 and 3650.")
+    .Validate(options => options.ExportMaxRecords is >= 100 and <= 100000, "SecurityObservability:ExportMaxRecords must be between 100 and 100000.")
+    .ValidateOnStart();
 builder.Services.AddScoped<TaskNotificationInterceptor>();
 builder.Services.AddScoped<SurveyNotificationInterceptor>();
 builder.Services.AddScoped<WebsiteWorkFollowUpRealtimeInterceptor>();
@@ -135,6 +146,7 @@ builder.Services.AddScoped<IOperationsIncidentService, OperationsIncidentService
 builder.Services.AddScoped<IAgentUpdateService, AgentUpdateService>();
 builder.Services.AddScoped<IAgentUpdateIncidentBridge, AgentUpdateIncidentBridge>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<ISecurityObservabilityService, SecurityObservabilityService>();
 builder.Services.AddSingleton<IRealtimeEventPublisher, SignalRRealtimeEventPublisher>();
 builder.Services.AddSingleton<IWebsiteWorkRealtimePublisher, SignalRWebsiteWorkRealtimePublisher>();
 builder.Services.AddSingleton<IAdminNotificationRealtimePublisher, SignalRAdminNotificationRealtimePublisher>();
@@ -186,6 +198,36 @@ builder.Services.AddTaskMonitoringAuthorization();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        try
+        {
+            var httpContext = context.HttpContext;
+            var dbContext = httpContext.RequestServices.GetRequiredService<AppDbContext>();
+            dbContext.AuditLogs.Add(new AuditLog
+            {
+                Action = SecurityObservabilityService.RateLimitRejectedAction,
+                TargetType = "Endpoint",
+                TargetId = $"{httpContext.Request.Method} {httpContext.Request.Path}",
+                MetadataJson = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    method = httpContext.Request.Method,
+                    path = httpContext.Request.Path.Value
+                }),
+                IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+                UserAgent = httpContext.Request.Headers.UserAgent.ToString(),
+                CreatedAtUtc = DateTime.UtcNow
+            });
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            var logger = context.HttpContext.RequestServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("RateLimitAudit");
+            logger.LogWarning(ex, "Could not persist rate-limit rejection audit event.");
+        }
+    };
     options.AddPolicy("auth", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
