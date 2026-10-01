@@ -18,4 +18,8 @@ public sealed record AuthResponse(
     string RefreshToken,
     DateTime RefreshTokenExpiresAtUtc);
 
+public sealed record WebAuthResponse(
+    string AccessToken,
+    DateTime AccessTokenExpiresAtUtc);
+
 public sealed record ApiError(string Code, string Message);

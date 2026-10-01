@@ -1,11 +1,10 @@
-const SESSION_KEY = 'task-monitoring.admin.session.v1';
+const SESSION_KEY = 'task-monitoring.admin.session.v2';
+const LEGACY_SESSION_KEY = 'task-monitoring.admin.session.v1';
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 export interface AuthResponse {
   accessToken: string;
   accessTokenExpiresAtUtc: string;
-  refreshToken: string;
-  refreshTokenExpiresAtUtc: string;
 }
 
 export interface AuthSession extends AuthResponse {}
@@ -25,16 +24,19 @@ export class ApiRequestError extends Error {
   }
 }
 
+let refreshPromise: Promise<AuthSession> | null = null;
+
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;
 }
 
 export function readSession(): AuthSession | null {
+  sessionStorage.removeItem(LEGACY_SESSION_KEY);
   const raw = sessionStorage.getItem(SESSION_KEY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as AuthSession;
-    if (!parsed.accessToken || !parsed.refreshToken) return null;
+    if (!parsed.accessToken || !parsed.accessTokenExpiresAtUtc) return null;
     return parsed;
   } catch {
     sessionStorage.removeItem(SESSION_KEY);
@@ -43,6 +45,7 @@ export function readSession(): AuthSession | null {
 }
 
 export function saveSession(session: AuthSession | null): void {
+  sessionStorage.removeItem(LEGACY_SESSION_KEY);
   if (session) sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
   else sessionStorage.removeItem(SESSION_KEY);
   window.dispatchEvent(new Event('task-monitoring:auth-changed'));
@@ -94,8 +97,9 @@ async function readError(response: Response): Promise<ApiRequestError> {
 }
 
 export async function login(email: string, password: string): Promise<AuthSession> {
-  const response = await fetch(`${API_BASE}/api/auth/login`, {
+  const response = await fetch(`${API_BASE}/api/auth/web/login`, {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
   });
@@ -103,11 +107,10 @@ export async function login(email: string, password: string): Promise<AuthSessio
   return (await response.json()) as AuthSession;
 }
 
-async function refreshSession(session: AuthSession): Promise<AuthSession> {
-  const response = await fetch(`${API_BASE}/api/auth/refresh`, {
+async function requestRefresh(): Promise<AuthSession> {
+  const response = await fetch(`${API_BASE}/api/auth/web/refresh`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken: session.refreshToken })
+    credentials: 'same-origin'
   });
   if (!response.ok) throw await readError(response);
   const refreshed = (await response.json()) as AuthSession;
@@ -115,16 +118,33 @@ async function refreshSession(session: AuthSession): Promise<AuthSession> {
   return refreshed;
 }
 
+async function refreshSession(): Promise<AuthSession> {
+  if (!refreshPromise) {
+    refreshPromise = requestRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
 export async function logout(session: AuthSession): Promise<void> {
   try {
-    await fetch(`${API_BASE}/api/auth/logout`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.accessToken}`
-      },
-      body: JSON.stringify({ refreshToken: session.refreshToken })
-    });
+    let current: AuthSession | null = session;
+    if (expiresSoon(current)) {
+      try {
+        current = await refreshSession();
+      } catch {
+        current = null;
+      }
+    }
+
+    if (current) {
+      await fetch(`${API_BASE}/api/auth/web/logout`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { Authorization: `Bearer ${current.accessToken}` }
+      });
+    }
   } finally {
     saveSession(null);
   }
@@ -140,7 +160,7 @@ export async function getValidAccessToken(): Promise<string> {
   if (!session) throw new ApiRequestError(401, 'authentication_required', 'Please sign in again.');
   if (expiresSoon(session)) {
     try {
-      session = await refreshSession(session);
+      session = await refreshSession();
     } catch (error) {
       saveSession(null);
       throw error;
@@ -155,7 +175,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
   if (expiresSoon(session)) {
     try {
-      session = await refreshSession(session);
+      session = await refreshSession();
     } catch (error) {
       saveSession(null);
       throw error;
@@ -174,7 +194,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   let response = await execute(session.accessToken);
   if (response.status === 401) {
     try {
-      session = await refreshSession(session);
+      session = await refreshSession();
       response = await execute(session.accessToken);
     } catch (error) {
       saveSession(null);
