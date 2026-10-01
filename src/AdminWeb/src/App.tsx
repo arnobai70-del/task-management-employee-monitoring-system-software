@@ -6,6 +6,8 @@ import AccessAssignmentsPage from './AccessAssignments';
 import AuditLogsPage from './AuditLogs';
 import EscalationSlaAnalyticsPage from './EscalationSlaAnalytics';
 import OperationsDashboardPage from './OperationsDashboard';
+import SecurityAlertsPage from './SecurityAlerts';
+import SecurityAlertRealtimeNotice from './SecurityAlertRealtimeNotice';
 import { DepartmentManagementPage, EmployeeManagementPage } from './EmployeeDepartmentManagement';
 import PresencePanel from './PresencePanel';
 import ProductivityReportsPage from './ProductivityReports';
@@ -38,6 +40,7 @@ const navItems: NavItem[] = [
   { path: '/productivity', label: 'Productivity', short: 'PD', permission: 'reports.read' },
   { path: '/sla-analytics', label: 'SLA Analytics', short: 'SL', permission: 'reports.read' },
   { path: '/operations', label: 'Operations', short: 'OP', permission: 'reports.read' },
+  { path: '/security-alerts', label: 'Security Alerts', short: 'SA', permission: 'audit.read' },
   { path: '/employees', label: 'Employees', short: 'EM', permission: 'employees.read' },
   { path: '/departments', label: 'Departments', short: 'DP', permission: 'departments.read' },
   { path: '/shifts', label: 'Shifts', short: 'SH', permission: 'shifts.read' },
@@ -154,6 +157,7 @@ function AppShell({ children }: { children: ReactNode }) {
         <main className="content">{children}</main>
       </div>
       <WebsiteWorkRealtimeNotice />
+      <SecurityAlertRealtimeNotice />
     </div>
   );
 }
@@ -263,7 +267,7 @@ function DashboardPage() {
           <article className="panel table-panel">
             <div className="panel-heading"><div><h2>Highest open workload</h2><p>Tasks and active survey assignments</p></div><NavLink className="text-link" to="/employees">Employees →</NavLink></div>
             <div className="table-wrap"><table><thead><tr><th>Employee</th><th>Department</th><th>Open tasks</th><th>Urgent</th><th>Overdue</th><th>Survey work</th><th>Total</th></tr></thead><tbody>
-              {(workload.data || []).map(item => <tr key={item.employeeId}><td><strong>{item.fullName}</strong><small>{item.employeeCode}</small></td><td>{item.departmentName || '—'}</td><td>{item.openTasks}</td><td>{item.urgentOpenTasks}</td><td>{item.overdueTasks}</td><td>{item.activeSurveyAssignments}</td><td><strong>{item.totalOpenItems}</strong></td></tr>)}
+              {(workload.data || []).map(item => <tr key={item.employeeId}><td><strong>{item.fullName}</strong><small>{item.employeeCode} · {item.email}</small></td><td>{item.departmentName || '—'}</td><td>{item.openTasks}</td><td>{item.urgentOpenTasks}</td><td>{item.overdueTasks}</td><td>{item.activeSurveyAssignments}</td><td><strong>{item.totalOpenItems}</strong></td></tr>)}
               {!workload.data?.length && <EmptyRow colSpan={7} />}
             </tbody></table></div>
           </article>
@@ -359,6 +363,7 @@ export default function App() {
       <Route path="/productivity" element={<ProtectedPage permission="reports.read"><ProductivityReportsPage /></ProtectedPage>} />
       <Route path="/sla-analytics" element={<ProtectedPage permission="reports.read"><EscalationSlaAnalyticsPage /></ProtectedPage>} />
       <Route path="/operations" element={<ProtectedPage permission="reports.read"><OperationsDashboardPage /></ProtectedPage>} />
+      <Route path="/security-alerts" element={<ProtectedPage permission="audit.read"><SecurityAlertsPage /></ProtectedPage>} />
       <Route path="/employees" element={<ProtectedPage permission="employees.read"><EmployeeManagementPage /></ProtectedPage>} />
       <Route path="/departments" element={<ProtectedPage permission="departments.read"><DepartmentManagementPage /></ProtectedPage>} />
       <Route path="/shifts" element={<ProtectedPage permission="shifts.read"><ShiftManagementPage /></ProtectedPage>} />
