@@ -14,5 +14,10 @@
     <AssemblyMetadata Include="TaskMonitoring.ServerUrl" Value="$(TaskMonitoringServerUrl)" />
     <AssemblyMetadata Include="TaskMonitoring.UpdateManifestUrl" Value="$(TaskMonitoringUpdateManifestUrl)" />
     <AssemblyMetadata Include="TaskMonitoring.PublisherSha256" Value="$(TaskMonitoringPublisherSha256)" />
+    <AssemblyMetadata Include="TaskMonitoring.DevelopmentSetup" Value="$(TaskMonitoringDevelopmentSetup)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TaskMonitoringPayloadZip)' != '' and Exists('$(TaskMonitoringPayloadZip)')">
+    <EmbeddedResource Include="$(TaskMonitoringPayloadZip)" LogicalName="TaskMonitoring.Payload.zip" />
   </ItemGroup>
 </Project>
