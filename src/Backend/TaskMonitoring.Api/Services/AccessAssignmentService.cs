@@ -330,7 +330,10 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         CancellationToken cancellationToken)
     {
         (page, pageSize) = NormalizePaging(page, pageSize);
-        var query = dbContext.Set<WebsiteAssignment>().AsNoTracking().Include(x => x.Employee).AsQueryable();
+        var query = dbContext.Set<WebsiteAssignment>()
+            .AsNoTracking()
+            .Include(x => x.Employee)
+            .Where(x => x.AccessLevel != WebsiteAccessLevel.Survey);
 
         if (employeeId.HasValue)
         {
@@ -429,7 +432,8 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         RequestActor actor,
         CancellationToken cancellationToken)
     {
-        var assignment = await dbContext.Set<WebsiteAssignment>().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var assignment = await dbContext.Set<WebsiteAssignment>()
+            .SingleOrDefaultAsync(x => x.Id == id && x.AccessLevel != WebsiteAccessLevel.Survey, cancellationToken);
         if (assignment is null)
         {
             return OperationResult<WebsiteAssignmentResponse>.NotFound("website_assignment_not_found", "Website assignment was not found.");
@@ -502,11 +506,19 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         }
 
         var host = NormalizeHost(request.Host);
+        var effectiveFrom = request.ValidFrom ?? DateOnly.FromDateTime(UtcNow());
+        var effectiveTo = request.ExpiresOn ?? DateOnly.MaxValue;
         if (request.IsActive && await dbContext.Set<RdpAssignment>().AsNoTracking().AnyAsync(
-                x => x.Id != currentId && x.EmployeeId == request.EmployeeId && x.Host == host && x.Port == request.Port && x.IsActive,
+                x => x.Id != currentId &&
+                     x.EmployeeId == request.EmployeeId &&
+                     x.Host == host &&
+                     x.Port == request.Port &&
+                     x.IsActive &&
+                     (!x.ExpiresOn.HasValue || x.ExpiresOn.Value >= effectiveFrom) &&
+                     (!x.ValidFrom.HasValue || x.ValidFrom.Value <= effectiveTo),
                 cancellationToken))
         {
-            return (null, new ApiOperationError("rdp_assignment_exists", "This employee already has an active RDP assignment for the same host and port."));
+            return (null, new ApiOperationError("rdp_assignment_exists", "This employee already has an active RDP assignment for the same host and port during the requested validity period."));
         }
 
         return employeeResult;
@@ -555,6 +567,11 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         UpsertWebsiteAssignmentRequest request,
         CancellationToken cancellationToken)
     {
+        if (request.AccessLevel == WebsiteAccessLevel.Survey)
+        {
+            return (null, null, new ApiOperationError("survey_assignment_requires_survey_module", "Survey links must be managed through the survey-link module."));
+        }
+
         var employeeResult = await ValidateEmployeeAsync(request.EmployeeId, request.IsActive, cancellationToken);
         if (employeeResult.Error is not null)
         {
@@ -573,11 +590,19 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         }
 
         var url = uri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped);
+        var effectiveFrom = request.StartsOn ?? DateOnly.FromDateTime(UtcNow());
+        var effectiveTo = request.ExpiresOn ?? DateOnly.MaxValue;
         if (request.IsActive && await dbContext.Set<WebsiteAssignment>().AsNoTracking().AnyAsync(
-                x => x.Id != currentId && x.EmployeeId == request.EmployeeId && x.Url == url && x.IsActive,
+                x => x.Id != currentId &&
+                     x.EmployeeId == request.EmployeeId &&
+                     x.Url == url &&
+                     x.AccessLevel != WebsiteAccessLevel.Survey &&
+                     x.IsActive &&
+                     (!x.ExpiresOn.HasValue || x.ExpiresOn.Value >= effectiveFrom) &&
+                     (!x.StartsOn.HasValue || x.StartsOn.Value <= effectiveTo),
                 cancellationToken))
         {
-            return (null, null, new ApiOperationError("website_assignment_exists", "This employee already has active access to the same website URL."));
+            return (null, null, new ApiOperationError("website_assignment_exists", "This employee already has active access to the same website URL during the requested validity period."));
         }
 
         return (employeeResult.Employee, url, null);
