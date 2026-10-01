@@ -2,7 +2,7 @@
 
 The Production Release Control Center adds a centralized approval and verification layer around the existing signed Windows release and production publishing workflow.
 
-It deliberately does **not** execute arbitrary shell commands, write to the mounted update host, hold code-signing private keys, or replace the existing operator-owned atomic publication script. The API keeps `/srv/updates` read-only and verifies the resulting state after an approved operator publication.
+It deliberately does **not** execute arbitrary shell commands, write to the mounted update host, hold code-signing private keys, or replace the existing operator-owned atomic publication tools. The API keeps `/srv/updates` read-only and verifies the resulting state after an approved operator publication.
 
 ## Permissions
 
@@ -62,7 +62,25 @@ Only after those checks pass is the release marked `Deployed`. A previously depl
 
 Rollback can be requested only from the currently deployed release and only when a previously verified superseded release exists. Before accepting the rollback request, the service verifies that the archived target release still contains the expected manifest, package bytes/hash/size and publisher fingerprint/certificate.
 
-The operator republishes that archived signed release through the same atomic publication script. `Verify rollback` then checks the live stable files against the rollback target before the current release becomes `RolledBack` and the target returns to `Deployed` state.
+After the rollback decision is recorded, the operator restores that archived stable release with the dedicated helper:
+
+```bash
+bash scripts/production/rollback-windows-release.sh \
+  --env deploy/production/production.env \
+  --version X.Y.Z
+```
+
+The helper validates the archived stable manifest and package SHA-256/size, copies the archived files to an isolated temporary bundle, and calls the same hardened atomic publication path. Copying to a temporary bundle deliberately avoids source/destination aliasing when the rollback source already lives under the update archive.
+
+Then run server acceptance:
+
+```bash
+bash scripts/production/acceptance-server.sh \
+  --env deploy/production/production.env \
+  --channel stable
+```
+
+Finally use `Verify rollback` in the control center. It checks the live stable files against the recorded rollback target before the current release becomes `RolledBack` and the target returns to `Deployed` state.
 
 This design prevents the web/API layer from becoming a generic remote-execution surface while still centralizing the decision, gates, evidence and durable release history.
 
