@@ -21,12 +21,7 @@ public sealed class AuditRound4RegressionTests
         var protectedWork = AddWebsiteWork(db, project, "Protected website work");
         await db.SaveChangesAsync(cancellationToken);
 
-        var controller = new TasksController(
-            new ProjectTaskCoreService(db, new FixedTimeProvider(DateTimeOffset.Parse("2026-10-02T07:00:00Z"))),
-            db)
-        {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
-        };
+        var controller = CreateController(db);
 
         var cancelled = await controller.ChangeStatus(
             cancellable.Id,
@@ -52,6 +47,40 @@ public sealed class AuditRound4RegressionTests
             activity => activity.Action == "task.status.changed");
     }
 
+    [Fact]
+    public async Task Generic_tasks_listing_excludes_website_work_assignments()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var project = AddProject(db);
+        var normalTask = AddGenericTask(db, project, "Normal project task");
+        AddWebsiteWork(db, project, "Specialized website work");
+        await db.SaveChangesAsync(cancellationToken);
+
+        var result = await CreateController(db).GetAll(
+            projectId: null,
+            search: null,
+            status: null,
+            priority: null,
+            assigneeEmployeeId: null,
+            page: 1,
+            pageSize: 100,
+            cancellationToken);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var page = Assert.IsType<PagedResponse<ProjectTaskResponse>>(ok.Value);
+        var item = Assert.Single(page.Items);
+        Assert.Equal(normalTask.Id, item.Id);
+        Assert.Equal(1, page.TotalCount);
+    }
+
+    private static TasksController CreateController(AppDbContext db) => new(
+        new ProjectTaskCoreService(db, new FixedTimeProvider(DateTimeOffset.Parse("2026-10-02T07:00:00Z"))),
+        db)
+    {
+        ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+    };
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -74,6 +103,24 @@ public sealed class AuditRound4RegressionTests
         };
         db.Projects.Add(project);
         return project;
+    }
+
+    private static ProjectTask AddGenericTask(AppDbContext db, Project project, string title)
+    {
+        var createdAt = DateTime.Parse("2026-10-02T06:00:00Z").ToUniversalTime();
+        var task = new ProjectTask
+        {
+            ProjectId = project.Id,
+            Project = project,
+            Title = title,
+            NormalizedTitle = title.ToUpperInvariant(),
+            Status = ProjectTaskStatus.ToDo,
+            Priority = ProjectTaskPriority.Normal,
+            CreatedAtUtc = createdAt,
+            UpdatedAtUtc = createdAt
+        };
+        db.ProjectTasks.Add(task);
+        return task;
     }
 
     private static ProjectTask AddWebsiteWork(AppDbContext db, Project project, string title)
