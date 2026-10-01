@@ -55,7 +55,10 @@ public sealed record SecurityAlertSummaryResponse(
     int Escalated,
     int CriticalActive,
     int Assigned,
-    int ResolvedToday);
+    int ResolvedToday)
+{
+    public int OpenCritical => CriticalActive;
+}
 
 public sealed record SecurityAlertAssigneeResponse(
     Guid UserId,
