@@ -20,12 +20,14 @@ if ((Get-Item $packagePath).Length -ne [long]$manifest.package.sizeBytes) {
 }
 
 $updaterExe = Join-Path $releaseRoot 'updater\TaskMonitoring.EmployeeUpdater.exe'
+$setupExe = Join-Path $releaseRoot 'TaskMonitoring.EmployeeSetup.exe'
 $rollbackScript = Join-Path $releaseRoot 'rollback-employee-windows.ps1'
-foreach ($requiredBundleFile in @($updaterExe, $rollbackScript)) {
+foreach ($requiredBundleFile in @($updaterExe, $setupExe, $rollbackScript)) {
     if (-not (Test-Path $requiredBundleFile -PathType Leaf)) {
         throw "Release bundle is missing required file: $requiredBundleFile"
     }
 }
+Assert-TaskMonitoringFileVersion -Path $setupExe -ExpectedVersion ([string]$manifest.version)
 
 $tempRoot = Join-Path $env:TEMP ('TaskMonitoring-release-test-' + [Guid]::NewGuid().ToString('N'))
 try {
@@ -57,6 +59,7 @@ try {
             $desktopExe,
             $serviceExe,
             $updaterExe,
+            $setupExe,
             (Join-Path $releaseRoot 'install-employee-windows.ps1'),
             (Join-Path $releaseRoot 'uninstall-employee-windows.ps1'),
             $rollbackScript,
@@ -69,7 +72,7 @@ try {
         }
     }
 
-    Write-Host "Release bundle validation passed for version $($manifest.version), channel $($manifest.channel)."
+    Write-Host "Release bundle validation passed for version $($manifest.version), channel $($manifest.channel), including the employee setup wizard."
 }
 finally {
     Remove-Item -Recurse -Force $tempRoot -ErrorAction SilentlyContinue

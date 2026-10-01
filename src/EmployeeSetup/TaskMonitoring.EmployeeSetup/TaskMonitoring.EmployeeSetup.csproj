@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>TaskMonitoring.EmployeeSetup</AssemblyName>
+    <RootNamespace>TaskMonitoring.EmployeeSetup</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="TaskMonitoring.ServerUrl" Value="$(TaskMonitoringServerUrl)" />
+    <AssemblyMetadata Include="TaskMonitoring.UpdateManifestUrl" Value="$(TaskMonitoringUpdateManifestUrl)" />
+    <AssemblyMetadata Include="TaskMonitoring.PublisherSha256" Value="$(TaskMonitoringPublisherSha256)" />
+  </ItemGroup>
+</Project>
