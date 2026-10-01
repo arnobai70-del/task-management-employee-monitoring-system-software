@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -36,14 +35,17 @@ if (string.IsNullOrWhiteSpace(connectionString))
 }
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+if (string.IsNullOrWhiteSpace(jwtOptions.Issuer) || string.IsNullOrWhiteSpace(jwtOptions.Audience))
+{
+    throw new InvalidOperationException("Jwt:Issuer and Jwt:Audience are required.");
+}
 if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey) || Encoding.UTF8.GetByteCount(jwtOptions.SigningKey) < 32)
 {
     throw new InvalidOperationException("Jwt:SigningKey must contain at least 32 bytes and must be supplied through secure configuration.");
 }
-
-if (jwtOptions.AccessTokenMinutes is < 1 or > 1440 || jwtOptions.RefreshTokenDays is < 1 or > 90)
+if (jwtOptions.AccessTokenMinutes is < 1 or > 60 || jwtOptions.RefreshTokenDays is < 1 or > 30)
 {
-    throw new InvalidOperationException("JWT token lifetimes are outside the allowed range.");
+    throw new InvalidOperationException("JWT token lifetimes are outside the hardened range (access: 1-60 minutes, refresh: 1-30 days).");
 }
 
 var presenceOptions = builder.Configuration.GetSection(PresenceOptions.SectionName).Get<PresenceOptions>() ?? new PresenceOptions();
@@ -52,17 +54,8 @@ if (presenceOptions.OnlineThresholdSeconds is < 30 or > 600)
     throw new InvalidOperationException("Presence:OnlineThresholdSeconds must be between 30 and 600 seconds.");
 }
 
-var trustForwardedHeaders = builder.Configuration.GetValue<bool>("ReverseProxy:TrustForwardedHeaders");
-if (trustForwardedHeaders)
-{
-    builder.Services.Configure<ForwardedHeadersOptions>(options =>
-    {
-        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-        options.KnownIPNetworks.Clear();
-        options.KnownProxies.Clear();
-        options.ForwardLimit = 1;
-    });
-}
+var reverseProxyOptions = builder.Configuration.GetSection(ReverseProxyOptions.SectionName).Get<ReverseProxyOptions>() ?? new ReverseProxyOptions();
+SecurityRegistration.ConfigureTrustedForwardedHeaders(builder.Services, reverseProxyOptions);
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<PresenceOptions>(builder.Configuration.GetSection(PresenceOptions.SectionName));
@@ -151,20 +144,24 @@ builder.Services.AddHostedService<FollowUpReminderHostedService>();
 builder.Services.AddHostedService<OperationsIncidentHostedService>();
 builder.Services.AddHostedService<AgentUpdateIncidentHostedService>();
 builder.Services.AddScoped<DatabaseInitializer>();
-builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.MapInboundClaims = false;
+        options.SaveToken = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
+            RequireExpirationTime = true,
+            RequireSignedTokens = true,
             ValidIssuer = jwtOptions.Issuer,
             ValidAudience = jwtOptions.Audience,
+            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
             ClockSkew = TimeSpan.FromSeconds(30),
             RoleClaimType = System.Security.Claims.ClaimTypes.Role,
@@ -184,13 +181,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization(options =>
-{
-    foreach (var permission in PermissionCatalog.All)
-    {
-        options.AddPolicy(permission, policy => policy.Requirements.Add(new PermissionRequirement(permission)));
-    }
-});
+builder.Services.AddTaskMonitoringAuthorization();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -201,6 +192,28 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("agent-enrollment", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("agent-device", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Request.RouteValues["deviceId"]?.ToString() ??
+            httpContext.Connection.RemoteIpAddress?.ToString() ??
+            "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
@@ -229,7 +242,7 @@ if (args.Any(argument => string.Equals(argument, "--migrate-only", StringCompari
 }
 
 app.UseExceptionHandler();
-if (trustForwardedHeaders)
+if (reverseProxyOptions.TrustForwardedHeaders)
 {
     app.UseForwardedHeaders();
 }
@@ -240,10 +253,13 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<RealtimeHub>("/hubs/realtime");
-app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = registration => registration.Tags.Contains("ready") });
-app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = registration => registration.Tags.Contains("ready") });
-app.MapOpenApi();
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = registration => registration.Tags.Contains("ready") }).AllowAnonymous();
+app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = registration => registration.Tags.Contains("ready") }).AllowAnonymous();
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi().AllowAnonymous();
+}
 
 await using (var scope = app.Services.CreateAsyncScope())
 {
