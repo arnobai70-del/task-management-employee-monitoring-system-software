@@ -26,6 +26,7 @@ jobs:
           bash -n scripts/production/accept-real-production-launch.sh
           bash -n scripts/production/acceptance-server.sh
           bash -n scripts/production/backup-postgres.sh
+          bash -n scripts/production/bootstrap-admin.sh
           bash -n scripts/production/publish-windows-release.sh
 
       - name: Prove fail-closed argument gate
@@ -37,6 +38,15 @@ jobs:
           set -e
           test "$status" -eq 2
           grep -q 'Missing required argument' "${RUNNER_TEMP}/launch.err"
+
+      - name: Prove bootstrap and publisher integrity guardrails are present
+        shell: bash
+        run: |
+          bash scripts/production/bootstrap-admin.sh --help >/dev/null
+          grep -q 'BootstrapAdmin__Password' scripts/production/bootstrap-admin.sh
+          grep -q 'mktemp -d' scripts/production/bootstrap-admin.sh
+          grep -q 'publisher certificate bytes' scripts/production/accept-real-production-launch.sh
+          grep -q 'Published versions are immutable' scripts/production/publish-windows-release.sh
 
   windows-pilot-tooling:
     name: Validate Windows pilot evidence collector

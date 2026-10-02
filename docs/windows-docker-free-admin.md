@@ -27,9 +27,11 @@ Employee PCs do not need these development prerequisites. They only need the Emp
 ## First Docker-free run
 
 1. Copy `.env.example` to `.env` if the launcher has not already created it.
-2. Replace every `replace-with-...` value. Keep `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `ConnectionStrings__DefaultConnection` aligned.
+2. Replace every `replace-with-...` value and set `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` for the local application database.
 3. Set the bootstrap administrator email and a password of at least 12 characters for the initial setup.
 4. Double-click `Start-Admin-Native.cmd`.
+
+The launcher builds the API connection string in process from those `POSTGRES_*` values and the selected local port, so `-PostgresPort 5433` (or another explicit native port) is applied consistently to both database setup and API startup. The generated process value is not written back to `.env`. The standalone `ConnectionStrings__DefaultConnection` entry remains useful when running the API manually outside the launcher.
 
 If the application role/database do not exist yet, the launcher asks once for the local PostgreSQL administrator password (normally the password chosen for the `postgres` account during PostgreSQL installation). That password is kept only in the current process long enough to create/update the application role and database; TaskMonitoring does not write the PostgreSQL administrator password to `.env`, source files, logs, or the registry.
 

@@ -25,14 +25,7 @@ public sealed class EmployeeRealtimeClient(EmployeeApiClient apiClient) : IAsync
             {
                 options.AccessTokenProvider = async () => await apiClient.GetValidAccessTokenAsync();
             })
-            .WithAutomaticReconnect(new[]
-            {
-                TimeSpan.Zero,
-                TimeSpan.FromSeconds(2),
-                TimeSpan.FromSeconds(5),
-                TimeSpan.FromSeconds(10),
-                TimeSpan.FromSeconds(30)
-            })
+            .WithAutomaticReconnect(PersistentRealtimeRetryPolicy.Instance)
             .Build();
 
         connection.On<EmployeeNotificationResponse>("notificationCreated", notification =>
@@ -158,5 +151,25 @@ public sealed class EmployeeRealtimeClient(EmployeeApiClient apiClient) : IAsync
     {
         await StopAsync();
         _agentHealthReporter.Dispose();
+    }
+
+    private sealed class PersistentRealtimeRetryPolicy : IRetryPolicy
+    {
+        public static readonly PersistentRealtimeRetryPolicy Instance = new();
+
+        private static readonly TimeSpan[] Delays =
+        [
+            TimeSpan.Zero,
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromSeconds(30)
+        ];
+
+        public TimeSpan? NextRetryDelay(RetryContext retryContext)
+        {
+            var index = (int)Math.Min(retryContext.PreviousRetryCount, Delays.LongLength - 1);
+            return Delays[index];
+        }
     }
 }

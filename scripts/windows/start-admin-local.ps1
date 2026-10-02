@@ -40,6 +40,25 @@ function LoadEnv([string]$path) {
         [Environment]::SetEnvironmentVariable($key, $value, 'Process')
     }
 }
+function SetLocalApiDatabaseConnection([int]$port) {
+    foreach ($name in @('POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD')) {
+        $value = [Environment]::GetEnvironmentVariable($name, 'Process')
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            throw "Local database configuration requires $name in .env."
+        }
+    }
+
+    $builder = [System.Data.Common.DbConnectionStringBuilder]::new()
+    $builder['Host'] = '127.0.0.1'
+    $builder['Port'] = $port
+    $builder['Database'] = $env:POSTGRES_DB
+    $builder['Username'] = $env:POSTGRES_USER
+    $builder['Password'] = $env:POSTGRES_PASSWORD
+    $builder['Pooling'] = 'true'
+    $builder['Timeout'] = 15
+    $builder['Command Timeout'] = 30
+    [Environment]::SetEnvironmentVariable('ConnectionStrings__DefaultConnection', $builder.ConnectionString, 'Process')
+}
 function DockerReady() {
     if ($null -eq (Get-Command docker -ErrorAction SilentlyContinue)) { return $false }
     & docker info *> $null
@@ -337,6 +356,8 @@ $env:ASPNETCORE_ENVIRONMENT = 'Development'
 $env:VITE_DEV_API_TARGET = 'http://127.0.0.1:5080'
 
 $selectedDatabaseMode = ResolveDatabaseMode $DatabaseMode
+$apiDatabasePort = if ($selectedDatabaseMode -eq 'Native') { $PostgresPort } else { 5432 }
+SetLocalApiDatabaseConnection $apiDatabasePort
 Step "Database mode: $selectedDatabaseMode"
 if ($selectedDatabaseMode -eq 'Native') {
     $postgresTools = FindPostgresTools
@@ -394,7 +415,7 @@ if (UrlReady $api 2) {
     $project = Join-Path $repo 'src\Backend\TaskMonitoring.Api\TaskMonitoring.Api.csproj'
     Start-Process dotnet -ArgumentList @('run', '--project', $project) -WorkingDirectory $repo | Out-Null
     if (!(UrlReady $api 120)) {
-        throw 'API did not become healthy. Check the API console and PostgreSQL connection settings in .env.'
+        throw 'API did not become healthy. Check the API console and PostgreSQL settings in .env.'
     }
 }
 

@@ -60,9 +60,10 @@ The script creates missing values only; it does not overwrite existing secret fi
 
 - PostgreSQL password;
 - API PostgreSQL connection string pointing to the private `postgres` service;
-- JWT signing key.
+- JWT signing key;
+- centralized employee-agent update enrollment key.
 
-The API receives the connection string and JWT key through Docker secrets mounted under `/run/secrets`. `TASKMONITORING_KEY_PER_FILE_DIRECTORY` enables ASP.NET Core's key-per-file configuration provider, so these secrets do not need to be written into Compose environment values.
+The API receives the connection string and secret keys through Docker secrets mounted under `/run/secrets`. `TASKMONITORING_KEY_PER_FILE_DIRECTORY` enables ASP.NET Core's key-per-file configuration provider, so these secrets do not need to be written into Compose environment values.
 
 After initialization, copy the secret values into the organization's approved secret manager. Losing the PostgreSQL password complicates database administration; losing/replacing the JWT signing key invalidates existing signed access tokens.
 
@@ -86,6 +87,22 @@ The script:
 8. requires `/health/live` and `/health/ready` to succeed before declaring the rollout healthy.
 
 A deployment is not successful merely because containers were created. Readiness is part of the deployment contract.
+
+### First production SuperAdmin
+
+A brand-new production database contains roles and permissions but intentionally does **not** contain a hard-coded administrator account. Immediately after the first successful deployment, create the first organization-owned SuperAdmin with the one-shot bootstrap command:
+
+```bash
+bash scripts/production/bootstrap-admin.sh \
+  --env deploy/production/production.env \
+  --email admin@your-company.example
+```
+
+The command prompts for the password twice without echoing it. The email/password are written only to owner-readable temporary files and mounted into a one-shot migrator container as Docker secrets named `BootstrapAdmin__Email` and `BootstrapAdmin__Password`. The API entrypoint copies those optional bootstrap values only for that one container. The temporary files are deleted when the command exits; normal API and migrator containers do not mount or retain bootstrap credentials.
+
+The bootstrap command fails unless it can verify at least one active `SuperAdmin` after seeding. Sign in through the production Admin Web immediately afterward and store the administrator credential according to organization policy. Do not add bootstrap credentials to `production.env`, source control, shell history, Compose environment values, tickets, or logs.
+
+Re-running the bootstrap command with an email that already exists does not reset that user's password; normal administrator account-management/password-reset workflows remain authoritative after the initial account exists.
 
 ## Database migration policy
 
@@ -142,9 +159,9 @@ bash scripts/production/publish-windows-release.sh \
   --bundle /secure/path/TaskMonitoring.EmployeeRelease-X.Y.Z-win-x64
 ```
 
-The publisher validates manifest schema, channel/version, package file name, size, SHA-256 and publisher-certificate fingerprint. It copies the versioned package first and moves `release.json` into place last. Clients therefore cannot see a new channel manifest before its package is available.
+The publisher validates manifest schema, channel/version, package file name, size, SHA-256, and that the archived publisher certificate bytes hash to the pinned publisher-certificate SHA-256. It writes versioned archives immutably: retrying the exact same bundle is allowed, but an existing version can never be replaced with different manifest/package/certificate bytes. Build a new semantic version for changed bytes.
 
-Versioned archives are retained under `UPDATE_HOST_ROOT/releases/<version>/` while the active channel pointer is under `UPDATE_HOST_ROOT/stable/` or `beta/`.
+The active channel pointer is under `UPDATE_HOST_ROOT/stable/` or `beta/`; immutable rollback archives are retained under `UPDATE_HOST_ROOT/releases/<version>/`.
 
 ## Server acceptance
 
@@ -165,6 +182,8 @@ Acceptance requires:
 - the referenced runtime package is downloadable;
 - downloaded package size and SHA-256 match the manifest.
 
+The final real-production launch gate additionally verifies the signed-bundle and archived publisher certificate bytes against the independently recorded publisher fingerprint.
+
 ## Logs and diagnostics
 
 Use Compose logs for server diagnostics:
@@ -176,7 +195,7 @@ docker compose \
   logs --tail=200 api web postgres
 ```
 
-Do not paste secret-file contents into tickets or logs. Database/JWT secret values should not appear in normal Compose configuration output.
+Do not paste secret-file contents into tickets or logs. Database/JWT/bootstrap secret values should not appear in normal Compose configuration output.
 
 ## Security boundaries
 
@@ -184,6 +203,7 @@ Do not paste secret-file contents into tickets or logs. Database/JWT secret valu
 - The API is private to the Docker backend network.
 - Only the edge service publishes host ports.
 - Production secret values are mounted from local secret files.
+- Bootstrap administrator credentials exist only in one-shot temporary Docker secrets and are removed after bootstrap.
 - Employee JWT/refresh credentials are not part of server deployment files.
 - The update directory is mounted read-only into the edge container.
 - Windows packages still require Authenticode verification/publisher pinning on employee machines; HTTPS and SHA-256 are additional controls, not replacements for code signing.
@@ -199,3 +219,5 @@ For a server disaster:
 5. start API/edge services;
 6. require `/health/live` and `/health/ready` success;
 7. run server acceptance before returning users to service.
+
+Do not run the bootstrap-admin command during disaster recovery when the restored database already contains administrator accounts.

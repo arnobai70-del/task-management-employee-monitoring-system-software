@@ -9,6 +9,7 @@ The repository can provide and test the acceptance tooling, but Domain 25 is com
 Before final acceptance:
 
 - deploy the production stack with `docs/production-environment.md`;
+- on a brand-new database, run `scripts/production/bootstrap-admin.sh` and verify the organization-owned SuperAdmin can sign in;
 - configure real public DNS names for `APP_PUBLIC_URL` and `UPDATE_PUBLIC_URL`;
 - use publicly trusted HTTPS certificates;
 - configure the organization-owned Windows code-signing certificate in GitHub Actions secrets;
@@ -19,7 +20,9 @@ Before final acceptance:
 - create a fresh PostgreSQL backup and copy the exact backup archive to independently mounted/off-site storage;
 - keep the signed workflow run/reference and business/security approval references available.
 
-Never commit the signing PFX/private key, GitHub secret values, employee credentials, JWTs, refresh tokens or production database contents as acceptance evidence.
+Never commit the signing PFX/private key, GitHub secret values, bootstrap administrator password, employee credentials, JWTs, refresh tokens or production database contents as acceptance evidence.
+
+The production publisher treats `UPDATE_HOST_ROOT/releases/<version>/` as immutable. An exact retry is allowed, but if any manifest/package/certificate bytes change, build a new version instead of attempting to overwrite an archived version.
 
 ## 2. Prove the real Windows pilot
 
@@ -96,14 +99,16 @@ The final gate fails closed unless all of the following are true:
 5. the signed bundle is a stable semantic-version release with valid package metadata;
 6. bundle package bytes match its manifest;
 7. bundle publisher fingerprint matches the independently supplied fingerprint;
-8. the exact live stable manifest bytes match the validated signed bundle;
-9. the exact live runtime package size/SHA-256 matches the signed bundle;
-10. the archived production publisher fingerprint matches the independent fingerprint;
-11. the primary and independently stored backup copies have the same SHA-256;
-12. the independent backup is outside production `BACKUP_ROOT`;
-13. the pilot evidence matches the production version, URLs and publisher fingerprint;
-14. every required pilot validation/attestation is true;
-15. signed-workflow, backup-storage, business-approval and security-approval references are supplied.
+8. bundle `publisher-certificate.cer` bytes hash to that same independent publisher fingerprint;
+9. the exact live stable manifest bytes match the validated signed bundle;
+10. the exact live runtime package size/SHA-256 matches the signed bundle;
+11. the archived production publisher fingerprint matches the independent fingerprint;
+12. the archived production publisher certificate bytes hash to the independent fingerprint;
+13. the primary and independently stored backup copies have the same SHA-256;
+14. the independent backup is outside production `BACKUP_ROOT`;
+15. the pilot evidence matches the production version, URLs and publisher fingerprint;
+16. every required pilot validation/attestation is true;
+17. signed-workflow, backup-storage, business-approval and security-approval references are supplied.
 
 On success the script writes:
 

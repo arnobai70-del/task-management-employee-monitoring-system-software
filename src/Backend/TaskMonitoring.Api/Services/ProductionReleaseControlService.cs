@@ -654,6 +654,14 @@ public sealed class ProductionReleaseControlService(
             {
                 return new VerificationResult(false, "Archived publisher certificate is missing.", null);
             }
+            using (var certificateStream = File.OpenRead(certificatePath))
+            {
+                var actualCertificateSha = Convert.ToHexString(SHA256.HashData(certificateStream));
+                if (!string.Equals(actualCertificateSha, release.PublisherCertificateSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new VerificationResult(false, "Archived publisher certificate bytes do not match the approved publisher fingerprint.", null);
+                }
+            }
 
             DateTime? publishedAtUtc = null;
             if (root.TryGetProperty("publishedAtUtc", out var publishedElement) && DateTime.TryParse(publishedElement.GetString(), out var published))
@@ -661,7 +669,7 @@ public sealed class ProductionReleaseControlService(
                 publishedAtUtc = NormalizeUtc(published);
             }
 
-            return new VerificationResult(true, "Published manifest, package bytes, size, SHA-256 and archived publisher fingerprint match the approved candidate.", publishedAtUtc);
+            return new VerificationResult(true, "Published manifest, package bytes, size, SHA-256 and archived publisher certificate match the approved candidate.", publishedAtUtc);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         {
