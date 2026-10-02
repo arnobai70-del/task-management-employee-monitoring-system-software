@@ -19,6 +19,7 @@ Development is active. Implemented milestones include:
 - Employee Windows Desktop: sign-in, attendance, tasks, notifications, realtime delivery, assigned access, transparent monitoring disclosure and approved work-activity telemetry.
 - Transparent Monitoring Telemetry Core: administrator-approved application rules, opt-in window-title collection, approved business-domain hostname activity, retention controls, audit history and `monitoring.read` / `monitoring.manage` authorization.
 - Visible Employee Windows Service: credential-free API/service-health heartbeat only.
+- Docker-free Windows Admin development mode using native PostgreSQL 17 as a normal Windows service, while preserving the Docker PostgreSQL path as an explicit fallback.
 - Production Windows deployment tooling: self-contained versioned runtime bundle, machine-wide installer/uninstaller, scheduled auto-updater, SHA-256 verification, publisher certificate pinning, service recovery, backup/rollback and deployment-managed server configuration.
 - Production Windows signing workflow requiring repository code-signing secrets; unsigned packaging is limited to CI/development validation.
 - GitHub Actions quality gates for backend build/tests, EF migration drift, PostgreSQL integration, Admin Web build, Employee Desktop/Service/Updater builds, PowerShell parsing and release-bundle integrity validation.
@@ -78,6 +79,7 @@ src/
   EmployeeUpdater/TaskMonitoring.EmployeeUpdater/
 scripts/
   windows/
+    start-admin-local.ps1
     publish-employee-windows.ps1
     install-employee-service.ps1
     uninstall-employee-service.ps1
@@ -92,6 +94,7 @@ docs/
   architecture.md
   admin-web.md
   monitoring-telemetry.md
+  windows-docker-free-admin.md
   windows-production-deployment.md
 .github/workflows/
   ci.yml
@@ -214,11 +217,27 @@ Legacy service-only publish/install scripts remain available for development/com
 
 ## Backend local prerequisites
 
+For Windows local development/server testing:
+
 - .NET 10 SDK
-- Docker Desktop or local PostgreSQL 17
+- Node.js 24 or newer
+- PostgreSQL 17 installed as a Windows service **or** Docker Desktop
 - Git
 
-Copy `.env.example` to `.env` for Docker-oriented configuration and replace all placeholder secrets. Never commit `.env`.
+Docker is not mandatory. Employee PCs and administrator PCs that only connect to an already-hosted central server do not need Docker, PostgreSQL, .NET SDK, or Node.js.
+
+Copy `.env.example` to `.env` for local configuration and replace all placeholder secrets. Never commit `.env`.
+
+### Windows launchers (Docker-free supported)
+
+- `Start-Admin.cmd` — automatic database mode; prefers native PostgreSQL when installed and otherwise uses Docker when available.
+- `Start-Admin-Native.cmd` — forces Docker-free native PostgreSQL 17 mode.
+- `Start-Admin-Docker.cmd` — forces the previous Docker PostgreSQL mode.
+- `Start-Admin-LAN-Test.cmd -DatabaseMode Native` — Docker-free private-LAN development test mode.
+
+On the first native run, if the application database/role do not exist, the launcher securely prompts for the local PostgreSQL administrator password and provisions the configured application role/database. The administrator password is not written to TaskMonitoring configuration or logs.
+
+See [`docs/windows-docker-free-admin.md`](docs/windows-docker-free-admin.md) for the full Docker-free setup and troubleshooting path.
 
 Required API configuration:
 
@@ -238,6 +257,8 @@ Remove bootstrap credentials after the initial administrator exists.
 
 ## PostgreSQL and database migrations
 
+Docker path:
+
 ```bash
 cp .env.example .env
 # Replace placeholder passwords/keys.
@@ -248,6 +269,8 @@ dotnet ef database update \
   --project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj \
   --startup-project src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj
 ```
+
+On Windows, `Start-Admin-Native.cmd` performs the local native PostgreSQL readiness/provisioning checks and the Development API applies committed migrations when `Database__AutoMigrate=true` in `.env`.
 
 Production should apply committed migrations deliberately and keep `Database__AutoMigrate=false`. CI rejects EF model changes without a committed migration and validates the full migration chain against PostgreSQL.
 
@@ -314,4 +337,4 @@ The PostgreSQL integration test expects `TEST_POSTGRES_CONNECTION` to point to a
 
 Large features use focused branches and meaningful commits. A feature is complete only when its applicable API/data/UI layers, validation, permissions, error handling, tests/CI gates and documentation work together.
 
-See [`docs/architecture.md`](docs/architecture.md), [`docs/admin-web.md`](docs/admin-web.md), [`docs/monitoring-telemetry.md`](docs/monitoring-telemetry.md), and [`docs/windows-production-deployment.md`](docs/windows-production-deployment.md).
+See [`docs/architecture.md`](docs/architecture.md), [`docs/admin-web.md`](docs/admin-web.md), [`docs/monitoring-telemetry.md`](docs/monitoring-telemetry.md), [`docs/windows-docker-free-admin.md`](docs/windows-docker-free-admin.md), and [`docs/windows-production-deployment.md`](docs/windows-production-deployment.md).
