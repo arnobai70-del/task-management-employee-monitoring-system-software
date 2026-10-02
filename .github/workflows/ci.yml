@@ -201,6 +201,7 @@ jobs:
         shell: pwsh
         run: |
           $scripts = @(
+            'scripts/windows/start-admin-local.ps1',
             'scripts/windows/publish-employee-windows.ps1',
             'scripts/windows/install-employee-service.ps1',
             'scripts/windows/uninstall-employee-service.ps1',
@@ -217,6 +218,16 @@ jobs:
           foreach ($script in $scripts) {
             [void][scriptblock]::Create((Get-Content $script -Raw))
           }
+
+      - name: Validate local Admin database modes on Windows PowerShell
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\start-admin-local.ps1 -ValidateOnly -DatabaseMode Auto
+          if ($LASTEXITCODE -ne 0) { throw 'Auto launcher validation failed.' }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\start-admin-local.ps1 -ValidateOnly -DatabaseMode Native
+          if ($LASTEXITCODE -ne 0) { throw 'Native launcher validation failed.' }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\start-admin-local.ps1 -ValidateOnly -DatabaseMode Docker
+          if ($LASTEXITCODE -ne 0) { throw 'Docker launcher validation failed.' }
 
       - name: Run centralized updater control acceptance
         shell: pwsh
