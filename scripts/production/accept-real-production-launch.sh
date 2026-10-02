@@ -166,6 +166,11 @@ if [[ "$bundle_publisher" != "$expected_publisher" ]]; then
   echo "Signed release publisher fingerprint does not match the independently verified fingerprint." >&2
   exit 1
 fi
+bundle_certificate_sha="$(sha256sum "$release_bundle/publisher-certificate.cer" | awk '{print toupper($1)}')"
+if [[ "$bundle_certificate_sha" != "$expected_publisher" ]]; then
+  echo "Signed release publisher certificate bytes do not match the independently verified fingerprint." >&2
+  exit 1
+fi
 
 # The exact published manifest and package must match the independently validated signed bundle.
 tmpdir="$(mktemp -d)"
@@ -187,6 +192,12 @@ curl --fail --silent --show-error --max-time 30 "${UPDATE_PUBLIC_URL%/}/releases
 live_publisher="$(tr -d '[:space:]' < "$tmpdir/live-publisher.txt" | tr '[:lower:]' '[:upper:]')"
 if [[ "$live_publisher" != "$expected_publisher" ]]; then
   echo "Archived production publisher fingerprint differs from the independent fingerprint." >&2
+  exit 1
+fi
+curl --fail --silent --show-error --max-time 30 "${UPDATE_PUBLIC_URL%/}/releases/$version/publisher-certificate.cer" > "$tmpdir/live-publisher.cer"
+live_certificate_sha="$(sha256sum "$tmpdir/live-publisher.cer" | awk '{print toupper($1)}')"
+if [[ "$live_certificate_sha" != "$expected_publisher" ]]; then
+  echo "Archived production publisher certificate bytes differ from the independent fingerprint." >&2
   exit 1
 fi
 
