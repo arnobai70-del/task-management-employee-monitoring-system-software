@@ -22,5 +22,20 @@ for key in ConnectionStrings__DefaultConnection Jwt__SigningKey AgentUpdates__En
   install -o app -g app -m 0400 "$source_path" "$target_path"
 done
 
+# These secrets are mounted only by the one-shot production bootstrap command.
+# They are deliberately optional so normal API/migrator containers never need to
+# retain initial administrator credentials after the account has been created.
+for key in BootstrapAdmin__Email BootstrapAdmin__Password; do
+  source_path="$source_dir/$key"
+  target_path="$target_dir/$key"
+  if [ -e "$source_path" ]; then
+    if [ ! -s "$source_path" ]; then
+      echo "Optional bootstrap secret is present but empty: $source_path" >&2
+      exit 1
+    fi
+    install -o app -g app -m 0400 "$source_path" "$target_path"
+  fi
+done
+
 export TASKMONITORING_KEY_PER_FILE_DIRECTORY="$target_dir"
 exec gosu app dotnet TaskMonitoring.Api.dll "$@"
