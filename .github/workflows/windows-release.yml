@@ -1,4 +1,4 @@
-name: Production Windows Release
+name: Windows Employee Release
 
 on:
   workflow_dispatch:
@@ -15,8 +15,16 @@ on:
         options:
           - stable
           - beta
+      release_mode:
+        description: Signed public production or unsigned internal-office deployment
+        required: true
+        default: internal-unsigned
+        type: choice
+        options:
+          - internal-unsigned
+          - signed-production
       server_url:
-        description: HTTPS TaskMonitoring application URL embedded in the signed standalone setup wizard
+        description: HTTPS TaskMonitoring application URL embedded in the standalone setup wizard
         required: true
         type: string
       package_base_url:
@@ -28,8 +36,8 @@ permissions:
   contents: read
 
 jobs:
-  signed-release:
-    name: Build and validate signed employee release
+  release:
+    name: Build and validate employee release
     runs-on: windows-latest
     env:
       WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
@@ -44,16 +52,18 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Require production code-signing certificate
+        if: ${{ inputs.release_mode == 'signed-production' }}
         shell: pwsh
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_PFX_BASE64)) {
-            throw 'WINDOWS_SIGNING_PFX_BASE64 repository secret is required.'
+            throw 'WINDOWS_SIGNING_PFX_BASE64 repository secret is required for signed-production mode.'
           }
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_PFX_PASSWORD)) {
-            throw 'WINDOWS_SIGNING_PFX_PASSWORD repository secret is required.'
+            throw 'WINDOWS_SIGNING_PFX_PASSWORD repository secret is required for signed-production mode.'
           }
 
       - name: Materialize signing certificate
+        if: ${{ inputs.release_mode == 'signed-production' }}
         id: signing
         shell: pwsh
         run: |
@@ -61,40 +71,65 @@ jobs:
           [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64))
           "pfx=$pfx" >> $env:GITHUB_OUTPUT
 
-      - name: Build signed release bundle
+      - name: Build release bundle
         shell: pwsh
         run: |
-          ./scripts/windows/build-employee-release.ps1 `
-            -Version '${{ inputs.version }}' `
-            -Channel '${{ inputs.channel }}' `
-            -ServerUrl '${{ inputs.server_url }}' `
-            -PackageBaseUrl '${{ inputs.package_base_url }}' `
-            -OutputRoot '${{ runner.temp }}\employee-release' `
-            -PfxPath '${{ steps.signing.outputs.pfx }}' `
-            -PfxPassword $env:WINDOWS_SIGNING_PFX_PASSWORD
+          $common = @(
+            '-Version', '${{ inputs.version }}',
+            '-Channel', '${{ inputs.channel }}',
+            '-ServerUrl', '${{ inputs.server_url }}',
+            '-PackageBaseUrl', '${{ inputs.package_base_url }}',
+            '-OutputRoot', '${{ runner.temp }}\employee-release'
+          )
+          if ('${{ inputs.release_mode }}' -eq 'signed-production') {
+            ./scripts/windows/build-employee-release.ps1 @common `
+              -PfxPath '${{ steps.signing.outputs.pfx }}' `
+              -PfxPassword $env:WINDOWS_SIGNING_PFX_PASSWORD
+          }
+          else {
+            ./scripts/windows/build-employee-release.ps1 @common -AllowUnsignedDevelopmentBuild
+          }
 
-      - name: Build signed standalone setup EXE
+      - name: Build standalone setup EXE
         shell: pwsh
         run: |
           $release = '${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-${{ inputs.version }}-win-x64'
           $manifestUrl = '${{ inputs.package_base_url }}'.TrimEnd('/') + '/release.json'
-          ./scripts/windows/make-employee-setup-standalone.ps1 `
-            -ReleaseDirectory $release `
-            -ServerUrl '${{ inputs.server_url }}' `
-            -UpdateManifestUrl $manifestUrl `
-            -PfxPath '${{ steps.signing.outputs.pfx }}' `
-            -PfxPassword $env:WINDOWS_SIGNING_PFX_PASSWORD
+          if ('${{ inputs.release_mode }}' -eq 'signed-production') {
+            ./scripts/windows/make-employee-setup-standalone.ps1 `
+              -ReleaseDirectory $release `
+              -ServerUrl '${{ inputs.server_url }}' `
+              -UpdateManifestUrl $manifestUrl `
+              -PfxPath '${{ steps.signing.outputs.pfx }}' `
+              -PfxPassword $env:WINDOWS_SIGNING_PFX_PASSWORD
+          }
+          else {
+            ./scripts/windows/make-employee-setup-standalone.ps1 `
+              -ReleaseDirectory $release `
+              -ServerUrl '${{ inputs.server_url }}' `
+              -UpdateManifestUrl $manifestUrl `
+              -DevelopmentSetup
+          }
 
-      - name: Validate signed release bundle
+      - name: Validate release bundle
         shell: pwsh
         run: |
           $release = '${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-${{ inputs.version }}-win-x64'
-          $fingerprint = (Get-Content (Join-Path $release 'publisher-certificate-sha256.txt') -Raw).Trim()
-          ./scripts/windows/test-employee-release.ps1 -ReleaseDirectory $release -PublisherCertificateSha256 $fingerprint
           $setup = Join-Path $release 'TaskMonitoring.EmployeeSetup.exe'
-          $signature = Get-AuthenticodeSignature -FilePath $setup
-          if ($signature.Status -ne [Management.Automation.SignatureStatus]::Valid) {
-            throw "Standalone setup signature is not valid. Status=$($signature.Status)"
+          if ('${{ inputs.release_mode }}' -eq 'signed-production') {
+            $fingerprint = (Get-Content (Join-Path $release 'publisher-certificate-sha256.txt') -Raw).Trim()
+            ./scripts/windows/test-employee-release.ps1 -ReleaseDirectory $release -PublisherCertificateSha256 $fingerprint
+            $signature = Get-AuthenticodeSignature -FilePath $setup
+            if ($signature.Status -ne [Management.Automation.SignatureStatus]::Valid) {
+              throw "Standalone setup signature is not valid. Status=$($signature.Status)"
+            }
+          }
+          else {
+            ./scripts/windows/test-employee-release.ps1 -ReleaseDirectory $release -AllowUnsignedDevelopmentBuild
+            if (Test-Path (Join-Path $release 'publisher-certificate-sha256.txt')) {
+              throw 'Unsigned internal release unexpectedly contains a publisher fingerprint.'
+            }
+            Write-Warning 'Internal unsigned mode: Windows may show Unknown publisher / SmartScreen prompts on employee PCs.'
           }
           $runtime = Get-ChildItem $release -Filter 'TaskMonitoring.EmployeeRuntime-*.zip' | Select-Object -First 1
           if ($null -eq $runtime -or (Get-Item $setup).Length -le $runtime.Length) {
@@ -102,22 +137,22 @@ jobs:
           }
 
       - name: Remove signing certificate
-        if: always()
+        if: ${{ always() && inputs.release_mode == 'signed-production' }}
         shell: pwsh
         run: Remove-Item -Force '${{ steps.signing.outputs.pfx }}' -ErrorAction SilentlyContinue
 
-      - name: Upload signed release bundle
+      - name: Upload release bundle
         uses: actions/upload-artifact@v4
         with:
-          name: TaskMonitoring.EmployeeRelease-${{ inputs.version }}-${{ inputs.channel }}
+          name: TaskMonitoring.EmployeeRelease-${{ inputs.version }}-${{ inputs.channel }}-${{ inputs.release_mode }}
           path: ${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-${{ inputs.version }}-win-x64
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload signed standalone installer
+      - name: Upload standalone installer
         uses: actions/upload-artifact@v4
         with:
-          name: TaskMonitoring.EmployeeSetup-${{ inputs.version }}-${{ inputs.channel }}
+          name: TaskMonitoring.EmployeeSetup-${{ inputs.version }}-${{ inputs.channel }}-${{ inputs.release_mode }}
           path: ${{ runner.temp }}\employee-release\TaskMonitoring.EmployeeRelease-${{ inputs.version }}-win-x64\TaskMonitoring.EmployeeSetup.exe
           if-no-files-found: error
           retention-days: 30
