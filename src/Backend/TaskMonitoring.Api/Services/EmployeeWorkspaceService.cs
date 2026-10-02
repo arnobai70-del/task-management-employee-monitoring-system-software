@@ -41,7 +41,9 @@ public sealed class EmployeeWorkspaceService(AppDbContext dbContext, TimeProvide
 
         var query = dbContext.ProjectTasks
             .AsNoTracking()
-            .Where(x => x.AssigneeEmployeeId == employee.Id);
+            .Where(x =>
+                x.AssigneeEmployeeId == employee.Id &&
+                !x.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction));
 
         if (!includeClosed)
         {
@@ -195,6 +197,7 @@ public sealed class EmployeeWorkspaceService(AppDbContext dbContext, TimeProvide
 
         var employee = await dbContext.Employees
             .AsNoTracking()
+            .Include(x => x.User)
             .SingleOrDefaultAsync(x => x.UserId == actor.UserId.Value, cancellationToken);
 
         if (employee is null)
@@ -202,9 +205,9 @@ public sealed class EmployeeWorkspaceService(AppDbContext dbContext, TimeProvide
             return OperationResult<Employee>.NotFound("employee_profile_not_found", "No employee profile is linked to this account.");
         }
 
-        if (!employee.IsActive)
+        if (!employee.IsActive || !employee.User.IsActive)
         {
-            return OperationResult<Employee>.Invalid("employee_inactive", "The employee profile is inactive.");
+            return OperationResult<Employee>.Invalid("employee_inactive", "The employee profile or linked account is inactive.");
         }
 
         return OperationResult<Employee>.Success(employee);
