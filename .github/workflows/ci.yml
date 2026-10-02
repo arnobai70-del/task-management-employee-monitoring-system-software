@@ -140,7 +140,7 @@ jobs:
           test "$count" = "1"
           "${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -v ON_ERROR_STOP=1 -c 'DROP TABLE ci_restore_probe;'
 
-      - name: Verify atomic update publication and public acceptance
+      - name: Verify atomic immutable update publication and public acceptance
         shell: bash
         run: |
           bundle="${{ runner.temp }}/synthetic-signed-bundle"
@@ -152,10 +152,38 @@ jobs:
           cat > "$bundle/release.json" <<EOF
           {"schemaVersion":1,"channel":"stable","version":"9.9.9","publishedAtUtc":"2026-01-01T00:00:00Z","minimumUpdaterVersion":"1.0.0","package":{"file":"$package","url":"http://updates.localhost:18080/stable/$package","sha256":"$sha","sizeBytes":$size}}
           EOF
-          printf '%064d' 0 | tr '0' 'A' > "$bundle/publisher-certificate-sha256.txt"
           printf 'synthetic-ci-certificate' > "$bundle/publisher-certificate.cer"
+          certificate_sha="$(sha256sum "$bundle/publisher-certificate.cer" | awk '{print toupper($1)}')"
+          printf '%s' "$certificate_sha" > "$bundle/publisher-certificate-sha256.txt"
+
           bash scripts/production/publish-windows-release.sh --env deploy/production/production.ci.env --bundle "$bundle"
           bash scripts/production/acceptance-server.sh --env deploy/production/production.ci.env --channel stable
+
+          # Retrying the exact same bundle is safe and idempotent.
+          bash scripts/production/publish-windows-release.sh --env deploy/production/production.ci.env --bundle "$bundle"
+
+          # The certificate file must be cryptographically bound to its published fingerprint.
+          bad_certificate_bundle="${{ runner.temp }}/bad-certificate-bundle"
+          cp -a "$bundle" "$bad_certificate_bundle"
+          printf 'different-certificate' > "$bad_certificate_bundle/publisher-certificate.cer"
+          if bash scripts/production/publish-windows-release.sh --env deploy/production/production.ci.env --bundle "$bad_certificate_bundle"; then
+            echo 'Publisher accepted certificate bytes that do not match the pinned fingerprint.' >&2
+            exit 1
+          fi
+
+          # A version that has been archived must never be replaced by different bytes.
+          changed_bundle="${{ runner.temp }}/changed-same-version-bundle"
+          cp -a "$bundle" "$changed_bundle"
+          printf 'different-runtime-package-for-same-version' > "$changed_bundle/$package"
+          changed_size="$(wc -c < "$changed_bundle/$package" | tr -d ' ')"
+          changed_sha="$(sha256sum "$changed_bundle/$package" | awk '{print toupper($1)}')"
+          cat > "$changed_bundle/release.json" <<EOF
+          {"schemaVersion":1,"channel":"stable","version":"9.9.9","publishedAtUtc":"2026-01-01T00:00:01Z","minimumUpdaterVersion":"1.0.0","package":{"file":"$package","url":"http://updates.localhost:18080/stable/$package","sha256":"$changed_sha","sizeBytes":$changed_size}}
+          EOF
+          if bash scripts/production/publish-windows-release.sh --env deploy/production/production.ci.env --bundle "$changed_bundle"; then
+            echo 'Publisher overwrote an immutable release version with different bytes.' >&2
+            exit 1
+          fi
 
       - name: Production stack diagnostics
         if: failure()
