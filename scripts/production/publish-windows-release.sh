@@ -32,6 +32,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 source "$SCRIPT_DIR/common.sh"
 
+require_command mktemp
 require_command python3
 require_command sha256sum
 require_production_variables
@@ -108,15 +109,73 @@ if [[ ! "$fingerprint" =~ ^[0-9A-F]{64}$ ]]; then
   exit 1
 fi
 
+certificate_sha="$(sha256sum "$certificate_path" | awk '{print toupper($1)}')"
+if [[ "$certificate_sha" != "$fingerprint" ]]; then
+  echo "Publisher certificate bytes do not match publisher-certificate-sha256.txt." >&2
+  exit 1
+fi
+
 update_root="$(resolve_env_path "$UPDATE_HOST_ROOT")"
 channel_root="$update_root/$channel"
-archive_root="$update_root/releases/$version"
-mkdir -p "$channel_root" "$archive_root"
+releases_root="$update_root/releases"
+archive_root="$releases_root/$version"
+mkdir -p "$channel_root" "$releases_root"
 
-cp -f "$package_path" "$archive_root/$package_file"
-cp -f "$manifest_path" "$archive_root/release.json"
-cp -f "$fingerprint_path" "$archive_root/publisher-certificate-sha256.txt"
-cp -f "$certificate_path" "$archive_root/publisher-certificate.cer"
+incoming_manifest_sha="$(sha256sum "$manifest_path" | awk '{print toupper($1)}')"
+if [[ -e "$archive_root" ]]; then
+  if [[ ! -d "$archive_root" ]]; then
+    echo "Release archive path already exists and is not a directory: $archive_root" >&2
+    exit 1
+  fi
+
+  existing_manifest="$archive_root/release.json"
+  existing_package="$archive_root/$package_file"
+  existing_fingerprint_file="$archive_root/publisher-certificate-sha256.txt"
+  existing_certificate="$archive_root/publisher-certificate.cer"
+  for existing in "$existing_manifest" "$existing_package" "$existing_fingerprint_file" "$existing_certificate"; do
+    if [[ ! -s "$existing" ]]; then
+      echo "Release version $version already has an incomplete archive. Refusing to overwrite it: $archive_root" >&2
+      exit 1
+    fi
+  done
+
+  existing_manifest_sha="$(sha256sum "$existing_manifest" | awk '{print toupper($1)}')"
+  existing_package_sha="$(sha256sum "$existing_package" | awk '{print toupper($1)}')"
+  existing_package_size="$(wc -c < "$existing_package" | tr -d ' ')"
+  existing_fingerprint="$(tr -d '[:space:]' < "$existing_fingerprint_file" | tr '[:lower:]' '[:upper:]')"
+  existing_certificate_sha="$(sha256sum "$existing_certificate" | awk '{print toupper($1)}')"
+
+  if [[ "$existing_manifest_sha" != "$incoming_manifest_sha" ||
+        "$existing_package_sha" != "$expected_sha" ||
+        "$existing_package_size" != "$expected_size" ||
+        "$existing_fingerprint" != "$fingerprint" ||
+        "$existing_certificate_sha" != "$fingerprint" ]]; then
+    echo "Release version $version is already archived with different bytes. Published versions are immutable; build a new version instead of overwriting the rollback archive." >&2
+    exit 1
+  fi
+
+  echo "Release archive $version already contains the identical signed bundle; keeping the immutable archive unchanged."
+else
+  archive_tmp="$(mktemp -d "$releases_root/.${version}.publish.XXXXXX")"
+  cleanup_archive_tmp() {
+    if [[ -n "${archive_tmp:-}" && -d "$archive_tmp" ]]; then
+      rm -rf "$archive_tmp"
+    fi
+  }
+  trap cleanup_archive_tmp EXIT
+
+  cp "$package_path" "$archive_tmp/$package_file"
+  cp "$manifest_path" "$archive_tmp/release.json"
+  cp "$fingerprint_path" "$archive_tmp/publisher-certificate-sha256.txt"
+  cp "$certificate_path" "$archive_tmp/publisher-certificate.cer"
+  chmod 0644 "$archive_tmp/$package_file" "$archive_tmp/release.json" "$archive_tmp/publisher-certificate-sha256.txt" "$archive_tmp/publisher-certificate.cer"
+
+  # GNU mv -T performs an atomic directory rename and refuses to merge into an
+  # archive that another publisher created concurrently.
+  mv -T "$archive_tmp" "$archive_root"
+  archive_tmp=""
+  trap - EXIT
+fi
 
 cp -f "$package_path" "$channel_root/$package_file.tmp"
 mv -f "$channel_root/$package_file.tmp" "$channel_root/$package_file"
