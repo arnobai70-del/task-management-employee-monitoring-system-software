@@ -67,6 +67,34 @@ public sealed class ProductionReleaseControlServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Deployment_verification_rejects_archived_certificate_bytes_that_do_not_match_pinned_fingerprint()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var now = new DateTime(2026, 10, 1, 6, 30, 0, DateTimeKind.Utc);
+        await using var db = CreateDb();
+        var actor = AddAdmin(db, "release-security@example.com");
+        await db.SaveChangesAsync(cancellationToken);
+
+        var operations = new FakeOperationsHealthService(HealthyOverview(now, null));
+        var service = CreateService(db, operations, now);
+        var bundle = CreateBundle("2.0.0", now);
+        var registered = (await service.RegisterAsync(bundle.Request, Actor(actor), cancellationToken)).Value!;
+        await service.ApproveAsync(registered.Id, new ProductionReleaseActionRequest("Signed bundle verified."), Actor(actor), cancellationToken);
+        var authorized = await service.AuthorizePromotionAsync(registered.Id, new ProductionReleaseActionRequest("Ready."), Actor(actor), cancellationToken);
+        Assert.Equal(OperationStatus.Success, authorized.Status);
+
+        PublishToStable(bundle);
+        File.WriteAllBytes(
+            Path.Combine(root, "releases", bundle.Request.Version, "publisher-certificate.cer"),
+            Encoding.UTF8.GetBytes("different-publisher-certificate"));
+
+        var rejected = await service.VerifyDeploymentAsync(registered.Id, new ProductionReleaseActionRequest(null), Actor(actor), cancellationToken);
+        Assert.Equal(OperationStatus.Conflict, rejected.Status);
+        Assert.Equal("release_deployment_verification_failed", rejected.Error!.Code);
+        Assert.Contains("certificate", rejected.Error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Promotion_is_health_gated_and_verified_rollback_restores_previous_release()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -149,7 +177,8 @@ public sealed class ProductionReleaseControlServiceTests : IDisposable
         var packageFile = $"TaskMonitoring.EmployeeRuntime-{version}-win-x64.zip";
         var packageBytes = Encoding.UTF8.GetBytes($"runtime-package-{version}-{Guid.NewGuid():N}");
         var packageSha = Convert.ToHexString(SHA256.HashData(packageBytes));
-        var publisherSha = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("publisher-certificate")));
+        var publisherCertificateBytes = Encoding.UTF8.GetBytes("publisher-certificate");
+        var publisherSha = Convert.ToHexString(SHA256.HashData(publisherCertificateBytes));
         var manifestObject = new
         {
             schemaVersion = 1,
@@ -172,7 +201,7 @@ public sealed class ProductionReleaseControlServiceTests : IDisposable
         File.WriteAllBytes(Path.Combine(archive, packageFile), packageBytes);
         File.WriteAllBytes(Path.Combine(archive, "release.json"), manifestBytes);
         File.WriteAllText(Path.Combine(archive, "publisher-certificate-sha256.txt"), publisherSha);
-        File.WriteAllBytes(Path.Combine(archive, "publisher-certificate.cer"), [1, 2, 3, 4]);
+        File.WriteAllBytes(Path.Combine(archive, "publisher-certificate.cer"), publisherCertificateBytes);
 
         return new Bundle(
             new ProductionReleaseRegisterRequest(
