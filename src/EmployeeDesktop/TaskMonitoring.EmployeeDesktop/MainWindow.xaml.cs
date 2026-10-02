@@ -28,6 +28,19 @@ public partial class MainWindow : Window
         _presenceTimer.Tick += PresenceTimer_Tick;
         _monitoringTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
         _monitoringTimer.Tick += MonitoringTimer_Tick;
+
+        foreach (var filter in new[]
+                 {
+                     IncludeClosedTasksBox,
+                     IncludeClosedWebsiteWorkBox,
+                     IncludeInactiveSurveysBox,
+                     UnreadNotificationsOnlyBox,
+                     IncludeInactiveAccessBox
+                 })
+        {
+            filter.Checked += WorkspaceFilter_Changed;
+            filter.Unchecked += WorkspaceFilter_Changed;
+        }
     }
 
     protected override void OnClosed(EventArgs e)
@@ -250,7 +263,12 @@ public partial class MainWindow : Window
 
     private void Realtime_NotificationReceived(object? sender, EmployeeNotificationResponse notification)
     {
-        _ = Dispatcher.InvokeAsync(async () =>
+        _ = Dispatcher.InvokeAsync(() => RefreshAfterRealtimeNotification(notification));
+    }
+
+    private async void RefreshAfterRealtimeNotification(EmployeeNotificationResponse notification)
+    {
+        await RunAsync(async () =>
         {
             MessageText.Text = $"New notification: {notification.Title}";
             await RefreshNotificationsAsync();
@@ -288,6 +306,31 @@ public partial class MainWindow : Window
 
     private async void RefreshMonitoringPolicyButton_Click(object sender, RoutedEventArgs e)
         => await RunAsync(RefreshMonitoringPolicyAsync);
+
+    private async void WorkspaceFilter_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_api.IsAuthenticated)
+        {
+            return;
+        }
+
+        Func<Task>? refresh = ReferenceEquals(sender, IncludeClosedTasksBox)
+            ? RefreshTasksAsync
+            : ReferenceEquals(sender, IncludeClosedWebsiteWorkBox)
+                ? RefreshWebsiteWorkAsync
+                : ReferenceEquals(sender, IncludeInactiveSurveysBox)
+                    ? RefreshSurveysAsync
+                    : ReferenceEquals(sender, UnreadNotificationsOnlyBox)
+                        ? RefreshNotificationsAsync
+                        : ReferenceEquals(sender, IncludeInactiveAccessBox)
+                            ? RefreshAccessAsync
+                            : null;
+
+        if (refresh is not null)
+        {
+            await RunAsync(refresh);
+        }
+    }
 
     private async void MarkNotificationReadButton_Click(object sender, RoutedEventArgs e)
     {
