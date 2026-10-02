@@ -122,6 +122,14 @@ jobs:
         shell: bash
         run: bash scripts/production/deploy.sh deploy/production/production.ci.env
 
+      - name: Verify one-shot production SuperAdmin bootstrap
+        shell: bash
+        run: |
+          printf 'CI-only-bootstrap-password-123!\nCI-only-bootstrap-password-123!\n' | \
+            bash scripts/production/bootstrap-admin.sh \
+              --env deploy/production/production.ci.env \
+              --email ci-superadmin@example.invalid
+
       - name: Verify PostgreSQL backup and restore actually restores data
         shell: bash
         run: |
@@ -252,7 +260,7 @@ jobs:
         run: |
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\start-admin-local.ps1 -ValidateOnly -DatabaseMode Auto
           if ($LASTEXITCODE -ne 0) { throw 'Auto launcher validation failed.' }
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\start-admin-local.ps1 -ValidateOnly -DatabaseMode Native
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\start-admin-local.ps1 -ValidateOnly -DatabaseMode Native -PostgresPort 55432
           if ($LASTEXITCODE -ne 0) { throw 'Native launcher validation failed.' }
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\start-admin-local.ps1 -ValidateOnly -DatabaseMode Docker
           if ($LASTEXITCODE -ne 0) { throw 'Docker launcher validation failed.' }
