@@ -141,9 +141,10 @@ if (-not $AllowUnsignedDevelopmentBuild) {
 }
 
 $serviceExisted = $null -ne (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)
-& schtasks.exe /Query /TN $taskName 2>$null | Out-Null
-$updateTaskExisted = $LASTEXITCODE -eq 0
-& schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
+$updateTaskExisted = $null -ne (Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue)
+if ($updateTaskExisted) {
+    Unregister-ScheduledTask -TaskName $taskName -TaskPath '\' -Confirm:$false -ErrorAction Stop
+}
 Stop-TaskMonitoringEmployeeService -ServiceName $serviceName
 
 $activatedNewInstall = $false
@@ -330,7 +331,10 @@ try {
 }
 catch {
     Write-Warning "Installation failed. Attempting rollback: $($_.Exception.Message)"
-    & schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
+    $failedUpdateTask = Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue
+    if ($null -ne $failedUpdateTask) {
+        Unregister-ScheduledTask -TaskName $taskName -TaskPath '\' -Confirm:$false -ErrorAction SilentlyContinue
+    }
     try { Stop-TaskMonitoringEmployeeService -ServiceName $serviceName } catch { }
 
     if (-not $serviceExisted -and $null -ne (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)) {

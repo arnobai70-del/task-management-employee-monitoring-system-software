@@ -55,7 +55,8 @@ function Assert-InstalledVersion([string]$Expected) {
 try {
     Start-Sleep -Seconds 2
     $manifestUrl = "http://127.0.0.1:$UpdateHostPort/stable/release.json"
-    & (Join-Path $initialRelease 'install-employee-windows.ps1') `
+    $installerPath = Join-Path $initialRelease 'install-employee-windows.ps1'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installerPath `
         -ReleaseDirectory $initialRelease `
         -ServerUrl 'http://127.0.0.1:65534' `
         -UpdateManifestUrl $manifestUrl `
@@ -65,6 +66,9 @@ try {
         -AllowHttpForDevelopment `
         -SkipServerHealthCheck `
         -NoPublicDesktopShortcut
+    if ($LASTEXITCODE -ne 0) {
+        throw "Initial Windows PowerShell installation exited with code $LASTEXITCODE."
+    }
 
     Assert-InstalledVersion -Expected ([string]$initialManifest.version)
     if ((Get-Service -Name $serviceName).Status -ne 'Running') {
