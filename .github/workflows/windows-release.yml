@@ -74,20 +74,24 @@ jobs:
       - name: Build release bundle
         shell: pwsh
         run: |
-          $common = @(
-            '-Version', '${{ inputs.version }}',
-            '-Channel', '${{ inputs.channel }}',
-            '-ServerUrl', '${{ inputs.server_url }}',
-            '-PackageBaseUrl', '${{ inputs.package_base_url }}',
-            '-OutputRoot', '${{ runner.temp }}\employee-release'
-          )
           if ('${{ inputs.release_mode }}' -eq 'signed-production') {
-            ./scripts/windows/build-employee-release.ps1 @common `
+            ./scripts/windows/build-employee-release.ps1 `
+              -Version '${{ inputs.version }}' `
+              -Channel '${{ inputs.channel }}' `
+              -ServerUrl '${{ inputs.server_url }}' `
+              -PackageBaseUrl '${{ inputs.package_base_url }}' `
+              -OutputRoot '${{ runner.temp }}\employee-release' `
               -PfxPath '${{ steps.signing.outputs.pfx }}' `
               -PfxPassword $env:WINDOWS_SIGNING_PFX_PASSWORD
           }
           else {
-            ./scripts/windows/build-employee-release.ps1 @common -AllowUnsignedDevelopmentBuild
+            ./scripts/windows/build-employee-release.ps1 `
+              -Version '${{ inputs.version }}' `
+              -Channel '${{ inputs.channel }}' `
+              -ServerUrl '${{ inputs.server_url }}' `
+              -PackageBaseUrl '${{ inputs.package_base_url }}' `
+              -OutputRoot '${{ runner.temp }}\employee-release' `
+              -AllowUnsignedDevelopmentBuild
           }
 
       - name: Build standalone setup EXE
