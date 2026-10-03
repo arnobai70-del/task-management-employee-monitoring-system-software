@@ -234,18 +234,18 @@ try {
 
     $installedServiceExe = Join-Path $InstallRoot 'Service\TaskMonitoring.EmployeeService.exe'
     if ($serviceExisted) {
-        & sc.exe config $serviceName binPath= ('\"{0}\"' -f $installedServiceExe) start= delayed-auto | Out-Null
+        & sc.exe config $serviceName binPath= ('"{0}"' -f $installedServiceExe) start= delayed-auto | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'Failed to update Windows service configuration.' }
     }
     else {
-        New-Service -Name $serviceName -BinaryPathName ('\"{0}\"' -f $installedServiceExe) -DisplayName 'TaskMonitoring Employee Service' -StartupType Automatic
+        New-Service -Name $serviceName -BinaryPathName ('"{0}"' -f $installedServiceExe) -DisplayName 'TaskMonitoring Employee Service' -StartupType Automatic
         & sc.exe config $serviceName start= delayed-auto | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'Failed to configure delayed automatic service startup.' }
     }
 
     & sc.exe description $serviceName 'Visible TaskMonitoring service for approved API reachability and service-health heartbeat.' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Failed to configure service description.' }
-    & sc.exe failure $serviceName reset= 86400 actions= restart/5000/restart/15000/\"\"/0 | Out-Null
+    & sc.exe failure $serviceName reset= 86400 actions= restart/5000/restart/15000/""/0 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Failed to configure service recovery actions.' }
     & sc.exe failureflag $serviceName 1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Failed to enable service recovery actions.' }
@@ -301,12 +301,12 @@ try {
     if (-not $DisableAutoUpdate) {
         if ($centralUpdatesEnabled) {
             $centralRunner = Join-Path $maintenanceRoot 'run-central-agent-update.ps1'
-            $taskCommand = ('powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{0}\" -ProgramDataRoot \"{1}\"' -f $centralRunner, $ProgramDataRoot)
+            $taskCommand = ('powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -ProgramDataRoot "{1}"' -f $centralRunner, $ProgramDataRoot)
             & schtasks.exe /Create /TN $taskName /TR $taskCommand /SC HOURLY /MO 1 /RU SYSTEM /RL HIGHEST /F | Out-Null
         }
         else {
             $updaterExe = Join-Path $updaterRoot 'TaskMonitoring.EmployeeUpdater.exe'
-            $taskCommand = ('\"{0}\" --settings \"{1}\"' -f $updaterExe, $updateSettingsPath)
+            $taskCommand = ('"{0}" --settings "{1}"' -f $updaterExe, $updateSettingsPath)
             & schtasks.exe /Create /TN $taskName /TR $taskCommand /SC HOURLY /MO 4 /RU SYSTEM /RL HIGHEST /F | Out-Null
         }
         if ($LASTEXITCODE -ne 0) { throw 'Failed to create the automatic update scheduled task.' }
@@ -318,7 +318,7 @@ try {
     New-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value ([string]$manifest.version) -PropertyType String -Force | Out-Null
     New-ItemProperty -Path $uninstallKey -Name Publisher -Value 'TaskMonitoring' -PropertyType String -Force | Out-Null
     New-ItemProperty -Path $uninstallKey -Name InstallLocation -Value $InstallRoot -PropertyType String -Force | Out-Null
-    $uninstallCommand = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"{0}\" -InstallRoot \"{1}\" -ProgramDataRoot \"{2}\"' -f (Join-Path $maintenanceRoot 'uninstall-employee-windows.ps1'), $InstallRoot, $ProgramDataRoot
+    $uninstallCommand = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{0}" -InstallRoot "{1}" -ProgramDataRoot "{2}"' -f (Join-Path $maintenanceRoot 'uninstall-employee-windows.ps1'), $InstallRoot, $ProgramDataRoot
     New-ItemProperty -Path $uninstallKey -Name UninstallString -Value $uninstallCommand -PropertyType String -Force | Out-Null
     New-ItemProperty -Path $uninstallKey -Name NoModify -Value 1 -PropertyType DWord -Force | Out-Null
     New-ItemProperty -Path $uninstallKey -Name NoRepair -Value 1 -PropertyType DWord -Force | Out-Null
@@ -394,13 +394,13 @@ catch {
         if ((Test-Path $deviceSecretPath -PathType Leaf) -and
             (Test-Path $restoredCentralRunner -PathType Leaf) -and
             (Test-Path $updateSettingsPath -PathType Leaf)) {
-            $restoredTaskCommand = ('powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{0}\" -ProgramDataRoot \"{1}\"' -f $restoredCentralRunner, $ProgramDataRoot)
+            $restoredTaskCommand = ('powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -ProgramDataRoot "{1}"' -f $restoredCentralRunner, $ProgramDataRoot)
             & schtasks.exe /Create /TN $taskName /TR $restoredTaskCommand /SC HOURLY /MO 1 /RU SYSTEM /RL HIGHEST /F | Out-Null
         }
         else {
             $restoredUpdaterExe = Join-Path $updaterRoot 'TaskMonitoring.EmployeeUpdater.exe'
             if ((Test-Path $restoredUpdaterExe -PathType Leaf) -and (Test-Path $updateSettingsPath -PathType Leaf)) {
-                $restoredTaskCommand = ('\"{0}\" --settings \"{1}\"' -f $restoredUpdaterExe, $updateSettingsPath)
+                $restoredTaskCommand = ('"{0}" --settings "{1}"' -f $restoredUpdaterExe, $updateSettingsPath)
                 & schtasks.exe /Create /TN $taskName /TR $restoredTaskCommand /SC HOURLY /MO 4 /RU SYSTEM /RL HIGHEST /F | Out-Null
             }
         }
