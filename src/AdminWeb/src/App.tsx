@@ -8,6 +8,7 @@ import EscalationSlaAnalyticsPage from './EscalationSlaAnalytics';
 import OperationsDashboardPage from './OperationsDashboard';
 import SecurityAlertsPage from './SecurityAlerts';
 import SecurityAlertRealtimeNotice from './SecurityAlertRealtimeNotice';
+import { StatusRail } from './StatusRail';
 import { DepartmentManagementPage, EmployeeManagementPage } from './EmployeeDepartmentManagement';
 import PresencePanel from './PresencePanel';
 import ProductivityReportsPage from './ProductivityReports';
@@ -154,6 +155,7 @@ function AppShell({ children }: { children: ReactNode }) {
             <button className="ghost-button" type="button" onClick={() => void signOut()}>Sign out</button>
           </div>
         </header>
+        <StatusRail />
         <main className="content">{children}</main>
       </div>
       <WebsiteWorkRealtimeNotice />

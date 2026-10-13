@@ -1,0 +1,43 @@
+P5 / G-33 — live status pills overlapping each other and the page header
+Date: 2026-10-14 (UTC 2026-10-13T23:58Z)
+Branch: fix/admin-web-status-pill-rail, base main (after #76)
+
+Defect (VERIFIED BUG, P3, UI):
+  Four realtime components each placed a pill with hard-coded position: fixed offsets:
+    OperationsIncidentRealtimeNotice.tsx  right:170 top:76
+    SecurityAlertRealtimeNotice.tsx       right:24  top:76
+    WebsiteWorkRealtimeNotice.tsx         Notifications right:20 top:76; Follow-ups right:20 top:76/116
+  Security and Notifications occupy the same box at every width, and on narrow screens the
+  pills cover the page eyebrow and title.
+
+Fix:
+  New StatusRail.tsx: one rail element under the top bar (sticky on desktop, in-flow below 820 px);
+  each pill is portalled into it, so pills wrap instead of stacking. No data, API or permission change.
+
+Method:
+  scripts/audit/status-rail-overlap.mjs, Playwright 1.56.1 + Chromium, Vite dev server.
+  Every /api call is mocked with synthetic counts (incidents 2/1 critical, security 3/1 critical,
+  notifications 4 unread, follow-ups 3/1 overdue); realtime hub aborted; fictional user
+  admin@example.test with SuperAdmin permissions. Page /departments. Measures bounding-box
+  intersections between pills and header elements (eyebrow, h1, header buttons, top bar).
+
+Results — before (main):
+  320px  overlaps=5 [Notifications x Security; Notifications x Organization; Follow-ups x Departments; Security x Organization; Incidents x Organization]
+  375px  overlaps=5 (same)
+  768px  overlaps=5 (same)
+  1024px overlaps=3 [Notifications x Security; Follow-ups x Organization; Follow-ups x Departments]
+  1440px overlaps=1 [Notifications x Security]
+
+Results — after (this branch):
+  320px  pills=4 overlaps=0 overflowX=false
+  375px  pills=4 overlaps=0 overflowX=false
+  768px  pills=4 overlaps=0 overflowX=false
+  1024px pills=4 overlaps=0 overflowX=false
+  1440px pills=4 overlaps=0 overflowX=false
+
+Screenshots: P5-status-rail-{before,after}-{375,1440}.png (synthetic data only)
+Build: npm run build (tsc + vite) PASS.
+
+Not covered: real backend data; dark theme (not built yet); other Phase 5 items in DESIGN_SYSTEM.md.
+Side observation (OPPORTUNITY G-34): four separate SignalR connections per admin tab
+(PresencePanel, OperationsIncidentRealtimeNotice, SecurityAlertRealtimeNotice, WebsiteWorkRealtimeNotice).

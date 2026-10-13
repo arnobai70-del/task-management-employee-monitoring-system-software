@@ -50,7 +50,7 @@ All timestamps UTC.
 ## Not yet run (planned)
 | Area | Reason | Phase |
 | --- | --- | --- |
-| Browser E2E / RBAC / visual regression | No suite exists yet (G-17) | 5, 10 |
+| Browser E2E / RBAC / visual regression | No suite exists yet (G-17); first layout check `scripts/audit/status-rail-overlap.mjs` (G-33, 5 widths, mocked API) | 5, 10 |
 | Signed Windows release | BLOCKED — no signing certificate | 9 |
 | RDP two-user isolation | BLOCKED — no Windows Server RDP host | 7 |
 | Production smoke / restore rehearsal on real host | BLOCKED — no production access | 9 |

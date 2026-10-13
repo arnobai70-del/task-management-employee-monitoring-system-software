@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { apiFetch, apiUrl, getValidAccessToken } from './api';
 import { useAuth } from './auth';
+import { StatusRailItem } from './StatusRail';
 
 interface IncidentSummary {
   open: number;
@@ -100,22 +101,15 @@ export default function OperationsIncidentRealtimeNotice() {
       )}
 
       {allowed && activeCount > 0 && (
-        <NavLink
-          to="/operations"
-          className={`status-badge status-${(summary?.openCritical ?? 0) > 0 ? 'urgent' : 'warning'}`}
-          aria-label={`${activeCount} active operations incidents, ${summary?.openCritical ?? 0} critical`}
-          style={{
-            position: 'fixed',
-            right: 170,
-            top: 76,
-            zIndex: 30,
-            textDecoration: 'none',
-            padding: '8px 12px',
-            boxShadow: '0 8px 24px rgba(0,0,0,.16)'
-          }}
-        >
-          Incidents {activeCount}{(summary?.openCritical ?? 0) > 0 ? ` · ${summary!.openCritical} critical` : ''}
-        </NavLink>
+        <StatusRailItem>
+          <NavLink
+            to="/operations"
+            className={`status-badge rail-pill status-${(summary?.openCritical ?? 0) > 0 ? 'urgent' : 'warning'}`}
+            aria-label={`${activeCount} active operations incidents, ${summary?.openCritical ?? 0} critical`}
+          >
+            Incidents {activeCount}{(summary?.openCritical ?? 0) > 0 ? ` · ${summary!.openCritical} critical` : ''}
+          </NavLink>
+        </StatusRailItem>
       )}
     </>
   );
