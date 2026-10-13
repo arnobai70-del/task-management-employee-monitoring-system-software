@@ -1,0 +1,26 @@
+# G-28 browser and live-service check (synthetic data only)
+# Stack: API from main ba1557a via `dotnet run` (sdk:10.0 container) on a scratch PostgreSQL DB tm_ui_check,
+#        AdminWeb Vite dev server, Chromium (Playwright 1.56.1), timezone Asia/Dhaka
+# Data: one fictional employee "Rahim Uddin", Day Shift 09:00-17:00 Asia/Dhaka,
+#       Oct 11 session closed by employee at 16:00, Oct 12 session left open (forgotten checkout)
+
+## Correct form (desktop 1366x860)
+- Attendance list shows a "Closed by" column and a Correct action for SuperAdmin (attendance.manage)
+- Correct pre-fills local check-in 2026-10-11T09:20 and check-out 2026-10-11T16:00
+- Set check-out to 16:30 with reason "Left at 16:30, confirmed by supervisor" -> success banner, row shows "Corrected", check-out 4:30 PM
+- DB after: EndedAtUtc 2026-10-11 10:30Z, EarlyLeaveMinutes 30, ClosureSource AdminCorrection, reason stored
+- Screenshots: G28-ui-correct-form.png, G28-ui-after-correction.png
+- Note: the seeded Oct 11 row had TotalBreakMinutes=30 without break rows; the correction recomputed it from break rows (0). Real sessions always keep the two in step (EndBreakAsync adds each break), so this is a seed artifact, not a defect.
+
+## Background auto-close (live hosted service, default 240 min / 300 s scan)
+- Oct 12 session (scheduled end 2026-10-12 11:00Z) closed by the scan within one interval:
+  EndedAtUtc 2026-10-12 11:00Z, ClosureSource AutoClosed
+- audit_logs: attendance.auto_closed with ActorUserId NULL
+- API log: "Automatically closed 1 work sessions past the scheduled shift end."
+
+## Mobile (390x844, fresh load)
+- No horizontal overflow (scrollWidth - innerWidth = 0); navigation collapses to a menu button
+- Phase 5 polish item: the "Incidents" pill overlaps the page eyebrow label on narrow screens
+
+## Console
+- SignalR "negotiation stopped" errors appear only when the script forces a full page reload mid-negotiation (page.goto); to be re-checked in the Phase 5 browser pass with client-side navigation.
