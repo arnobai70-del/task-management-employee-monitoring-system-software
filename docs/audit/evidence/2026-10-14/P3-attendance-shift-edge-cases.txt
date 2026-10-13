@@ -1,0 +1,34 @@
+# Phase 3 attendance/shift edge cases (G-06)
+# Base: main 6b2198a + tests/Backend.Tests/AttendanceShiftEdgeCaseTests.cs
+# Env: mcr.microsoft.com/dotnet/sdk:10.0 container, InMemory provider, server clock injected via TimeProvider
+# Run: 2026-10-13T23:20:42Z
+
+Running tests from /src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64)
+/src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64) passed (2s 393ms)
+  total: 13
+  failed: 0
+  succeeded: 13
+
+# Per-test outcomes (TRX report)
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Break_and_checkout_actions_require_an_open_session_and_breaks_cannot_nest
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Forgotten_checkout_keeps_session_open_until_the_employee_checks_out_next_day
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Night_shift_2030_to_0900_full_night_with_two_breaks_records_late_break_and_no_early_leave
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Night_shift_check_in_after_midnight_belongs_to_previous_work_date_with_full_lateness
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Night_shift_checkout_at_0800_records_sixty_minutes_early_leave
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Night_shift_from_2030_ends_on_the_next_local_day(endHour: 10, endMinute: 0, expectedEndUtc: "2026-10-02T04:00:00Z")
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Night_shift_from_2030_ends_on_the_next_local_day(endHour: 9, endMinute: 0, expectedEndUtc: "2026-10-02T03:00:00Z")
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Night_shift_from_2030_ends_on_the_next_local_day(endHour: 9, endMinute: 30, expectedEndUtc: "2026-10-02T03:30:00Z")
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Night_shift_rejects_check_in_before_start_and_after_end
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Overnight_shift_across_fall_back_is_nine_hours
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Overnight_shift_across_spring_forward_is_seven_hours
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Second_check_in_after_checkout_in_the_same_night_is_rejected
+Passed  Backend.Tests.AttendanceShiftEdgeCaseTests.Shift_starting_in_the_spring_forward_gap_cannot_be_resolved_on_that_day
+
+# Full backend suite on same tree (local PostgreSQL 16, fresh task_monitoring_tests DB)
+
+Test run summary: Passed!
+  total: 155
+  failed: 0
+  succeeded: 155
+  skipped: 0
+  duration: 7s 836ms
