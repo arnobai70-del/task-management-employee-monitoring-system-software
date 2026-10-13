@@ -28,8 +28,18 @@ All timestamps UTC.
 | R-02 (G-22) | `scripts/audit/signalr-expiry.mjs` | `Jwt__AccessTokenMinutes=1`, wait 150 s, no refresh | L | Socket still `Connected` after expiry | 2026-10-13 22:47–22:50 | [F02 log](evidence/2026-10-13/F02-signalr-expiry-before-fix.txt) |
 | R-03 (G-23) | `Export_neutralizes_spreadsheet_formula_cells_from_untrusted_audit_fields` | User-Agent `=HYPERLINK(...)`, TargetId `@SUM(1+1)`, `+1`, `-2+3` | L | FAIL as expected: raw `=HYPERLINK(` in CSV | 2026-10-13 22:45 | [F03 log](evidence/2026-10-13/F03-csv-injection-before-fix.txt) |
 
-## After fix (branch `fix/phase2-auth-realtime-export-hardening`)
-Recorded in that PR (`docs/audit/evidence/2026-10-13/*-after-fix.txt`) so that this matrix only references committed evidence.
+## After fix (#69 / #70)
+
+| # | Test | Input | Env | Result | Timestamp | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| A-01 (G-21/22/23) | Full backend suite | fresh PostgreSQL DB | L | PASS 142/142 (139 + 3 new) | 2026-10-13 22:53 | [backend-after-fix.txt](evidence/2026-10-13/backend-after-fix.txt) |
+| A-02 (G-21) | `RefreshTokenConcurrencyTests` ×5 | 8 concurrent refreshes | L | PASS 5/5 (exactly one success each run) | 2026-10-13 22:53 | same |
+| A-03 (G-21/G-23) | `AuthServiceTests` (4), `Export_neutralizes_*` | — | L | PASS | 2026-10-13 23:00 | [F01-F03-unit-after-fix.txt](evidence/2026-10-13/F01-F03-unit-after-fix.txt) |
+| A-04 (G-22) | `signalr-expiry.mjs` | 1-min tokens, no refresh | L | Server closed socket at expiry (22:55:32) | 2026-10-13 22:54–22:57 | [F02-signalr-expiry-after-fix.txt](evidence/2026-10-13/F02-signalr-expiry-after-fix.txt) |
+| A-05 (G-22) | `signalr-reconnect.mjs` | 1-min tokens, refreshing factory | L | Reconnected twice with fresh tokens, final state Connected | 2026-10-13 22:54–22:57 | [F02-signalr-reconnect-after-fix.txt](evidence/2026-10-13/F02-signalr-reconnect-after-fix.txt) |
+| A-06 | CI on #69 head `b487248` (backend, admin web, production acceptance, Windows lifecycle) | PR | CI | PASS 4/4 | 2026-10-13 23:04–23:06 | [run 38481932114](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/38481932114) |
+| A-07 (G-20) | CI on #70 head `0fca207` with `npm ci` | PR | CI | Admin web, backend, production acceptance PASS; Windows jobs still running when the PR was merged | 2026-10-13 23:05–23:06 | [run 38482050415](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/38482050415) |
+| A-08 | CI on main after merges (`d429854`, `a500158`, `10c5102`) — backend, admin web (`npm ci`), production acceptance, Windows lifecycle | push | CI | PASS on all three merge commits, 4/4 jobs each | 2026-10-13 23:06–23:10 | [run 38482189177](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/38482189177), [38482168811](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/38482168811), [38482132213](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/38482132213) |
 
 ## Not yet run (planned)
 | Area | Reason | Phase |

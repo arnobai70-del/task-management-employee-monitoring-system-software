@@ -7,7 +7,7 @@
 | Baseline commit | `main` @ `c38dca3fee7c0452d1e381edbe9be22f530b44e6` ("fix: allow first Windows install without existing update task (#67)", 2026-10-03) |
 | Baseline CI | [CI run #344 — success](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/37138451220), [Windows Employee Release #3 — success](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/37138971995) |
 | Auditor | Claude Code (autonomous, GitHub-connected Linux container) |
-| Status | Phase 0 complete, Phase 1 complete for everything runnable on Linux; Phase 2 started (3 verified bugs fixed in a separate PR) |
+| Status | Phase 0 and Phase 1 complete (Linux scope). Phase 2 in progress: G-20…G-23 fixed and merged (#69, #70). Old PRs #9/#24 closed as superseded. Nothing deployed. |
 
 Status vocabulary used everywhere in `docs/audit/`:
 
@@ -77,7 +77,7 @@ Permission catalog (`Security/PermissionCatalog.cs`): 34 permissions incl. `pres
 | [#24](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/pull/24) website work completion review | `eafc571` | base `b6def04`; main 55 ahead; conflicts | Superseded. Same title merged to main as `6d40aea` (2026-09-30). Main's `WebsiteWorkReviewService.cs` has since evolved (diff vs PR: 278+/383−). Approve/Reopen/Submit endpoints exist in `WebsiteWorkController.cs:99,107,180`. | Close as superseded by `6d40aea`. |
 | [#17](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/pull/17) private observability stack | `59203d1` | base `e027467`; main 61 ahead; conflicts | **Not** superseded. Main has no OTLP/Prometheus/Loki/Grafana overlay (`grep OpenTelemetry` → none). Main does have in-app operations/security observability (`OperationsHealthService`, `SecurityObservabilityService`), which the overlay must not duplicate. | Keep open; rebase onto main and re-run CI in a dedicated Phase 8 PR. Not deployed (G-15). |
 
-No PR was merged or closed by this audit.
+**Outcome (2026-10-13):** on the owner's decision, #9 and #24 were closed with a comment naming the replacing commits; their branches are kept. #17 remains open for a Phase 8 rebase.
 
 ## 5. Environment used for evidence
 
@@ -93,19 +93,19 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 - **Where:** `src/Backend/TaskMonitoring.Api/Services/AuthService.cs:88-128` (`RefreshAsync` reads, checks `IsRevoked`, then saves without a concurrency guard).
 - **Repro:** `tests/Backend.Tests/RefreshTokenConcurrencyTests.cs` (real PostgreSQL) sends 8 simultaneous refreshes with one token. Before fix: **5, 7, 7 successful rotations** in three runs (expected 1). [log](evidence/2026-10-13/F01-refresh-race-before-fix.txt)
 - **Impact:** a stolen refresh token raced against the legitimate client yields independent valid sessions; one-time-use rotation is not enforced.
-- **Fix:** optimistic concurrency token on `refresh_tokens.RevokedAtUtc` (no schema change; EF drift check clean); losing request gets `409 refresh_conflict` and no tokens; a token re-presented within 15 s of its own rotation is treated as a client race (409) rather than theft, older replays still revoke the family. Admin Web retries once after 750 ms. **Status: FIXED in PR `fix/phase2-auth-realtime-export-hardening`.**
+- **Fix:** optimistic concurrency token on `refresh_tokens.RevokedAtUtc` (no schema change; EF drift check clean); losing request gets `409 refresh_conflict` and no tokens; a token re-presented within 15 s of its own rotation is treated as a client race (409) rather than theft, older replays still revoke the family. Admin Web retries once after 750 ms. **Status: FIXED — merged in [#69](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/pull/69) (merge `a500158`); PR CI green ([run 38481932114](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/38481932114)). Not deployed.**
 
 ### F-02 SignalR connections outlive token expiry and account disable — VERIFIED BUG, P1 (G-22)
 - **Where:** `Program.cs:303` maps the hub without `CloseOnAuthenticationExpiration`; `Hubs/RealtimeHub.cs:106-148` assigns permission groups (presence, operations, security alerts, task managers) only at connect time.
 - **Repro:** `scripts/audit/signalr-expiry.mjs` with `Jwt__AccessTokenMinutes=1`: socket still `Connected` 150 s after the token expired. [log](evidence/2026-10-13/F02-signalr-expiry-before-fix.txt)
 - **Impact:** a deactivated user, or one whose permission was removed, keeps receiving presence/security-alert broadcasts until they close the tab.
-- **Fix:** `CloseOnAuthenticationExpiration = true`; existing clients already use `withAutomaticReconnect` + token factory and reconnect with fresh claims (verified, see TEST_MATRIX). **Status: FIXED in the same PR.**
+- **Fix:** `CloseOnAuthenticationExpiration = true`; existing clients already use `withAutomaticReconnect` + token factory and reconnect with fresh claims (verified, see TEST_MATRIX). **Status: FIXED — merged in #69. Not deployed.**
 
 ### F-03 CSV/formula injection in audit and report exports — VERIFIED BUG, P1 (G-23)
 - **Where:** `Services/SecurityObservabilityService.cs:302-306` (`Csv()` only escapes quotes); `src/AdminWeb/src/ProductivityReports.tsx:141`, `EscalationSlaAnalytics.tsx:92`.
 - **Attack path:** any unauthenticated client sets `User-Agent: =HYPERLINK(...)` on a failed login → stored in `audit_logs.UserAgent` (`AuthService.cs:43`) → exported by an auditor → evaluated by Excel/LibreOffice.
 - **Repro:** `SecurityObservabilityServiceTests.Export_neutralizes_spreadsheet_formula_cells_from_untrusted_audit_fields` failed before the fix. [log](evidence/2026-10-13/F03-csv-injection-before-fix.txt)
-- **Fix:** prefix `'` to text cells starting with `= + - @ \t \r` (server and both client exporters; numeric cells unchanged). **Status: FIXED in the same PR.**
+- **Fix:** prefix `'` to text cells starting with `= + - @ \t \r` (server and both client exporters; numeric cells unchanged). **Status: FIXED — merged in #69. Not deployed.**
 
 ### F-04 Rate-limit rejections each write an audit row — RISK, P2 (G-24)
 - `Program.cs:207-236`: every 429 performs a synchronous DB insert. A flood against `/api/auth/*` turns rate limiting into DB write amplification. Suggest: sample/aggregate (e.g. one row per partition per window). Not changed yet.
@@ -117,7 +117,7 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 - `docs/admin-web.md:33-49` described JSON refresh tokens in `sessionStorage`. Corrected in this PR. Remaining exposure: the 15-minute **access** token is still in `sessionStorage` (XSS-readable); mitigated by CSP `script-src 'self'`. Kept as RISK.
 
 ### F-07 No committed Admin Web lockfile — VERIFIED, P1 (G-20)
-- `src/AdminWeb` has no `package-lock.json`; CI uses `npm install`. Exact dependency tree differs per build. Fix: commit lockfile, switch CI to `npm ci`. Separate PR.
+- `src/AdminWeb` has no `package-lock.json`; CI uses `npm install`. Exact dependency tree differs per build. **Status: FIXED — merged in [#70](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/pull/70) (`10c5102`).**
 
 ### F-08 Migration test is not re-runnable on a used database — VERIFIED, P2 (G-26)
 - `tests/Backend.Tests/DatabaseMigrationTests.cs` inserts fixed rows (`migration-test@example.com`, `MIG-001`); a second run on the same database fails. CI is unaffected (fresh service container). Suggest a unique database per run.
@@ -132,8 +132,8 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 | Phase | Status | Next action |
 | --- | --- | --- |
 | 0 Discovery | DONE | — |
-| 1 Build/tests | DONE (Linux scope); Windows via CI | lockfile PR; licence scan |
-| 2 Security & data integrity | IN PROGRESS — F-01/F-02/F-03 fixed in PR | RBAC A/B matrix tests (G-10), F-04/F-05, backup encryption review |
+| 1 Build/tests | DONE (Linux scope); Windows via CI; lockfile merged (#70) | licence scan |
+| 2 Security & data integrity | IN PROGRESS — F-01/F-02/F-03 fixed and merged (#69) | RBAC A/B matrix tests (G-10), F-04/F-05, backup encryption review |
 | 3 Attendance/breaks | NOT STARTED — existing tests cover duplicate check-in, open break blocks checkout, overnight work date | add 20:30→09:00/09:30/10:00, DST, retry/idempotency tests |
 | 4 Tasks/Website Work | NOT STARTED — PR #24 superseded | SignalR durable fallback tests |
 | 5 UI redesign | NOT STARTED — [DESIGN_SYSTEM.md](../ui/DESIGN_SYSTEM.md) draft | route inventory done (§3) |
