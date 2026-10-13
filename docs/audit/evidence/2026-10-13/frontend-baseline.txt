@@ -1,0 +1,9 @@
+# Admin Web build on baseline c38dca3 (Node v22.22.0, npm 10.9.4)
+vite v8.3.1 building client environment for production...
+✓ 76 modules transformed.
+(!) Some chunks are larger than 500 kB after minification. Consider:
+✓ built in 879ms
+npm audit (all deps): found 0 vulnerabilities
+npm audit --omit=dev: found 0 vulnerabilities
+dist/assets/index-*.js raw bytes: 567363 ; gzip bytes: 144003
+dist/assets/index-*.css raw bytes: 23195

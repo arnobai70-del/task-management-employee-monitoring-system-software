@@ -30,23 +30,24 @@ Backend business rules must not be duplicated or weakened in the browser.
 
 ## Authentication and authorization
 
-The backend returns a short-lived JWT access token and an opaque rotating refresh token. The Admin Web stores the current session in `sessionStorage`, not persistent `localStorage`, so closing the browser tab/session removes the local token copy.
+The Admin Web uses the browser-specific auth endpoints. `POST /api/auth/web/login` returns only the short-lived JWT access token in JSON; the opaque rotating refresh token is set by the backend as an `HttpOnly`, `Secure` (outside Development over HTTP), `SameSite=Strict` cookie named `TaskMonitoring.Web.Refresh`, scoped to the path `/api/auth/web` (`AuthController.cs`). JavaScript cannot read the refresh token.
+
+The Admin Web keeps the current access token (and its expiry) in `sessionStorage`, not persistent `localStorage`, so closing the browser tab/session removes the local copy. The access token is still readable by script in that tab, so preventing XSS (CSP `script-src 'self'`, no inline script) remains an important deployment requirement.
 
 The access token is decoded only to drive presentation decisions such as navigation visibility and whether optional panels should connect. Server authorization remains authoritative. Every protected REST request and SignalR handshake still requires a valid backend-issued token.
 
 The client:
 
-1. signs in through `POST /api/auth/login`;
+1. signs in through `POST /api/auth/web/login` (same-origin credentials);
 2. reads server-issued `permission` and role claims from the access token;
 3. hides navigation/write controls the user cannot use;
 4. guards routes and optional live panels using the same permission codes used by backend policies;
-5. refreshes the session when the access token is near expiry or after one `401` response;
-6. stores the rotated refresh token returned by the backend;
-7. supplies a refresh-aware access-token factory to SignalR reconnects;
-8. clears the browser session if refresh fails; and
-9. calls `POST /api/auth/logout` when the user signs out.
+5. refreshes through `POST /api/auth/web/refresh` when the access token is near expiry or after one `401` response; the browser sends the refresh cookie and receives the rotated one;
+6. supplies a refresh-aware access-token factory to SignalR reconnects;
+7. clears the browser session if refresh fails; and
+8. calls `POST /api/auth/web/logout`, which revokes the refresh token and deletes the cookie, when the user signs out.
 
-Because the current backend contract returns refresh tokens in JSON, JavaScript must be able to access the refresh token. A future authentication design may move refresh-token transport to a secure same-site HttpOnly cookie, but that requires an explicit backend contract change. Until then, avoiding persistent browser storage and preventing XSS remain important deployment requirements.
+Native clients (Employee Desktop) use the JSON contract `POST /api/auth/login` / `refresh` / `logout`, keep tokens in process memory and serialize refreshes in-process.
 
 ## Live workforce presence
 

@@ -1,0 +1,29 @@
+# Backend pipeline on baseline c38dca3 (.NET SDK 10.0.401 container, PostgreSQL 16.15 local)
+EXIT tool-restore=0
+EXIT restore=0
+Build succeeded.
+EXIT build=0
+No changes have been made to the model since the last migration.
+EXIT ef-drift=0
+Test run summary: Passed!
+  total: 139
+  failed: 0
+  succeeded: 139
+  skipped: 0
+EXIT test=0
+The given project `TaskMonitoring.Api` has no vulnerable packages given the current sources.
+The given project `Backend.Tests` has no vulnerable packages given the current sources.
+EXIT vuln=0
+Project `TaskMonitoring.Api` has the following updates to its packages
+   Top-level Package                                    Requested   Resolved   Latest 
+   > Microsoft.AspNetCore.Authentication.JwtBearer      10.0.12     10.0.12    10.0.13
+   > Microsoft.AspNetCore.OpenApi                       10.0.12     10.0.12    10.0.13
+   > Microsoft.EntityFrameworkCore                      10.0.12     10.0.12    10.0.13
+   > Microsoft.EntityFrameworkCore.Design               10.0.12     10.0.12    10.0.13
+   > Microsoft.EntityFrameworkCore.Relational           10.0.12     10.0.12    10.0.13
+Project `Backend.Tests` has the following updates to its packages
+   Top-level Package                             Requested   Resolved   Latest 
+   > Microsoft.EntityFrameworkCore.InMemory      10.0.12     10.0.12    10.0.13
+   > Microsoft.NET.Test.Sdk                      18.10.1     18.10.1    18.11.0
+   > xunit.v3                                    4.0.1       4.0.1      4.0.2  
+EXIT outdated=0

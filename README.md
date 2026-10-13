@@ -26,6 +26,10 @@ Development is active. Implemented milestones include:
 
 A production environment still needs organization-specific infrastructure such as HTTPS API/Admin hosting, PostgreSQL backup/restore operations, a stable HTTPS update host, and the organization's code-signing certificate secrets. MSI/MSIX packaging is not currently implemented; the supported production deployment path is the signed self-contained release bundle plus elevated PowerShell installer/updater workflow.
 
+## Audit and quality evidence
+
+The full A-to-Z audit runs from the owner's master plan and is tracked in [`docs/audit/`](docs/audit/PROJECT_AUDIT.md): gap register, feature matrix, threat model, test matrix with committed evidence logs, deployment runbook and release report. Nothing there claims production readiness; every item is marked VERIFIED, RISK, UNKNOWN or BLOCKED with evidence. The tab-only screenshot feature is an RFC draft awaiting written policy approval ([`SCREENSHOT_CAPTURE_RFC.md`](docs/audit/SCREENSHOT_CAPTURE_RFC.md)).
+
 ## Architecture
 
 ```text

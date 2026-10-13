@@ -1,0 +1,25 @@
+Build succeeded.
+failed Backend.Tests.RefreshTokenConcurrencyTests.Concurrent_refreshes_with_the_same_token_issue_at_most_one_replacement (3s 899ms)
+  Assert.Equal() Failure: Values differ
+  Expected: 1
+  Actual:   5
+/src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64) failed with 1 error(s) (4s 682ms)
+  total: 1
+  failed: 1
+  succeeded: 0
+failed Backend.Tests.RefreshTokenConcurrencyTests.Concurrent_refreshes_with_the_same_token_issue_at_most_one_replacement (3s 683ms)
+  Assert.Equal() Failure: Values differ
+  Expected: 1
+  Actual:   7
+/src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64) failed with 1 error(s) (4s 472ms)
+  total: 1
+  failed: 1
+  succeeded: 0
+failed Backend.Tests.RefreshTokenConcurrencyTests.Concurrent_refreshes_with_the_same_token_issue_at_most_one_replacement (3s 629ms)
+  Assert.Equal() Failure: Values differ
+  Expected: 1
+  Actual:   7
+/src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64) failed with 1 error(s) (4s 376ms)
+  total: 1
+  failed: 1
+  succeeded: 0
