@@ -31,9 +31,15 @@ public sealed class AuthController(IAuthService authService, IWebHostEnvironment
     [EnableRateLimiting("auth")]
     [ProducesResponseType<AuthResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiError>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<AuthResponse>> Refresh(RefreshRequest request, CancellationToken cancellationToken)
     {
         var result = await authService.RefreshAsync(request, ClientIp(), Request.Headers.UserAgent.ToString(), cancellationToken);
+        if (result.Status == AuthStatus.RefreshConflict)
+        {
+            return RefreshConflict();
+        }
+
         return ToActionResult(result, "Session is no longer valid. Please sign in again.");
     }
 
@@ -60,6 +66,7 @@ public sealed class AuthController(IAuthService authService, IWebHostEnvironment
     [EnableRateLimiting("auth")]
     [ProducesResponseType<WebAuthResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiError>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<WebAuthResponse>> WebRefresh(CancellationToken cancellationToken)
     {
         var refreshToken = Request.Cookies[WebRefreshCookieName];
@@ -78,6 +85,12 @@ public sealed class AuthController(IAuthService authService, IWebHostEnvironment
         {
             WriteWebRefreshCookie(result.Response.RefreshToken, result.Response.RefreshTokenExpiresAtUtc);
             return Ok(new WebAuthResponse(result.Response.AccessToken, result.Response.AccessTokenExpiresAtUtc));
+        }
+
+        if (result.Status == AuthStatus.RefreshConflict)
+        {
+            // Keep the cookie: the concurrent winner has already written its replacement, which the client may retry with.
+            return RefreshConflict();
         }
 
         DeleteWebRefreshCookie();
@@ -132,6 +145,9 @@ public sealed class AuthController(IAuthService authService, IWebHostEnvironment
 
         return Unauthorized(new ApiError("authentication_failed", message));
     }
+
+    private ObjectResult RefreshConflict()
+        => Conflict(new ApiError("refresh_conflict", "This session was refreshed by another request. Retry once with the latest session."));
 
     private void WriteWebRefreshCookie(string refreshToken, DateTime expiresAtUtc)
     {

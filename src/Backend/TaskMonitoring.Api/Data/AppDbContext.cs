@@ -88,6 +88,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.CreatedByIp).HasMaxLength(64);
             entity.Property(x => x.RevokedByIp).HasMaxLength(64);
             entity.Property(x => x.RevokeReason).HasMaxLength(200);
+            // Rotation must be single-use: a second concurrent revoke of the same token fails instead of minting another session.
+            entity.Property(x => x.RevokedAtUtc).IsConcurrencyToken();
             entity.HasIndex(x => x.TokenHash).IsUnique();
             entity.HasIndex(x => new { x.UserId, x.ExpiresAtUtc });
             entity.HasOne(x => x.User).WithMany(x => x.RefreshTokens).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);

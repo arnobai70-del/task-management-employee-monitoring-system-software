@@ -302,6 +302,12 @@ public sealed class SecurityObservabilityService(
     private static string Csv(string? value)
     {
         var normalized = value ?? string.Empty;
+        // Fields such as User-Agent are attacker-controlled; stop spreadsheets evaluating them as formulas (CWE-1236).
+        if (normalized.Length > 0 && normalized[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+        {
+            normalized = "'" + normalized;
+        }
+
         return $"\"{normalized.Replace("\"", "\"\"")}\"";
     }
 

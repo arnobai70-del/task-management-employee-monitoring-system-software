@@ -111,6 +111,35 @@ public sealed class SecurityObservabilityServiceTests
         await Assert.ThrowsAsync<ArgumentException>(() => service.ExportAsync(now, now.AddDays(-367), cancellationToken));
     }
 
+    [Fact]
+    public async Task Export_neutralizes_spreadsheet_formula_cells_from_untrusted_audit_fields()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var now = DateTime.UtcNow;
+        db.AuditLogs.Add(new AuditLog
+        {
+            Action = "auth.login.failed",
+            TargetType = "User",
+            TargetId = "@SUM(1+1)",
+            UserAgent = "=HYPERLINK(\"https://attacker.invalid\",\"open\")",
+            IpAddress = "+1",
+            MetadataJson = "-2+3",
+            CreatedAtUtc = now.AddMinutes(-5)
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        var export = await CreateService(db).ExportAsync(now.AddDays(-1), now.AddMinutes(1), cancellationToken);
+        var dataRow = System.Text.Encoding.UTF8.GetString(export.Content)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)[1];
+
+        Assert.Contains("\"'=HYPERLINK(", dataRow);
+        Assert.Contains("\"'@SUM(1+1)\"", dataRow);
+        Assert.Contains("\"'+1\"", dataRow);
+        Assert.Contains("\"'-2+3\"", dataRow);
+        Assert.DoesNotContain(",\"=", dataRow);
+    }
+
     private static SecurityObservabilityService CreateService(AppDbContext db)
         => new(
             db,

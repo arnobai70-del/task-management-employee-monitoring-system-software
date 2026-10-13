@@ -1,0 +1,11 @@
+# Backend after fix (branch fix/phase2-auth-realtime-export-hardening), fresh PostgreSQL DB
+Build succeeded.
+  total: 142
+  failed: 0
+  succeeded: 142
+  skipped: 0
+  failed: 0   succeeded: 1  (race run 1)
+  failed: 0   succeeded: 1  (race run 2)
+  failed: 0   succeeded: 1  (race run 3)
+  failed: 0   succeeded: 1  (race run 4)
+  failed: 0   succeeded: 1  (race run 5)
