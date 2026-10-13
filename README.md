@@ -135,7 +135,7 @@ Run locally:
 
 ```bash
 cd src/AdminWeb
-npm install
+npm ci
 npm run dev
 ```
 
@@ -149,7 +149,7 @@ Production build:
 
 ```bash
 cd src/AdminWeb
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 npm run build
 ```
 
@@ -300,7 +300,7 @@ Admin Web:
 
 ```bash
 cd src/AdminWeb
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 npm run build
 ```
 

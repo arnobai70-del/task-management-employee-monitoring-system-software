@@ -103,7 +103,7 @@ Install dependencies and run the Vite development server:
 
 ```bash
 cd src/AdminWeb
-npm install
+npm ci
 npm run dev
 ```
 
@@ -119,7 +119,7 @@ The application uses relative API/hub paths by default. For a deployment where t
 
 ```bash
 cd src/AdminWeb
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 npm run build
 ```
 

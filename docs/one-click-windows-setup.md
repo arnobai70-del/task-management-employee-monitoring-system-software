@@ -18,7 +18,7 @@ The launcher:
 4. requires a configured, gitignored `.env` and refuses placeholder secrets or a bootstrap password shorter than 12 characters;
 5. starts PostgreSQL and waits for container health;
 6. starts the API on `http://127.0.0.1:5080` in Development mode;
-7. runs `npm install` only when Admin Web dependencies are not present;
+7. runs `npm ci` (locked by `package-lock.json`) only when Admin Web dependencies are not present;
 8. starts the Admin Web on `http://127.0.0.1:5173` and opens the browser.
 
 If an old local PostgreSQL volume was initialized with a different password, use the explicit development-only reset once:
