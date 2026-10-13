@@ -11,7 +11,8 @@ public enum AuthStatus
     Success,
     InvalidCredentials,
     AccountUnavailable,
-    InvalidRefreshToken
+    InvalidRefreshToken,
+    RefreshConflict
 }
 
 public sealed record AuthResult(AuthStatus Status, AuthResponse? Response = null);
@@ -31,6 +32,9 @@ public sealed class AuthService(
 {
     private const int MaxFailedLoginAttempts = 5;
     private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
+    // A token presented again this soon after its own rotation is treated as a concurrent client race, not theft.
+    // It never yields new tokens; replays after this window still revoke the whole token family.
+    public static readonly TimeSpan RotationRaceWindow = TimeSpan.FromSeconds(15);
 
     public async Task<AuthResult> LoginAsync(LoginRequest request, string? ipAddress, string? userAgent, CancellationToken cancellationToken)
     {
@@ -102,6 +106,13 @@ public sealed class AuthService(
             return new AuthResult(AuthStatus.InvalidRefreshToken);
         }
 
+        if (existing.IsRevoked &&
+            existing.RevokeReason == "rotated" &&
+            existing.RevokedAtUtc > now - RotationRaceWindow)
+        {
+            return new AuthResult(AuthStatus.RefreshConflict);
+        }
+
         if (existing.IsRevoked)
         {
             await RevokeAllActiveTokensAsync(existing.UserId, "refresh_token_reuse", ipAddress, now, cancellationToken);
@@ -123,7 +134,16 @@ public sealed class AuthService(
         existing.ReplacedByTokenId = replacement.Id;
         dbContext.RefreshTokens.Add(replacement);
         dbContext.AuditLogs.Add(CreateAudit(existing.UserId, "auth.refresh.rotated", "User", existing.UserId.ToString(), null, ipAddress, userAgent, now));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another request rotated or revoked this token first; only that request may receive the replacement.
+            dbContext.ChangeTracker.Clear();
+            return new AuthResult(AuthStatus.RefreshConflict);
+        }
 
         return new AuthResult(AuthStatus.Success, ToResponse(issued));
     }

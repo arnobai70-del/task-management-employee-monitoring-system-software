@@ -41,12 +41,14 @@ public sealed class AuthServiceTests
         var user = CreateUser("manager@example.com", "Correct-Horse-Battery-43");
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken);
-        var service = CreateService(db);
+        var clock = new MutableTimeProvider(DateTime.UtcNow);
+        var service = CreateService(db, clock);
 
         var login = await service.LoginAsync(new LoginRequest(user.Email, "Correct-Horse-Battery-43"), "127.0.0.1", "tests", cancellationToken);
         var firstRefresh = login.Response!.RefreshToken;
         var rotation = await service.RefreshAsync(new RefreshRequest(firstRefresh), "127.0.0.1", "tests", cancellationToken);
         Assert.Equal(AuthStatus.Success, rotation.Status);
+        clock.Advance(AuthService.RotationRaceWindow + TimeSpan.FromSeconds(1));
 
         var reuse = await service.RefreshAsync(new RefreshRequest(firstRefresh), "127.0.0.1", "tests", cancellationToken);
 
@@ -54,6 +56,32 @@ public sealed class AuthServiceTests
         var tokens = await db.RefreshTokens.ToListAsync(cancellationToken);
         Assert.All(tokens, token => Assert.True(token.IsRevoked));
         Assert.Contains(await db.AuditLogs.ToListAsync(cancellationToken), x => x.Action == "auth.refresh.reuse_detected");
+    }
+
+    [Fact]
+    public async Task Reusing_a_just_rotated_token_reports_a_conflict_without_issuing_or_revoking()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var user = CreateUser("tabs@example.com", "Correct-Horse-Battery-47");
+        db.Users.Add(user);
+        await db.SaveChangesAsync(cancellationToken);
+        var clock = new MutableTimeProvider(DateTime.UtcNow);
+        var service = CreateService(db, clock);
+
+        var login = await service.LoginAsync(new LoginRequest(user.Email, "Correct-Horse-Battery-47"), "127.0.0.1", "tests", cancellationToken);
+        var firstRefresh = login.Response!.RefreshToken;
+        var rotation = await service.RefreshAsync(new RefreshRequest(firstRefresh), "127.0.0.1", "tests", cancellationToken);
+        Assert.Equal(AuthStatus.Success, rotation.Status);
+        clock.Advance(TimeSpan.FromSeconds(2));
+
+        var racing = await service.RefreshAsync(new RefreshRequest(firstRefresh), "127.0.0.1", "tests", cancellationToken);
+
+        Assert.Equal(AuthStatus.RefreshConflict, racing.Status);
+        Assert.Null(racing.Response);
+        var stillValid = await service.RefreshAsync(new RefreshRequest(rotation.Response!.RefreshToken), "127.0.0.1", "tests", cancellationToken);
+        Assert.Equal(AuthStatus.Success, stillValid.Status);
+        Assert.DoesNotContain(await db.AuditLogs.ToListAsync(cancellationToken), x => x.Action == "auth.refresh.reuse_detected");
     }
 
     [Fact]
@@ -85,7 +113,7 @@ public sealed class AuthServiceTests
         return new AppDbContext(options);
     }
 
-    private static AuthService CreateService(AppDbContext db)
+    private static AuthService CreateService(AppDbContext db, TimeProvider? timeProvider = null)
     {
         var jwt = Options.Create(new JwtOptions
         {
@@ -96,7 +124,7 @@ public sealed class AuthServiceTests
             RefreshTokenDays = 7
         });
         var passwordHasher = new PasswordHasher<User>();
-        return new AuthService(db, passwordHasher, new TokenService(jwt), TimeProvider.System);
+        return new AuthService(db, passwordHasher, new TokenService(jwt), timeProvider ?? TimeProvider.System);
     }
 
     private static User CreateUser(string email, string password)
@@ -109,5 +137,14 @@ public sealed class AuthServiceTests
         };
         user.PasswordHash = new PasswordHasher<User>().HashPassword(user, password);
         return user;
+    }
+
+    private sealed class MutableTimeProvider(DateTime utcNow) : TimeProvider
+    {
+        private DateTime _utcNow = utcNow;
+
+        public override DateTimeOffset GetUtcNow() => new(_utcNow, TimeSpan.Zero);
+
+        public void Advance(TimeSpan by) => _utcNow = _utcNow.Add(by);
     }
 }

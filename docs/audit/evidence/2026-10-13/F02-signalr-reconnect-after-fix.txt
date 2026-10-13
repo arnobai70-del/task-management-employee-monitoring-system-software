@@ -1,0 +1,9 @@
+2026-10-13T22:54:33.337Z connected
+2026-10-13T22:55:32.337Z reconnecting: n/a
+2026-10-13T22:55:32.515Z refreshed access token, new expiry 2026-10-13T22:56:32.3708148Z
+2026-10-13T22:55:32.526Z reconnected
+2026-10-13T22:56:32.334Z reconnecting: n/a
+2026-10-13T22:56:32.350Z refreshed access token, new expiry 2026-10-13T22:57:32.3398846Z
+2026-10-13T22:56:32.355Z reconnected
+2026-10-13T22:57:03.338Z final state=Connected reconnects=2
+RESULT: client recovered with a fresh token after server-side expiry close

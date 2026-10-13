@@ -90,7 +90,9 @@ function formatMinutes(value: number): string {
 }
 
 function csvCell(value: string | number | boolean): string {
-  const text = String(value);
+  const raw = String(value);
+  // Neutralize spreadsheet formulas in text cells (CWE-1236); numeric cells stay numeric.
+  const text = typeof value === 'string' && /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

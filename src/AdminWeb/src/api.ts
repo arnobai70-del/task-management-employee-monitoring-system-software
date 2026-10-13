@@ -123,10 +123,17 @@ export async function login(email: string, password: string): Promise<AuthSessio
 }
 
 async function requestRefresh(): Promise<AuthSession> {
-  const response = await fetch(`${API_BASE}/api/auth/web/refresh`, {
+  const send = () => fetch(`${API_BASE}/api/auth/web/refresh`, {
     method: 'POST',
     credentials: 'same-origin'
   });
+  let response = await send();
+  // 409: another tab rotated the shared refresh cookie at the same moment. Give its response time to
+  // store the replacement cookie, then retry once; the server never issues tokens for the losing request.
+  if (response.status === 409) {
+    await new Promise(resolve => setTimeout(resolve, 750));
+    response = await send();
+  }
   if (!response.ok) throw await readError(response);
   const refreshed = (await response.json()) as AuthSession;
   saveSession(refreshed);
