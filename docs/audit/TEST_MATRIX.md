@@ -41,12 +41,13 @@ All timestamps UTC.
 | A-07 (G-20) | CI on #70 head `0fca207` with `npm ci` | PR | CI | Admin web, backend, production acceptance PASS; Windows jobs still running when the PR was merged | 2026-10-13 23:05–23:06 | [run 38482050415](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/38482050415) |
 | A-08 | CI on main after merges (`d429854`, `a500158`, `10c5102`) — backend, admin web (`npm ci`), production acceptance, Windows lifecycle | push | CI | PASS on all three merge commits, 4/4 jobs each | 2026-10-13 23:06–23:10 | [run 38482189177](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/38482189177), [38482168811](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/38482168811), [38482132213](https://github.com/arnobai70-del/task-management-employee-monitoring-system-software/actions/runs/38482132213) |
 
+| P3-01 (G-06) | `AttendanceShiftEdgeCaseTests` (13): 20:30→09:00/09:30/10:00 work date and end, two breaks = 45 min, 08:00 checkout = 60 min early leave, after-midnight check-in lateness, before-start/after-end rejection, second check-in same night, break/checkout without session, nested break, forgotten checkout, DST spring-forward 7h / fall-back 9h / gap start | Unit (InMemory, injected clock) | L | PASS 13/13; full suite 155/155 | 2026-10-13 23:21 UTC | [P3-attendance-shift-edge-cases.txt](evidence/2026-10-14/P3-attendance-shift-edge-cases.txt) |
+| P3-02 | Retry / clock skew | Analysis | — | Repeated check-in returns 409 (`work_session_already_open` / `attendance_already_recorded`), never a second session; all times come from the server clock, so client clock skew cannot change work date or lateness | 2026-10-13 | `AttendanceCoreService.cs:300-361` |
+
 ## Not yet run (planned)
 | Area | Reason | Phase |
 | --- | --- | --- |
 | Browser E2E / RBAC / visual regression | No suite exists yet (G-17) | 5, 10 |
-| Employee A/B, Manager A/B authorization matrix | Not written yet (G-10) | 2 |
-| Attendance 20:30→09:00/09:30/10:00, DST, retry/idempotency | Not written yet (G-06) | 3 |
 | Signed Windows release | BLOCKED — no signing certificate | 9 |
 | RDP two-user isolation | BLOCKED — no Windows Server RDP host | 7 |
 | Production smoke / restore rehearsal on real host | BLOCKED — no production access | 9 |
