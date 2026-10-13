@@ -1,0 +1,9 @@
+Build succeeded.
+failed Backend.Tests.SecurityObservabilityServiceTests.Export_neutralizes_spreadsheet_formula_cells_from_untrusted_audit_fields (1s 006ms)
+  Assert.Contains() Failure: Sub-string not found
+  String:    ""5c6d5efe-47fc-4894-9726-c65b602263d6","2026-10-13"···
+  Not found: ""'=HYPERLINK("
+/src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64) failed with 1 error(s) (1s 714ms)
+  total: 1
+  failed: 1
+  succeeded: 0

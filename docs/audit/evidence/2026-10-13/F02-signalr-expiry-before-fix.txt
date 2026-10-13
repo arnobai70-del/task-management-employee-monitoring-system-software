@@ -1,0 +1,5 @@
+2026-10-13T22:47:36.729Z login 200 accessTokenExpiresAtUtc 2026-10-13T22:48:36.4504764Z
+2026-10-13T22:47:36.855Z connected, state = Connected
+2026-10-13T22:50:06.867Z after 150s: tokenExpired=true state=Connected closedAt=never
+RESULT: socket still open after access-token expiry (finding reproduced)
+2026-10-13T22:50:06.869Z server closed connection: no error
