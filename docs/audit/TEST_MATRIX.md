@@ -44,6 +44,9 @@ All timestamps UTC.
 | P3-01 (G-06) | `AttendanceShiftEdgeCaseTests` (13): 20:30→09:00/09:30/10:00 work date and end, two breaks = 45 min, 08:00 checkout = 60 min early leave, after-midnight check-in lateness, before-start/after-end rejection, second check-in same night, break/checkout without session, nested break, forgotten checkout, DST spring-forward 7h / fall-back 9h / gap start | Unit (InMemory, injected clock) | L | PASS 13/13; full suite 155/155 | 2026-10-13 23:21 UTC | [P3-attendance-shift-edge-cases.txt](evidence/2026-10-14/P3-attendance-shift-edge-cases.txt) |
 | P3-02 | Retry / clock skew | Analysis | — | Repeated check-in returns 409 (`work_session_already_open` / `attendance_already_recorded`), never a second session; all times come from the server clock, so client clock skew cannot change work date or lateness | 2026-10-13 | `AttendanceCoreService.cs:300-361` |
 
+| P4-01 (G-32) | `HttpWebsiteWorkLifecycleTests` (7): assign→start→open→submit→reopen (note required)→approve, double submit/start/approve 409, durable notifications, generic `/api/tasks` status/update guard, cancel compatibility, inactive assignee | HTTP + PostgreSQL | L | PASS 7/7; suite 156/156 | 2026-10-13 | [P4-website-work-lifecycle-http.txt](evidence/2026-10-14/P4-website-work-lifecycle-http.txt) |
+| G28-01 | `AttendanceAutoCloseAndCorrectionTests` (15) + `HttpAttendanceCorrectionTests` (2): auto-close timing, breaks, late checkout, next-day check-in, correction math/validation, 401/403/400/200, concurrent close exactly once (control without token: 8 rows) | Unit + HTTP + PostgreSQL | L | PASS 17/17; suite 173/173; migration up/down/up OK | 2026-10-13 | [G28-attendance-auto-close-correction.txt](evidence/2026-10-14/G28-attendance-auto-close-correction.txt) |
+
 ## Not yet run (planned)
 | Area | Reason | Phase |
 | --- | --- | --- |

@@ -169,8 +169,9 @@ public sealed class AttendanceShiftEdgeCaseTests
         var lateCheckout = await RunAsync(options, clock, s => s.CheckOutAsync(actor, ct));
         var afterClose = await RunAsync(options, clock, s => s.CheckInAsync(actor, ct));
 
-        // G-28: there is no auto-close and no admin correction endpoint, so the
-        // previous day is closed with ~24h of work and the new day starts late.
+        // With automatic closing disabled (the default when the service is built without
+        // configuration), the previous day is closed with ~24h of work. Production enables
+        // Attendance:AutoCloseAfterShiftEndMinutes; see AttendanceAutoCloseAndCorrectionTests (G-28).
         Assert.Equal("work_session_already_open", nextDay.ErrorCode);
         Assert.Equal(OperationStatus.Success, lateCheckout.Status);
         Assert.Equal(new DateOnly(2026, 10, 1), lateCheckout.Value!.WorkDate);
