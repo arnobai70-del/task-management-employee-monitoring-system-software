@@ -1,0 +1,29 @@
+# Phase 4 Website Work lifecycle through HTTP (Gate 4)
+# Base: 48f14c2 (PR #72) + tests/Backend.Tests/HttpWebsiteWorkLifecycleTests.cs
+# Env: mcr.microsoft.com/dotnet/sdk:10.0 container, WebApplicationFactory<Program>, local PostgreSQL 16 (unique DB per run)
+# Run: 2026-10-13T23:28:41Z
+
+# Phase 4 lifecycle tests (TRX)
+Passed  Backend.Tests.HttpWebsiteWorkLifecycleTests.Assigned_work_moves_through_start_submit_reopen_and_approve_with_durable_notifications
+Passed  Backend.Tests.HttpWebsiteWorkLifecycleTests.Generic_task_status_route_can_cancel_website_work_but_not_restore_it
+Passed  Backend.Tests.HttpWebsiteWorkLifecycleTests.Generic_task_status_route_cannot_reopen_approved_website_work_without_a_correction_note
+Passed  Backend.Tests.HttpWebsiteWorkLifecycleTests.Generic_task_status_route_cannot_skip_website_work_review(target: "Blocked")
+Passed  Backend.Tests.HttpWebsiteWorkLifecycleTests.Generic_task_status_route_cannot_skip_website_work_review(target: "Done")
+Passed  Backend.Tests.HttpWebsiteWorkLifecycleTests.Generic_task_update_cannot_reassign_started_website_work
+Passed  Backend.Tests.HttpWebsiteWorkLifecycleTests.Website_work_cannot_be_assigned_to_a_deactivated_employee
+
+# Full backend suite on same tree (fresh task_monitoring_tests DB)
+Test run summary: Passed!
+  total: 156
+  failed: 0
+  succeeded: 156
+  skipped: 0
+  duration: 9s 158ms
+
+# First run (before the test expectations were corrected), kept for the record:
+# 4/7 failed. Two expected a new error code, but the existing TasksController guard
+# (TasksController.cs:112-137) already returns 409 website_work_managed_separately.
+# One failed with 429 because the auth endpoint is limited to 10 logins/min
+# (Program.cs:238-243); the fixture now logs in once per account.
+# One assumed restore-from-cancelled was allowed; the guard rejects it.
+# No production defect was found.
