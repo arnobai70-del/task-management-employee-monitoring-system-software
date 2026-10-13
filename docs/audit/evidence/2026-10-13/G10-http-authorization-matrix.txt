@@ -1,0 +1,17 @@
+# HTTP authorization matrix (WebApplicationFactory + real PostgreSQL 16.15)
+Build succeeded.
+Running tests from /src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64)
+/src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64) passed (6s 963ms)
+Test run summary: Passed!
+  total: 7
+  failed: 0
+  succeeded: 7
+  skipped: 0
+  duration: 7s 237ms
+
+# Full suite with matrix tests (fresh DB)
+Build succeeded.
+  total: 149
+  failed: 0
+  succeeded: 149
+  skipped: 0
