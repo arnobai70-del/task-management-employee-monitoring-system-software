@@ -133,9 +133,9 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 | --- | --- | --- |
 | 0 Discovery | DONE | — |
 | 1 Build/tests | DONE (Linux scope); Windows via CI; lockfile merged (#70) | licence scan |
-| 2 Security & data integrity | IN PROGRESS — F-01/F-02/F-03 fixed and merged (#69); HTTP authorization matrix (G-10) in #72, no defect found | G-27 owner decision, F-04/F-05, backup encryption review |
-| 3 Attendance/breaks | TESTED — 13 edge-case tests pass (20:30→09:00/09:30/10:00, breaks, early leave, DST, retry); no core logic defect | G-28 correction/auto-close policy (owner decision), G-29, G-30 |
-| 4 Tasks/Website Work | NOT STARTED — PR #24 superseded | SignalR durable fallback tests |
+| 2 Security & data integrity | IN PROGRESS — G-20…G-23 fixed (#69, #70); HTTP authorization matrix merged (#72), no defect | G-27 owner decision (manager team scoping), F-04/F-05, backup encryption review |
+| 3 Attendance/breaks | TESTED (#73 merged); G-28 auto-close + admin correction implemented in #75 (owner chose "both") | merge #75, browser check of the Correct form; G-29, G-30 |
+| 4 Tasks/Website Work | TESTED (#74 merged) — HTTP lifecycle, generic-route guard, durable notifications; no defect (G-32) | G-31 dead `CompleteAsync`; survey flows review |
 | 5 UI redesign | NOT STARTED — [DESIGN_SYSTEM.md](../ui/DESIGN_SYSTEM.md) draft | route inventory done (§3) |
 | 6 Tab screenshot | RFC DRAFT ONLY — **implementation needs owner's written policy approval** | [SCREENSHOT_CAPTURE_RFC.md](SCREENSHOT_CAPTURE_RFC.md) |
 | 7 RDP support | BLOCKED — no Windows Server RDP test host | owner to provide a test VPS |
