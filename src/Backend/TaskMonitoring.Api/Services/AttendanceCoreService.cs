@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using TaskMonitoring.Api.Configuration;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
@@ -19,10 +21,22 @@ public interface IAttendanceCoreService
     Task<OperationResult<WorkSessionResponse>> StartBreakAsync(RequestActor actor, CancellationToken cancellationToken);
     Task<OperationResult<WorkSessionResponse>> EndBreakAsync(RequestActor actor, CancellationToken cancellationToken);
     Task<OperationResult<WorkSessionResponse>> CheckOutAsync(RequestActor actor, CancellationToken cancellationToken);
+    Task<OperationResult<WorkSessionResponse>> CorrectSessionAsync(Guid id, CorrectWorkSessionRequest request, RequestActor actor, CancellationToken cancellationToken);
+    Task<int> AutoCloseStaleSessionsAsync(CancellationToken cancellationToken);
 }
 
-public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider timeProvider) : IAttendanceCoreService
+public sealed class AttendanceCoreService(
+    AppDbContext dbContext,
+    TimeProvider timeProvider,
+    IOptions<AttendanceOptions>? options = null) : IAttendanceCoreService
 {
+    public const string AutoClosedAction = "attendance.auto_closed";
+    public const string CorrectedAction = "attendance.corrected";
+    private const int AutoCloseBatchSize = 200;
+    private static readonly RequestActor SystemActor = new(null, null, "attendance-auto-close");
+    // Constructed without configuration (unit tests, tools): automatic closing stays off.
+    private readonly AttendanceOptions _options = options?.Value ?? new AttendanceOptions { AutoCloseAfterShiftEndMinutes = 0 };
+
     public async Task<IReadOnlyCollection<ShiftResponse>> GetShiftsAsync(bool? isActive, CancellationToken cancellationToken)
     {
         var query = dbContext.Shifts.AsNoTracking();
@@ -303,6 +317,18 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
 
         var employee = employeeResult.Employee!;
         var now = UtcNow();
+        var staleSession = await SessionQuery().SingleOrDefaultAsync(
+            x => x.EmployeeId == employee.Id && !x.EndedAtUtc.HasValue,
+            cancellationToken);
+        if (staleSession is not null && IsStale(staleSession, now))
+        {
+            ApplyAutoClose(staleSession, now);
+            if (!await TrySaveAsync(cancellationToken))
+            {
+                return OperationResult<WorkSessionResponse>.Conflict("work_session_changed", "The work session changed at the same time. Refresh and try again.");
+            }
+        }
+
         if (await dbContext.WorkSessions.AnyAsync(
             x => x.EmployeeId == employee.Id && !x.EndedAtUtc.HasValue,
             cancellationToken))
@@ -373,6 +399,12 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
         }
 
         var session = sessionResult.Session!;
+        if (IsStale(session, UtcNow()))
+        {
+            ApplyAutoClose(session, UtcNow());
+            await TrySaveAsync(cancellationToken);
+            return OperationResult<WorkSessionResponse>.Invalid("work_session_not_open", "The previous work session was closed automatically at the scheduled shift end.");
+        }
         if (await dbContext.WorkBreaks.AnyAsync(
             x => x.WorkSessionId == session.Id && !x.EndedAtUtc.HasValue,
             cancellationToken))
@@ -413,6 +445,12 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
         }
 
         var session = sessionResult.Session!;
+        if (IsStale(session, UtcNow()))
+        {
+            ApplyAutoClose(session, UtcNow());
+            await TrySaveAsync(cancellationToken);
+            return OperationResult<WorkSessionResponse>.Invalid("work_session_not_open", "The previous work session was closed automatically at the scheduled shift end.");
+        }
         var workBreak = session.Breaks.SingleOrDefault(x => !x.EndedAtUtc.HasValue);
         if (workBreak is null)
         {
@@ -439,22 +477,241 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
         }
 
         var session = sessionResult.Session!;
+        var now = UtcNow();
+        if (IsStale(session, now))
+        {
+            // A checkout long after the shift ended would record hours nobody worked; close at the scheduled end instead.
+            ApplyAutoClose(session, now);
+            return await TrySaveAsync(cancellationToken)
+                ? OperationResult<WorkSessionResponse>.Success(ToSessionResponse(session))
+                : OperationResult<WorkSessionResponse>.Conflict("work_session_changed", "The work session changed at the same time. Refresh and try again.");
+        }
+
         if (session.Breaks.Any(x => !x.EndedAtUtc.HasValue))
         {
             return OperationResult<WorkSessionResponse>.Conflict("break_open", "End the current break before checking out.");
         }
 
-        var now = UtcNow();
         session.EndedAtUtc = now;
         session.EarlyLeaveMinutes = now < session.ScheduledEndUtc
             ? Math.Max(0, (int)Math.Ceiling((session.ScheduledEndUtc - now).TotalMinutes))
             : 0;
+        session.ClosureSource = WorkSessionClosureSource.Employee;
         session.UpdatedAtUtc = now;
         AddAudit(actor, "attendance.checked_out", "WorkSession", session.Id, new { session.EmployeeId, session.WorkDate, session.EndedAtUtc, session.EarlyLeaveMinutes, session.TotalBreakMinutes });
-        await dbContext.SaveChangesAsync(cancellationToken);
+        if (!await TrySaveAsync(cancellationToken))
+        {
+            return OperationResult<WorkSessionResponse>.Conflict("work_session_changed", "The work session changed at the same time. Refresh and try again.");
+        }
 
         return OperationResult<WorkSessionResponse>.Success(ToSessionResponse(session));
     }
+
+    public async Task<OperationResult<WorkSessionResponse>> CorrectSessionAsync(
+        Guid id,
+        CorrectWorkSessionRequest request,
+        RequestActor actor,
+        CancellationToken cancellationToken)
+    {
+        if (!actor.UserId.HasValue)
+        {
+            return OperationResult<WorkSessionResponse>.Invalid("authenticated_user_required", "An authenticated user is required.");
+        }
+
+        var reason = request.Reason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason) || reason.Length < 5 || reason.Length > 500)
+        {
+            return OperationResult<WorkSessionResponse>.Invalid("correction_reason_required", "A correction reason of 5 to 500 characters is required.");
+        }
+
+        if (!request.EndedAtUtc.HasValue)
+        {
+            return OperationResult<WorkSessionResponse>.Invalid("correction_end_required", "The corrected end time is required.");
+        }
+
+        var session = await SessionQuery().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (session is null)
+        {
+            return OperationResult<WorkSessionResponse>.NotFound("work_session_not_found", "Work session was not found.");
+        }
+
+        var now = UtcNow();
+        var start = request.StartedAtUtc.HasValue ? AsUtc(request.StartedAtUtc.Value) : session.StartedAtUtc;
+        var end = AsUtc(request.EndedAtUtc.Value);
+        if (end <= start)
+        {
+            return OperationResult<WorkSessionResponse>.Invalid("correction_range_invalid", "The corrected end must be after the corrected start.");
+        }
+
+        if (end > now)
+        {
+            return OperationResult<WorkSessionResponse>.Invalid("correction_end_in_future", "The corrected end cannot be in the future.");
+        }
+
+        if (end - start > TimeSpan.FromHours(24) ||
+            start < session.ScheduledStartUtc.AddHours(-12) ||
+            end > session.ScheduledEndUtc.AddHours(12))
+        {
+            return OperationResult<WorkSessionResponse>.Invalid("correction_outside_shift_window", "Corrected times must stay within 12 hours of the scheduled shift and cover at most 24 hours.");
+        }
+
+        if (session.Breaks.Any(x => x.StartedAtUtc < start || (x.EndedAtUtc ?? x.StartedAtUtc) > end || x.StartedAtUtc >= end))
+        {
+            return OperationResult<WorkSessionResponse>.Invalid("correction_conflicts_with_breaks", "Recorded breaks must fall inside the corrected start and end.");
+        }
+
+        var before = new
+        {
+            session.StartedAtUtc,
+            session.EndedAtUtc,
+            session.LateMinutes,
+            session.EarlyLeaveMinutes,
+            session.TotalBreakMinutes,
+            ClosureSource = session.ClosureSource?.ToString()
+        };
+
+        foreach (var openBreak in session.Breaks.Where(x => !x.EndedAtUtc.HasValue))
+        {
+            openBreak.EndedAtUtc = end;
+            openBreak.DurationMinutes = Math.Max(0, (int)Math.Floor((end - openBreak.StartedAtUtc).TotalMinutes));
+        }
+
+        session.StartedAtUtc = start;
+        session.LateMinutes = Math.Max(0, (int)Math.Floor((start - session.ScheduledStartUtc).TotalMinutes) - session.Shift.GraceMinutes);
+        session.EndedAtUtc = end;
+        session.EarlyLeaveMinutes = end < session.ScheduledEndUtc
+            ? Math.Max(0, (int)Math.Ceiling((session.ScheduledEndUtc - end).TotalMinutes))
+            : 0;
+        session.TotalBreakMinutes = session.Breaks.Sum(x => x.DurationMinutes ?? 0);
+        session.ClosureSource = WorkSessionClosureSource.AdminCorrection;
+        session.CorrectedAtUtc = now;
+        session.CorrectedByUserId = actor.UserId;
+        session.CorrectionReason = reason;
+        session.UpdatedAtUtc = now;
+
+        AddAudit(actor, CorrectedAction, "WorkSession", session.Id, new
+        {
+            session.EmployeeId,
+            session.WorkDate,
+            reason,
+            before,
+            after = new
+            {
+                session.StartedAtUtc,
+                session.EndedAtUtc,
+                session.LateMinutes,
+                session.EarlyLeaveMinutes,
+                session.TotalBreakMinutes,
+                ClosureSource = session.ClosureSource?.ToString()
+            }
+        });
+
+        if (!await TrySaveAsync(cancellationToken))
+        {
+            return OperationResult<WorkSessionResponse>.Conflict("work_session_changed", "The work session changed at the same time. Refresh and try again.");
+        }
+
+        return OperationResult<WorkSessionResponse>.Success(ToSessionResponse(session));
+    }
+
+    public async Task<int> AutoCloseStaleSessionsAsync(CancellationToken cancellationToken)
+    {
+        if (_options.AutoCloseAfterShiftEndMinutes <= 0)
+        {
+            return 0;
+        }
+
+        var now = UtcNow();
+        var cutoff = now.AddMinutes(-_options.AutoCloseAfterShiftEndMinutes);
+        var staleIds = await dbContext.WorkSessions
+            .AsNoTracking()
+            .Where(x => !x.EndedAtUtc.HasValue && x.ScheduledEndUtc <= cutoff)
+            .OrderBy(x => x.ScheduledEndUtc)
+            .Select(x => x.Id)
+            .Take(AutoCloseBatchSize)
+            .ToListAsync(cancellationToken);
+
+        // One load and save per session: a conflict (employee checking out at the same moment)
+        // clears the change tracker, so each session must be loaded after the previous save.
+        var closed = 0;
+        foreach (var id in staleIds)
+        {
+            var session = await SessionQuery().SingleOrDefaultAsync(x => x.Id == id && !x.EndedAtUtc.HasValue, cancellationToken);
+            if (session is null)
+            {
+                continue;
+            }
+
+            ApplyAutoClose(session, now);
+            if (await TrySaveAsync(cancellationToken))
+            {
+                closed++;
+            }
+        }
+
+        return closed;
+    }
+
+    private bool IsStale(WorkSession session, DateTime nowUtc)
+        => _options.AutoCloseAfterShiftEndMinutes > 0 &&
+           !session.EndedAtUtc.HasValue &&
+           nowUtc >= session.ScheduledEndUtc.AddMinutes(_options.AutoCloseAfterShiftEndMinutes);
+
+    private void ApplyAutoClose(WorkSession session, DateTime nowUtc)
+    {
+        // Close at the scheduled end, or later if break activity proves the employee was still there.
+        var endedAt = session.ScheduledEndUtc;
+        foreach (var workBreak in session.Breaks)
+        {
+            var latest = workBreak.EndedAtUtc ?? workBreak.StartedAtUtc;
+            if (latest > endedAt)
+            {
+                endedAt = latest;
+            }
+        }
+
+        foreach (var openBreak in session.Breaks.Where(x => !x.EndedAtUtc.HasValue))
+        {
+            openBreak.EndedAtUtc = endedAt;
+            openBreak.DurationMinutes = Math.Max(0, (int)Math.Floor((endedAt - openBreak.StartedAtUtc).TotalMinutes));
+            session.TotalBreakMinutes += openBreak.DurationMinutes.Value;
+        }
+
+        session.EndedAtUtc = endedAt;
+        session.EarlyLeaveMinutes = 0;
+        session.ClosureSource = WorkSessionClosureSource.AutoClosed;
+        session.UpdatedAtUtc = nowUtc;
+        AddAudit(SystemActor, AutoClosedAction, "WorkSession", session.Id, new
+        {
+            session.EmployeeId,
+            session.WorkDate,
+            session.ScheduledEndUtc,
+            session.EndedAtUtc,
+            session.TotalBreakMinutes,
+            afterMinutes = _options.AutoCloseAfterShiftEndMinutes
+        });
+    }
+
+    private async Task<bool> TrySaveAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            dbContext.ChangeTracker.Clear();
+            return false;
+        }
+    }
+
+    private static DateTime AsUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+    };
 
     private IQueryable<WorkSession> SessionQuery() => dbContext.WorkSessions
         .Include(x => x.Employee)
@@ -655,7 +912,10 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
         session.Breaks
             .OrderBy(x => x.StartedAtUtc)
             .Select(x => new WorkBreakResponse(x.Id, x.StartedAtUtc, x.EndedAtUtc, x.DurationMinutes))
-            .ToArray());
+            .ToArray(),
+        session.ClosureSource,
+        session.CorrectedAtUtc,
+        session.CorrectionReason);
 
     private void AddAudit(RequestActor actor, string action, string targetType, Guid targetId, object metadata)
     {
@@ -677,4 +937,51 @@ public sealed class AttendanceCoreService(AppDbContext dbContext, TimeProvider t
     private static string? Truncate(string? value, int maxLength) => string.IsNullOrWhiteSpace(value) ? null : value.Length <= maxLength ? value : value[..maxLength];
 
     private sealed record ResolvedShift(EmployeeShiftAssignment Assignment, DateOnly WorkDate, DateTime ScheduledStartUtc, DateTime ScheduledEndUtc);
+}
+
+public sealed class AttendanceAutoCloseHostedService(
+    IServiceScopeFactory scopeFactory,
+    IOptions<AttendanceOptions> options,
+    ILogger<AttendanceAutoCloseHostedService> logger) : BackgroundService
+{
+    private readonly AttendanceOptions _options = options.Value;
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (_options.AutoCloseAfterShiftEndMinutes <= 0)
+        {
+            return;
+        }
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                var service = scope.ServiceProvider.GetRequiredService<IAttendanceCoreService>();
+                var closed = await service.AutoCloseStaleSessionsAsync(stoppingToken);
+                if (closed > 0)
+                {
+                    logger.LogInformation("Automatically closed {Count} work sessions past the scheduled shift end.", closed);
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Attendance auto-close scan failed; the next scheduled scan will retry.");
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(_options.AutoCloseScanIntervalSeconds), stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+        }
+    }
 }

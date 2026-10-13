@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using TaskMonitoring.Api.Domain;
 
 namespace TaskMonitoring.Api.Contracts;
 
@@ -97,6 +98,20 @@ public sealed record WorkSessionResponse(
     int LateMinutes,
     int? EarlyLeaveMinutes,
     int TotalBreakMinutes,
-    IReadOnlyCollection<WorkBreakResponse> Breaks);
+    IReadOnlyCollection<WorkBreakResponse> Breaks,
+    WorkSessionClosureSource? ClosureSource = null,
+    DateTime? CorrectedAtUtc = null,
+    string? CorrectionReason = null);
+
+public sealed class CorrectWorkSessionRequest
+{
+    public DateTime? StartedAtUtc { get; init; }
+
+    [Required]
+    public DateTime? EndedAtUtc { get; init; }
+
+    [Required, StringLength(500, MinimumLength = 5)]
+    public string Reason { get; init; } = string.Empty;
+}
 
 public sealed record AttendanceStateResponse(AttendanceState State, WorkSessionResponse? Session);

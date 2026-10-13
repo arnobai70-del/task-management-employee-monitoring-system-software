@@ -59,6 +59,11 @@ SecurityRegistration.ConfigureTrustedForwardedHeaders(builder.Services, reverseP
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<PresenceOptions>(builder.Configuration.GetSection(PresenceOptions.SectionName));
+builder.Services.AddOptions<AttendanceOptions>()
+    .Bind(builder.Configuration.GetSection(AttendanceOptions.SectionName))
+    .Validate(options => options.AutoCloseAfterShiftEndMinutes is >= 0 and <= 1440, "Attendance:AutoCloseAfterShiftEndMinutes must be between 0 (disabled) and 1440.")
+    .Validate(options => options.AutoCloseScanIntervalSeconds is >= 30 and <= 3600, "Attendance:AutoCloseScanIntervalSeconds must be between 30 and 3600.")
+    .ValidateOnStart();
 builder.Services.AddOptions<WebsiteWorkAttentionOptions>()
     .Bind(builder.Configuration.GetSection(WebsiteWorkAttentionOptions.SectionName))
     .Validate(options => options.LongWorkingMinutes is >= 15 and <= 1440, "WebsiteWorkAttention:LongWorkingMinutes must be between 15 and 1440.")
@@ -156,6 +161,7 @@ builder.Services.AddSingleton<IWebsiteWorkRealtimePublisher, SignalRWebsiteWorkR
 builder.Services.AddSingleton<IAdminNotificationRealtimePublisher, SignalRAdminNotificationRealtimePublisher>();
 builder.Services.AddSingleton<IOperationsIncidentRealtimePublisher, SignalROperationsIncidentRealtimePublisher>();
 builder.Services.AddSingleton<ISecurityAlertRealtimePublisher, SignalRSecurityAlertRealtimePublisher>();
+builder.Services.AddHostedService<AttendanceAutoCloseHostedService>();
 builder.Services.AddHostedService<MonitoringRetentionHostedService>();
 builder.Services.AddHostedService<FollowUpReminderHostedService>();
 builder.Services.AddHostedService<OperationsIncidentHostedService>();

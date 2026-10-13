@@ -48,9 +48,20 @@ public sealed class WorkSession
     public int LateMinutes { get; set; }
     public int? EarlyLeaveMinutes { get; set; }
     public int TotalBreakMinutes { get; set; }
+    public WorkSessionClosureSource? ClosureSource { get; set; }
+    public DateTime? CorrectedAtUtc { get; set; }
+    public Guid? CorrectedByUserId { get; set; }
+    public string? CorrectionReason { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public ICollection<WorkBreak> Breaks { get; set; } = new List<WorkBreak>();
+}
+
+public enum WorkSessionClosureSource
+{
+    Employee = 1,
+    AutoClosed = 2,
+    AdminCorrection = 3
 }
 
 public sealed class WorkBreak

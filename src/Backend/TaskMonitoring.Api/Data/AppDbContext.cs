@@ -172,6 +172,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(x => new { x.WorkDate, x.StartedAtUtc });
             entity.HasIndex(x => x.ShiftId);
             entity.HasIndex(x => x.ShiftAssignmentId);
+            entity.HasIndex(x => x.ScheduledEndUtc).HasFilter("\"EndedAtUtc\" IS NULL");
+            entity.Property(x => x.ClosureSource).HasConversion<string>().HasMaxLength(30);
+            entity.Property(x => x.CorrectionReason).HasMaxLength(500);
+            // Employee checkout, automatic close and admin correction can race on the same open session.
+            entity.Property(x => x.EndedAtUtc).IsConcurrencyToken();
             entity.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Shift).WithMany(x => x.WorkSessions).HasForeignKey(x => x.ShiftId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.ShiftAssignment).WithMany(x => x.WorkSessions).HasForeignKey(x => x.ShiftAssignmentId).OnDelete(DeleteBehavior.Restrict);

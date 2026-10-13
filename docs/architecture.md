@@ -67,12 +67,16 @@ All event timestamps are stored in UTC. Scheduled UTC boundaries are derived fro
 - `WorkBreak` records explicit break start/end and duration.
 - A filtered unique index allows only one open break per work session.
 - Checkout is rejected while a break remains open.
+- A session that is never checked out is closed automatically at the scheduled shift end once `Attendance:AutoCloseAfterShiftEndMinutes` (default 240; `0` disables) has passed. An open break is closed at the same time. If break activity happened after the scheduled end, the session ends at that later time instead. The background scan runs every `Attendance:AutoCloseScanIntervalSeconds` (default 300). A check-in, break or checkout on such a session triggers the same close first. Auto-closed sessions carry `ClosureSource = AutoClosed` and an `attendance.auto_closed` audit row with no actor.
+- `POST /api/attendance/{id}/correction` lets an attendance manager set the start and end of a session with a 5 to 500 character reason. Lateness, early leave and break totals are recomputed. An open break is closed at the new end. Corrected times must stay within 12 hours of the scheduled shift, cover at most 24 hours, not be in the future, and contain every recorded break. The session keeps `CorrectedByUserId`, `CorrectedAtUtc` and `CorrectionReason`, and the `attendance.corrected` audit row stores the before and after values.
+- `work_sessions.EndedAtUtc` is an optimistic concurrency token, so an employee checkout, the auto-close scan and a correction cannot all close the same session.
 
 ### Authorization
 
 - `shifts.read` — shift/assignment lookup.
 - `shifts.manage` — shift creation/update and employee assignment.
 - `attendance.read` — organization-wide attendance history.
+- `attendance.manage` — audited work-session correction. Only SuperAdmin receives it automatically; grant it to other roles from the role editor.
 - Employee self-service attendance operations require authentication plus an active employee profile.
 
 ## Project / Task Core

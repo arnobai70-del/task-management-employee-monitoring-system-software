@@ -10,7 +10,7 @@ Implemented areas include:
 - Employee Productivity — daily/weekly Website Work productivity with assignment/start/review/approval metrics, working-time reconstruction and CSV export.
 - My Follow-ups — manager-specific pending/overdue Website Work attention follow-ups with owner-only resolution, realtime refresh and a global count badge.
 - Employees and departments — directory plus management workflows.
-- Attendance and shifts — work-session visibility and shift administration.
+- Attendance and shifts — work-session visibility, shift administration, and audited corrections. A "Closed by" column shows whether the employee checked out, the session was auto-closed at shift end, or an admin corrected it.
 - Projects and tasks — project/task management workflows.
 - Website Work — external website target assignment, live worker progress, completion review and approved-completion history.
 - RDP, IP and website assignments — company access-assignment workflows.
@@ -141,6 +141,7 @@ Important route/panel boundaries include:
 | `/departments` | `departments.read` |
 | `/shifts` | `shifts.read` |
 | `/attendance` | `attendance.read` |
+| Attendance correction (Correct button) | `attendance.manage` |
 | `/projects` | `projects.read` |
 | `/tasks` | `tasks.read` |
 | `/website-work` | `tasks.read` |
