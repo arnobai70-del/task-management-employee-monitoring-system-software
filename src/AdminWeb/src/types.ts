@@ -94,6 +94,9 @@ export interface WorkSession {
   lateMinutes: number;
   earlyLeaveMinutes: number | null;
   totalBreakMinutes: number;
+  closureSource?: 'Employee' | 'AutoClosed' | 'AdminCorrection' | null;
+  correctedAtUtc?: string | null;
+  correctionReason?: string | null;
 }
 
 export interface Project {

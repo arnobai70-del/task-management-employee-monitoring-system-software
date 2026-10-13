@@ -23,6 +23,7 @@ sealed class RealtimePresenceNotificationsModelSnapshot : AppDbContextModelSnaps
         base.BuildModel(modelBuilder);
         RealtimePresenceNotificationsModelMetadata.Configure(modelBuilder);
         TransparentMonitoringTelemetryModelMetadata.Configure(modelBuilder);
+        AttendanceClosureAndCorrectionModelMetadata.Configure(modelBuilder);
     }
 
     internal void BuildRealtimeInto(ModelBuilder modelBuilder)

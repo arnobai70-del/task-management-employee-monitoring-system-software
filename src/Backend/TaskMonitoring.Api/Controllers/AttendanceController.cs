@@ -44,6 +44,11 @@ public sealed class AttendanceController(IAttendanceCoreService attendanceCoreSe
     public async Task<ActionResult<WorkSessionResponse>> CheckOut(CancellationToken cancellationToken)
         => ToActionResult(await attendanceCoreService.CheckOutAsync(Actor(), cancellationToken));
 
+    [HttpPost("{id:guid}/correction")]
+    [Authorize(Policy = PermissionCatalog.AttendanceManage)]
+    public async Task<ActionResult<WorkSessionResponse>> Correct(Guid id, CorrectWorkSessionRequest request, CancellationToken cancellationToken)
+        => ToActionResult(await attendanceCoreService.CorrectSessionAsync(id, request, Actor(), cancellationToken));
+
     private ActionResult<T> ToActionResult<T>(OperationResult<T> result)
     {
         if (result.Status == OperationStatus.Success && result.Value is not null)

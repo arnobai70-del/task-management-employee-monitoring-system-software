@@ -291,13 +291,72 @@ function EmployeesPage() {
   </>;
 }
 
+function toLocalInput(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+const closureLabels: Record<string, string> = { Employee: 'Employee', AutoClosed: 'Auto-closed', AdminCorrection: 'Corrected' };
+
 function AttendancePage() {
+  const { can } = useAuth();
+  const mayCorrect = can('attendance.manage');
   const resource = useApiResource<PagedResponse<WorkSession>>('/api/attendance?page=1&pageSize=50');
+  const [editing, setEditing] = useState<WorkSession | null>(null);
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  function openCorrection(session: WorkSession) {
+    setEditing(session);
+    setStart(toLocalInput(session.startedAtUtc));
+    setEnd(toLocalInput(session.endedAtUtc ?? session.scheduledEndUtc));
+    setReason('');
+    setError('');
+    setNotice('');
+  }
+
+  async function submitCorrection(event: FormEvent) {
+    event.preventDefault();
+    if (!editing || !start || !end || reason.trim().length < 5) return;
+    setBusy(true);
+    setError('');
+    try {
+      await apiFetch(`/api/attendance/${editing.id}/correction`, {
+        method: 'POST',
+        body: JSON.stringify({ startedAtUtc: new Date(start).toISOString(), endedAtUtc: new Date(end).toISOString(), reason: reason.trim() })
+      });
+      setNotice(`Corrected ${editing.employeeName} on ${formatDate(editing.workDate)}. The change and reason are in the audit log.`);
+      setEditing(null);
+      resource.reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to correct the work session.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const columns = mayCorrect ? 9 : 8;
   return <>
-    <PageHeader title="Attendance" description="Recent server-validated work sessions, lateness and break totals." action={<button className="ghost-button" onClick={resource.reload}>Refresh</button>} />
-    {resource.loading ? <LoadingBlock /> : resource.error ? <ErrorBlock message={resource.error} retry={resource.reload} /> : <article className="panel table-panel"><div className="panel-heading"><h2>Recent work sessions</h2><span>{resource.data?.totalCount ?? 0} records</span></div><div className="table-wrap"><table><thead><tr><th>Employee</th><th>Date</th><th>Shift</th><th>Check in</th><th>Check out</th><th>Late</th><th>Break</th></tr></thead><tbody>
-      {(resource.data?.items || []).map(session => <tr key={session.id}><td><strong>{session.employeeName}</strong></td><td>{formatDate(session.workDate)}</td><td>{session.shiftName}</td><td>{formatDateTime(session.startedAtUtc)}</td><td>{formatDateTime(session.endedAtUtc)}</td><td>{session.lateMinutes} min</td><td>{session.totalBreakMinutes} min</td></tr>)}
-      {!resource.data?.items.length && <EmptyRow colSpan={7} />}
+    <PageHeader title="Attendance" description="Recent server-validated work sessions, lateness and break totals. Sessions left open are closed automatically at the scheduled shift end." action={<button className="ghost-button" onClick={resource.reload}>Refresh</button>} />
+    {notice && <div className="success-banner" role="status">{notice}</div>}
+    {editing && <article className="panel management-form-panel"><form onSubmit={submitCorrection}>
+      <div className="panel-heading"><h2>Correct {editing.employeeName}, {formatDate(editing.workDate)}</h2><span>{editing.shiftName}</span></div>
+      {error && <div className="error-banner" role="alert">{error}</div>}
+      <div className="form-grid">
+        <label><span>Check in (local time)</span><input type="datetime-local" value={start} onChange={event => setStart(event.target.value)} required /></label>
+        <label><span>Check out (local time)</span><input type="datetime-local" value={end} onChange={event => setEnd(event.target.value)} required /></label>
+        <label className="wide-field"><span>Reason (required, recorded in the audit log)</span><input value={reason} onChange={event => setReason(event.target.value)} minLength={5} maxLength={500} required /></label>
+      </div>
+      <div className="form-actions"><button className="primary-button" disabled={busy || reason.trim().length < 5}>Save correction</button><button type="button" className="ghost-button" onClick={() => setEditing(null)} disabled={busy}>Cancel</button></div>
+    </form></article>}
+    {resource.loading ? <LoadingBlock /> : resource.error ? <ErrorBlock message={resource.error} retry={resource.reload} /> : <article className="panel table-panel"><div className="panel-heading"><h2>Recent work sessions</h2><span>{resource.data?.totalCount ?? 0} records</span></div><div className="table-wrap"><table><thead><tr><th>Employee</th><th>Date</th><th>Shift</th><th>Check in</th><th>Check out</th><th>Closed by</th><th>Late</th><th>Break</th>{mayCorrect && <th>Action</th>}</tr></thead><tbody>
+      {(resource.data?.items || []).map(session => <tr key={session.id}><td><strong>{session.employeeName}</strong></td><td>{formatDate(session.workDate)}</td><td>{session.shiftName}</td><td>{formatDateTime(session.startedAtUtc)}</td><td>{formatDateTime(session.endedAtUtc)}</td><td>{session.closureSource ? <span title={session.correctionReason || undefined}><StatusBadge value={closureLabels[session.closureSource] ?? session.closureSource} /></span> : session.endedAtUtc ? 'Employee' : 'Open'}</td><td>{session.lateMinutes} min</td><td>{session.totalBreakMinutes} min</td>{mayCorrect && <td className="action-cell"><button className="text-button" onClick={() => openCorrection(session)}>Correct</button></td>}</tr>)}
+      {!resource.data?.items.length && <EmptyRow colSpan={columns} />}
     </tbody></table></div></article>}
   </>;
 }

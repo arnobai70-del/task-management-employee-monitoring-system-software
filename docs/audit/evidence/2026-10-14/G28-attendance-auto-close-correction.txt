@@ -1,0 +1,61 @@
+# G-28 attendance auto-close and admin correction
+# Owner decision 2026-10-13: 'both' (auto-close at shift end + admin correction with audited reason)
+# Env: mcr.microsoft.com/dotnet/sdk:10.0, local PostgreSQL 16, WebApplicationFactory<Program>
+# Run: 2026-10-13T23:40:28Z
+
+# Build / model drift
+      1     0 Warning(s)
+      1 Build succeeded.
+No changes have been made to the model since the last migration.
+
+# Full backend suite
+Test run summary: Passed!
+  total: 173
+  failed: 0
+  succeeded: 173
+  skipped: 0
+  duration: 10s 779ms
+
+# G-28 tests (TRX)
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Break_action_on_a_stale_session_closes_it_and_reports_no_open_session
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Checkout_before_the_deadline_is_a_normal_employee_checkout
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Correction_of_an_open_session_closes_it_and_its_open_break
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Correction_of_unknown_session_is_not_found
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Correction_recomputes_late_early_and_breaks_and_records_reason_and_before_after
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Correction_rejects_invalid_requests(start: "2026-09-30T10:00:00Z", end: "2026-10-01T10:00:00Z", reason: "Too early start test", expectedCode: "correction_outside_shift_window")
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Correction_rejects_invalid_requests(start: "2026-10-01T03:00:00Z", end: "2026-10-01T10:00:00Z", reason: "no", expectedCode: "correction_reason_required")
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Correction_rejects_invalid_requests(start: "2026-10-01T03:00:00Z", end: "2026-10-03T10:00:00Z", reason: "Future end test", expectedCode: "correction_end_in_future")
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Correction_rejects_invalid_requests(start: "2026-10-01T07:00:00Z", end: "2026-10-01T10:00:00Z", reason: "Break before start test", expectedCode: "correction_conflicts_with_breaks")
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Correction_rejects_invalid_requests(start: "2026-10-01T10:00:00Z", end: "2026-10-01T09:00:00Z", reason: "Wrong order test", expectedCode: "correction_range_invalid")
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Late_checkout_after_the_deadline_closes_at_the_scheduled_end_not_now
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Next_day_check_in_closes_the_forgotten_session_and_starts_the_new_day
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Sweep_closes_a_forgotten_session_at_the_scheduled_end_and_audits_it
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Sweep_closes_an_open_break_and_keeps_activity_after_the_scheduled_end
+Passed  Backend.Tests.AttendanceAutoCloseAndCorrectionTests.Sweep_does_nothing_when_auto_close_is_disabled
+Passed  Backend.Tests.HttpAttendanceCorrectionTests.Concurrent_checkouts_and_sweeps_close_a_forgotten_session_exactly_once
+Passed  Backend.Tests.HttpAttendanceCorrectionTests.Only_attendance_managers_can_correct_a_session
+
+# Control: race test with the EndedAtUtc concurrency token removed (3 runs)
+# Each run: 8 parallel auto-close/checkout attempts wrote 8 attendance.auto_closed rows instead of 1
+  Expected: 1   Actual:   8   failed: 1   succeeded: 0 
+  Expected: 1   Actual:   8   failed: 1   succeeded: 0 
+  Expected: 1   Actual:   8   failed: 1   succeeded: 0 
+
+# AdminWeb
+npx tsc -b --noEmit: 0 errors; npm run build: built (vite)
+Browser walk-through of the Correct form: NOT YET DONE (scheduled with the Phase 5 UI pass)
+
+# Migration rollback check (scratch DB tm_rollback_check, dropped afterwards)
+## update to latest
+Applying migration '20261013233309_AttendanceClosureAndCorrection'.
+Done.
+## revert to 20260929225909_TransparentMonitoringTelemetry
+Reverting migration '20261013233309_AttendanceClosureAndCorrection'.
+Done.
+## re-apply latest
+Applying migration '20261013233309_AttendanceClosureAndCorrection'.
+Done.
+ClosureSource
+CorrectedAtUtc
+CorrectedByUserId
+CorrectionReason
