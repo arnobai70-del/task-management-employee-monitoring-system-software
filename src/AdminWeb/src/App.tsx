@@ -4,6 +4,7 @@ import { apiFetch } from './api';
 import { useAuth } from './auth';
 import SecurityAlertRealtimeNotice from './SecurityAlertRealtimeNotice';
 import { StatusRail } from './StatusRail';
+import { ThemeSelect } from './theme';
 import WebsiteWorkRealtimeNotice from './WebsiteWorkRealtimeNotice';
 import type {
   AttendanceDailyMetric,
@@ -157,6 +158,7 @@ function AppShell({ children }: { children: ReactNode }) {
           <div className="topbar-title"><strong>Operations Console</strong><span>Live server data</span></div>
           <div className="account-area">
             <div className="account-copy"><strong>{claims.email || 'Signed in'}</strong><span>{claims.roles.join(', ') || 'Authorized user'}</span></div>
+            <ThemeSelect />
             <button className="ghost-button" type="button" onClick={() => void signOut()}>Sign out</button>
           </div>
         </header>

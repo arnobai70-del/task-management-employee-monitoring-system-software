@@ -11,6 +11,7 @@ import OperationsIncidentRealtimeNotice from './OperationsIncidentRealtimeNotice
 import { StatusRailProvider } from './StatusRail';
 import './styles.css';
 import './admin-experience.css';
+import './theme-dark.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element was not found.');

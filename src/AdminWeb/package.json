@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "node scripts/generate-dark-theme.mjs --check && tsc -p tsconfig.json && vite build",
+    "theme:dark": "node scripts/generate-dark-theme.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

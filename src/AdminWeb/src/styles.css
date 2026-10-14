@@ -67,7 +67,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .panel { border-radius: 14px; padding: 20px; }
 .panel-heading { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 18px; }
 .panel-heading h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
-.panel-heading p, .panel-heading span { color: var(--muted); font-size: 12px; margin: 3px 0 0; }
+.panel-heading p, .panel-heading span:not(.status-badge) { color: var(--muted); font-size: 12px; margin: 3px 0 0; }
 .text-link { color: var(--accent); font-size: 13px; font-weight: 700; }
 .bar-chart { height: 220px; display: flex; align-items: stretch; gap: 8px; padding-top: 15px; }
 .bar-column { flex: 1; min-width: 24px; display: flex; flex-direction: column; align-items: center; gap: 7px; }
