@@ -1,0 +1,74 @@
+P5 / G-35: route-level code splitting for Admin Web
+Date: 2026-10-14
+Branch: perf/admin-web-route-splitting, base main 2e31b94
+
+Status: OPPORTUNITY (DESIGN_SYSTEM.md §6 Gate 5: initial payload must not grow; target < 100 KB gzip)
+
+Change:
+  App.tsx loads the 15 route page modules (and PresencePanel) with React.lazy, inside a Suspense
+  boundary in the shell's <main>. management.css is now imported once in main.tsx, before the
+  rest of the app, because shell-level toasts and pills also use it. The CSS output is
+  byte-identical to main (same hash index-cL6sFnjk.css, 23.59 kB).
+
+Build sizes (npm run build, vite 8.3.1):
+  before: one JS chunk 570.55 kB raw / 145.58 kB gzip
+  after:  initial index 343.97 kB raw / 102.0 kB gzip, plus shared jsx-runtime chunk 13.38 kB / 5.2 kB gzip
+          = about 107 kB gzip initial (-26 %); each page is a 8-47 kB raw chunk loaded on navigation
+  Measured in browser, /login JS bytes downloaded (uncompressed): before 570559, after 357362
+
+The < 100 KB target is NOT met yet. The remaining largest eager dependency is @microsoft/signalr, used by
+three always-mounted realtime notices (see G-34; a shared, lazily started connection is the next step).
+
+Route smoke: scripts/audit/admin-route-smoke.mjs, Playwright + Chromium against vite preview of
+the production build. Fictional SuperAdmin-scoped token; every /api call returns 503 (no data),
+hub aborted. Same result on main and on this branch.
+
+--- before (main)
+before /login JS bytes (uncompressed) = 570559
+before /dashboard -> url=/dashboard h1="Dashboard" pageErrors=0
+before /productivity -> url=/productivity h1="Employee Productivity" pageErrors=0
+before /sla-analytics -> url=/sla-analytics h1="Escalation & SLA Analytics" pageErrors=0
+before /operations -> url=/operations h1="Operations & Agent Health" pageErrors=0
+before /security-alerts -> url=/security-alerts h1="Security alerts" pageErrors=0
+before /employees -> url=/employees h1="Employees & roles" pageErrors=0
+before /departments -> url=/departments h1="Departments" pageErrors=0
+before /shifts -> url=/shifts h1="Shifts & assignments" pageErrors=0
+before /attendance -> url=/attendance h1="Attendance" pageErrors=0
+before /projects -> url=/projects h1="Projects & members" pageErrors=0
+before /tasks -> url=/tasks h1="Tasks" pageErrors=0
+before /website-work -> url=/website-work h1="Website Work" pageErrors=0
+before /follow-ups -> url=/follow-ups h1="My Follow-ups" pageErrors=0
+before /surveys -> url=/surveys h1="Survey website assignments" pageErrors=0
+before /access/rdp -> url=/access/rdp h1="RDP Assignments" pageErrors=0
+before /access/ip -> url=/access/ip h1="IP Assignments" pageErrors=0
+before /access/websites -> url=/access/websites h1="Website Assignments" pageErrors=0
+before /audit-logs -> url=/audit-logs h1="Security observability & audit" pageErrors=0
+before /forbidden -> url=/forbidden h1="Permission required" pageErrors=0
+before /nope -> url=/nope h1="Page not found" pageErrors=0
+
+--- after (this branch)
+after /login JS bytes (uncompressed) = 357362
+after /dashboard -> url=/dashboard h1="Dashboard" pageErrors=0
+after /productivity -> url=/productivity h1="Employee Productivity" pageErrors=0
+after /sla-analytics -> url=/sla-analytics h1="Escalation & SLA Analytics" pageErrors=0
+after /operations -> url=/operations h1="Operations & Agent Health" pageErrors=0
+after /security-alerts -> url=/security-alerts h1="Security alerts" pageErrors=0
+after /employees -> url=/employees h1="Employees & roles" pageErrors=0
+after /departments -> url=/departments h1="Departments" pageErrors=0
+after /shifts -> url=/shifts h1="Shifts & assignments" pageErrors=0
+after /attendance -> url=/attendance h1="Attendance" pageErrors=0
+after /projects -> url=/projects h1="Projects & members" pageErrors=0
+after /tasks -> url=/tasks h1="Tasks" pageErrors=0
+after /website-work -> url=/website-work h1="Website Work" pageErrors=0
+after /follow-ups -> url=/follow-ups h1="My Follow-ups" pageErrors=0
+after /surveys -> url=/surveys h1="Survey website assignments" pageErrors=0
+after /access/rdp -> url=/access/rdp h1="RDP Assignments" pageErrors=0
+after /access/ip -> url=/access/ip h1="IP Assignments" pageErrors=0
+after /access/websites -> url=/access/websites h1="Website Assignments" pageErrors=0
+after /audit-logs -> url=/audit-logs h1="Security observability & audit" pageErrors=0
+after /forbidden -> url=/forbidden h1="Permission required" pageErrors=0
+after /nope -> url=/nope h1="Page not found" pageErrors=0
+
+Not covered: real backend data; permission-denied redirects (unchanged code path, covered by
+RequirePermission before the lazy page renders); slow-network fallback appearance.
+Rollback: revert the commit; no backend or data change.
