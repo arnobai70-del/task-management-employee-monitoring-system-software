@@ -12,6 +12,7 @@ namespace Backend.Tests;
 /// /health/ready must stay unhealthy while the schema is behind the API image, because production runs the
 /// migrator separately with AutoMigrate off and deploy.sh trusts this endpoint.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class HttpReadinessTests
 {
     [Fact]
