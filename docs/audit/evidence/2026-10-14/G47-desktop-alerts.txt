@@ -1,0 +1,47 @@
+G-47 alerts on the admin's PC (opt-in desktop notifications), 2026-10-14
+Owner decision 2026-10-14: alerts go to the PC ('PC te'). Local API, scratch database, fictional admin; failed sign-ins use fictional @example.invalid addresses.
+Headless Chromium cannot show OS notifications, so scripts/audit/desktop-alerts.mjs replaces window.Notification with a recorder: this proves what the page asks the browser to show.
+
+== Run 1 (first burst on a fresh alert: Detected) - recorder did not yet keep the permission across reloads, so only the background line is valid ==
+allowed: toggle before click "Desktop alerts off" (aria-pressed=false)
+allowed: toggle after click "Desktop alerts on" (aria-pressed=true); stored=on
+background window: in-page toast after 53 s; desktop notifications 1: [{"title":"Warning security alert · Detected","body":"Repeated failed sign-ins from 127.0.0.1\n5 failed or blocked sign-in events were recorded from this source within the last 15 minutes.","tag":"security-alert-e4c63eef-82c4-b9f8-ebcb-4282aa777eb4"}]
+
+== Final run (toggle in the top bar; the alert from run 1 escalates to Critical) ==
+allowed: toggle before click "Desktop alerts off" (aria-pressed=false)
+allowed: toggle after click "Desktop alerts on" (aria-pressed=true); stored=on
+background window: in-page toast after 21 s; desktop notifications 1: [{"title":"Critical security alert · Updated","body":"Repeated failed sign-ins from 127.0.0.1\n24 failed or blocked sign-in events were recorded from this source within the last 15 minutes.","tag":"security-alert-e4c63eef-82c4-b9f8-ebcb-4282aa777eb4"}]
+after reload: toggle "Desktop alerts on"
+focused window (control): in-page toast after 56 s; desktop notifications 0
+turned off: toggle "Desktop alerts off"; stored=null
+blocked: toggle "Desktop alerts blocked", disabled=true, hint="Notifications are blocked for this site. Allow them in the browser's site settings to turn desktop alerts on."
+
+== Layout (fictional session, API mocked 503) ==
+main (control): 390px horizontal overflow 0px; 1366px 0px
+this change: 390px light: top-bar toggle hidden, horizontal overflow 0px; menu open: toggle 227x42 in the menu footer; 1366px dark: toggle 171x42 in the top bar, overflow 0px
+(first attempt kept the toggle in the top bar on phones: 72px overflow, then 45px with a short label; moved to the menu instead)
+
+== Route smoke, every /api call 503 (scripts/audit/admin-route-smoke.mjs) ==
+alerts /login JS bytes (uncompressed) = 308568
+alerts /dashboard -> url=/dashboard h1="Dashboard" pageErrors=0
+alerts /productivity -> url=/productivity h1="Employee Productivity" pageErrors=0
+alerts /sla-analytics -> url=/sla-analytics h1="Escalation & SLA Analytics" pageErrors=0
+alerts /operations -> url=/operations h1="Operations & Agent Health" pageErrors=0
+alerts /security-alerts -> url=/security-alerts h1="Security alerts" pageErrors=0
+alerts /employees -> url=/employees h1="Employees & roles" pageErrors=0
+alerts /departments -> url=/departments h1="Departments" pageErrors=0
+alerts /shifts -> url=/shifts h1="Shifts & assignments" pageErrors=0
+alerts /attendance -> url=/attendance h1="Attendance" pageErrors=0
+alerts /projects -> url=/projects h1="Projects & members" pageErrors=0
+alerts /tasks -> url=/tasks h1="Tasks" pageErrors=0
+alerts /website-work -> url=/website-work h1="Website Work" pageErrors=0
+alerts /follow-ups -> url=/follow-ups h1="My Follow-ups" pageErrors=0
+alerts /surveys -> url=/surveys h1="Survey website assignments" pageErrors=0
+alerts /access/rdp -> url=/access/rdp h1="RDP Assignments" pageErrors=0
+alerts /access/ip -> url=/access/ip h1="IP Assignments" pageErrors=0
+alerts /access/websites -> url=/access/websites h1="Website Assignments" pageErrors=0
+alerts /audit-logs -> url=/audit-logs h1="Security observability & audit" pageErrors=0
+alerts /forbidden -> url=/forbidden h1="Permission required" pageErrors=0
+alerts /nope -> url=/nope h1="Page not found" pageErrors=0
+
+npm run build (dark theme check, tsc, vite): OK

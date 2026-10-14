@@ -44,7 +44,9 @@ Every alarm the master plan names, and where it fires today. "In-app" alarms are
 | Upload failures | none | the only upload in the plan is screenshots (Phase 6) | BLOCKED — Phase 6 needs written policy approval |
 | Storage near quota | none for disk; screenshot storage does not exist | host disk is outside the app | OPEN — host-level alarm (node exporter or provider alert) to set up on the production host, BLOCKED without host access |
 
-Alert delivery (email/chat) is not configured: Prometheus has no Alertmanager in the stack. Owner decision needed on where alerts go before production.
+Alert delivery: the owner chose the admin's PC (2026-10-14, "PC te"), not email or chat (G-47). Every in-app alarm above (Operations incidents) and every security alert now reaches the PC as a desktop notification when an admin turns on **Desktop alerts** in the Admin Web top bar (in the menu on phones) and allows notifications in the browser. A notification is shown only while the console is in the background (another tab or window), because the in-page toast shows otherwise; clicking it opens the Operations or Security Alerts page. The browser has to stay open with the console signed in, and notifications need HTTPS (production is served over HTTPS by Caddy).
+
+The Prometheus-only alarms (API error rate, slow responses, telemetry down, retention lag) still show only in Prometheus/Grafana: there is no Alertmanager in the stack, so they do not reach the PC yet. Bringing them in needs an Alertmanager webhook into the API that raises an Operations incident (OPEN, follow-up).
 
 ## 5. Rollback
 - Application: redeploy previous image tag/commit via `deploy.sh` with the previous checkout.

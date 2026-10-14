@@ -7,6 +7,7 @@ import { watchRealtimeState, type RealtimeState } from './realtime';
 import SecurityAlertRealtimeNotice from './SecurityAlertRealtimeNotice';
 import { StatusRail } from './StatusRail';
 import { ThemeSelect } from './theme';
+import { desktopAlertHint, desktopAlertLabel, useDesktopAlerts } from './desktopAlerts';
 import WebsiteWorkRealtimeNotice from './WebsiteWorkRealtimeNotice';
 import type {
   AttendanceDailyMetric,
@@ -181,7 +182,7 @@ function AppShell({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
-        <div className="sidebar-footer"><span>Transparent, business-scoped operations</span></div>
+        <div className="sidebar-footer"><DesktopAlertsToggle placement="menu" /><span>Transparent, business-scoped operations</span></div>
       </aside>
       {menuOpen && <button className="sidebar-backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)} />}
       <div className="workspace">
@@ -191,6 +192,7 @@ function AppShell({ children }: { children: ReactNode }) {
           <div className="account-area">
             <div className="account-copy"><strong>{claims.email || 'Signed in'}</strong><span>{claims.roles.join(', ') || 'Authorized user'}</span></div>
             <ThemeSelect />
+            <DesktopAlertsToggle placement="topbar" />
             <button className="ghost-button" type="button" onClick={() => void signOut()}>Sign out</button>
           </div>
         </header>
@@ -200,6 +202,25 @@ function AppShell({ children }: { children: ReactNode }) {
       <WebsiteWorkRealtimeNotice />
       <SecurityAlertRealtimeNotice />
     </div>
+  );
+}
+
+// Shown in the top bar on wider screens and in the navigation menu on phones, where the top bar has no room.
+function DesktopAlertsToggle({ placement }: { placement: 'topbar' | 'menu' }) {
+  const [state, toggle] = useDesktopAlerts();
+  if (state === 'unsupported') return null;
+  return (
+    <button
+      className={`ghost-button desktop-alerts-toggle desktop-alerts-${placement}`}
+      type="button"
+      data-state={state}
+      aria-pressed={state === 'on'}
+      title={desktopAlertHint(state)}
+      disabled={state === 'blocked'}
+      onClick={() => void toggle()}
+    >
+      {desktopAlertLabel(state)}
+    </button>
   );
 }
 
