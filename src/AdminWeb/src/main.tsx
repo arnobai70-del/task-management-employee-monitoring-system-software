@@ -5,6 +5,7 @@ import { AuthProvider } from './auth';
 import AdminExperience from './AdminExperience';
 import App from './App';
 import OperationsIncidentRealtimeNotice from './OperationsIncidentRealtimeNotice';
+import { StatusRailProvider } from './StatusRail';
 import './styles.css';
 import './admin-experience.css';
 
@@ -15,9 +16,11 @@ createRoot(root).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
-        <AdminExperience />
-        <OperationsIncidentRealtimeNotice />
+        <StatusRailProvider>
+          <App />
+          <AdminExperience />
+          <OperationsIncidentRealtimeNotice />
+        </StatusRailProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>

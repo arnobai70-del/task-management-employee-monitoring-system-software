@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { apiFetch, apiUrl, getValidAccessToken } from './api';
 import { useAuth } from './auth';
+import { StatusRailItem } from './StatusRail';
 
 export interface WebsiteWorkCompletion {
   taskId: string;
@@ -357,41 +358,27 @@ export default function WebsiteWorkRealtimeNotice() {
       )}
 
       {mayManage && adminSummary.unread > 0 && (
-        <NavLink
-          to="/follow-ups#notifications"
-          className="status-badge status-active"
-          aria-label={`${adminSummary.unread} unread notifications`}
-          style={{
-            position: 'fixed',
-            right: 20,
-            top: 76,
-            zIndex: 31,
-            textDecoration: 'none',
-            padding: '8px 12px',
-            boxShadow: '0 8px 24px rgba(0,0,0,.16)'
-          }}
-        >
-          Notifications {adminSummary.unread}
-        </NavLink>
+        <StatusRailItem>
+          <NavLink
+            to="/follow-ups#notifications"
+            className="status-badge rail-pill status-active"
+            aria-label={`${adminSummary.unread} unread notifications`}
+          >
+            Notifications {adminSummary.unread}
+          </NavLink>
+        </StatusRailItem>
       )}
 
       {mayManage && followUpCount > 0 && (
-        <NavLink
-          to="/follow-ups"
-          className={`status-badge status-${followUpSummary.overdue > 0 ? 'overdue' : 'active'}`}
-          aria-label={`${followUpCount} follow-ups, ${followUpSummary.overdue} overdue`}
-          style={{
-            position: 'fixed',
-            right: 20,
-            top: adminSummary.unread > 0 ? 116 : 76,
-            zIndex: 30,
-            textDecoration: 'none',
-            padding: '8px 12px',
-            boxShadow: '0 8px 24px rgba(0,0,0,.16)'
-          }}
-        >
-          Follow-ups {followUpCount}{followUpSummary.overdue > 0 ? ` · ${followUpSummary.overdue} overdue` : ''}
-        </NavLink>
+        <StatusRailItem>
+          <NavLink
+            to="/follow-ups"
+            className={`status-badge rail-pill status-${followUpSummary.overdue > 0 ? 'overdue' : 'active'}`}
+            aria-label={`${followUpCount} follow-ups, ${followUpSummary.overdue} overdue`}
+          >
+            Follow-ups {followUpCount}{followUpSummary.overdue > 0 ? ` · ${followUpSummary.overdue} overdue` : ''}
+          </NavLink>
+        </StatusRailItem>
       )}
 
       {mayManage && (pending.length > 0 || reviewError) && (
