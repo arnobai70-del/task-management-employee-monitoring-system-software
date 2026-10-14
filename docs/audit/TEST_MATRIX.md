@@ -50,6 +50,7 @@ All timestamps UTC.
 | P4-03 | Survey flows review (`SurveyCoreServiceTests` 8, `ExternalSurveyServiceTests` 3) | code review + existing tests | L | PASS, no defect; history kept as revisions; external links store no third-party data | 2026-10-14 02:10 | same |
 | P8-01 (G-15) | #17 observability merged onto main: restore, vulnerable-package scan, Release build, full backend suite | merged tree | L | PASS: no vulnerable packages, build OK, 207/207 | 2026-10-14 02:25 | [P8 observability log](evidence/2026-10-14/P8-observability-merge.txt) |
 | G26-01 | `DatabaseMigrationTests` run 3 times against one PostgreSQL server | same `TEST_POSTGRES_CONNECTION` | L | Before: run 2 fails 23505; after: 3/3 pass, 0 leftover databases | 2026-10-14 14:35 | [G-26 log](evidence/2026-10-14/G26-migration-test-isolation.txt) |
+| P8-02 (G-40/G-41) | `scripts/audit/api-latency.mjs` 20 endpoints, 60 req, 4 clients; EXPLAIN ANALYZE of slow queries | `scripts/audit/perf-seed.sql` 1000 employees / 60 days (fictional) | L | Baseline + after published; dashboard 168h p95 1755 -> 952 ms; full suite 208/208 | 2026-10-14 15:05 | [P8 latency log](evidence/2026-10-14/P8-api-latency-baseline.txt) |
 
 ## Not yet run (planned)
 | Area | Reason | Phase |
