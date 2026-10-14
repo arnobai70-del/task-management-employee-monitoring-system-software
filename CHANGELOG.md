@@ -38,6 +38,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance managers (`attendance.manage`) can correct a session's start and end with a required reason. The change is audited with before and after values, and the Admin Web Attendance page has a Correct action (G-28).
 
 ### Fixed
+- Saving the monitoring policy, adding or editing approved applications and business domains, and recording approved activity from the Employee Desktop no longer fail with a server error; invalid values get a clear 400 instead (G-56).
 - Keyboard users of the Admin Web can skip the navigation with a "Skip to main content" link, the phone menu no longer leaves its hidden links in the Tab order (and its button reports open/closed and closes with Escape), and Quick jump keeps focus inside itself and gives it back when closed (G-52, G-53, G-54).
 - Failed loads and actions in the Admin Web are now announced by screen readers; success messages are announced politely (G-55).
 - Database backups no longer fail on real-size databases: the check that read the archive back died of a broken pipe on anything over a few hundred kilobytes, which also stopped deployments at their pre-deployment backup (G-50).
