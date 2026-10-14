@@ -1,0 +1,88 @@
+G-09 Employee Desktop network use — before and after
+=====================================================
+Date: 2026-10-14 (UTC). Code: main ba7708d (before) and branch perf/g09-desktop-traffic cfeba3b (after).
+Environment: local API (dotnet sdk 10.0 container) on 127.0.0.1:5081, PostgreSQL 16, fictional data only.
+Proxy: Caddy 2 on 127.0.0.1:5090 with "encode zstd gzip", as in deploy/production/Caddyfile.
+Script: scripts/audit/desktop-bandwidth.sh (MODE=before reproduces main, MODE=after the change).
+Bytes are what curl puts on and takes off the wire: request line + headers + body up, headers + body down.
+No real user, token or password is in this file. The fictional employee is created by the script.
+
+What the desktop sends while signed in (from the code)
+------------------------------------------------------
+MainWindow.xaml.cs presence timer, every 30 s: presence heartbeat, then (on main) a full notifications refresh.
+AgentHealthReporter: agent health every 30 s.
+Monitoring sampler: one application-activity post per sample interval (policy 15-300 s; 30 s used below).
+Monitoring policy: every 5 min. Desktop service liveness (/health/live): every 60 s.
+
+Finding (VERIFIED, new G-57)
+----------------------------
+1. On main, EmployeeApiClient.GetMyNotificationsAsync read EVERY page of /api/me/notifications (100 per page,
+   read and unread) every 30 s, even while the realtime connection was up and already pushing new ones.
+   Notifications are never deleted (G-51), so this grows forever.
+2. The desktop's HttpClient had no AutomaticDecompression, so it sent no Accept-Encoding and Caddy's
+   gzip/zstd was never used: through Caddy the 1000-notification refresh is still 378,531 bytes.
+
+Raw output (scripts/audit/desktop-bandwidth.sh)
+-----------------------------------------------
+== MODE=before via http://127.0.0.1:5081 (fictional employee 9ae42663-8111-408f-9df1-1d1d6b621903) ==
+presence heartbeat (30 s)          up=   778 down=     499 http=200
+agent health (30 s)                up=  1151 down=     244 http=200
+application activity (interval)    up=   845 down=     227 http=200
+monitoring policy (5 min)          up=   609 down=    1378 http=200
+service liveness (60 s)            up=    88 down=     275 http=200
+notifications refresh, 0 stored    up=   642 down=     247 pages=1
+notifications refresh, 100 stored  up=   642 down=   37533 pages=1
+notifications refresh, 1000 stored up=  6421 down=  376376 pages=10
+== MODE=before via http://127.0.0.1:5090 (fictional employee df6f6853-d53f-4b9b-94d8-0a5861eab21d) ==
+presence heartbeat (30 s)          up=   778 down=     514 http=200
+agent health (30 s)                up=  1151 down=     260 http=200
+application activity (interval)    up=   845 down=     243 http=200
+monitoring policy (5 min)          up=   609 down=    1394 http=200
+service liveness (60 s)            up=    88 down=     291 http=200
+notifications refresh, 0 stored    up=   642 down=     263 pages=1
+notifications refresh, 100 stored  up=   642 down=   37549 pages=1
+notifications refresh, 1000 stored up=  6421 down=  378531 pages=10
+== MODE=after via http://127.0.0.1:5081 (fictional employee 0860c350-1a50-47d1-a598-6f1de3c3334e) ==
+presence heartbeat (30 s)          up=   814 down=     499 http=200
+agent health (30 s)                up=  1187 down=     244 http=200
+application activity (interval)    up=   881 down=     227 http=200
+monitoring policy (5 min)          up=   645 down=    1378 http=200
+service liveness (60 s)            up=   124 down=     275 http=200
+notifications refresh, 0 stored    up=   678 down=     247 pages=1
+notifications refresh, 100 stored  up=   678 down=   37728 pages=1
+notifications refresh, 1000 stored up=   678 down=   37729 pages=1
+== MODE=after via http://127.0.0.1:5090 (fictional employee e5acf936-219a-48e1-8509-d9970075a7e5) ==
+presence heartbeat (30 s)          up=   814 down=     514 http=200
+agent health (30 s)                up=  1187 down=     260 http=200
+application activity (interval)    up=   881 down=     243 http=200
+monitoring policy (5 min)          up=   645 down=     730 http=200
+service liveness (60 s)            up=   124 down=     291 http=200
+notifications refresh, 0 stored    up=   678 down=     263 pages=1
+notifications refresh, 100 stored  up=   678 down=    5510 pages=1
+notifications refresh, 1000 stored up=   678 down=    5503 pages=1
+(Two runs in between hit the auth rate limit, 10/min/IP, and were re-run after a 65 s wait.)
+
+8-hour shift projection, one employee, through Caddy
+----------------------------------------------------
+Counts per shift: 30 s = 960, 60 s = 480, 5 min = 96.
+                                         before (main)    after, realtime up   after, realtime down
+heartbeat + agent health + activity +
+  policy + liveness                        4.01 MB          4.07 MB              4.07 MB
+notifications, 0 stored                    0.87 MB          0.09 MB              0.90 MB
+notifications, 100 stored                 36.66 MB          0.59 MB              5.94 MB
+notifications, 1000 stored               369.55 MB          0.59 MB              5.93 MB
+
+After the change one refresh is at most one page (latest 100) and gzip shrinks it from 37.7 KB to 5.5 KB.
+While realtime is connected the timer refreshes notifications only every 5 min; when realtime is down it keeps
+the 30 s refresh so nothing is missed. Upload of the request headers grows by 36 bytes (Accept-Encoding).
+Small JSON answers (heartbeat, health) are not compressed by Caddy and stay the same size.
+
+Not measured (UNKNOWN)
+----------------------
+- The SignalR realtime connection's own keep-alive traffic (WebSocket pings, 15 s by default); a few hundred
+  bytes per ping.
+- A real Windows desktop: the client compiles on Linux (EnableWindowsTargeting) and in the Windows CI job, but
+  WPF cannot run here. The measurement replays the same requests with curl.
+- Real-world notification counts per employee; the 1000 case stands for about a year of normal use.
+
+Rollback: revert the PR; the API is unchanged, so the old desktop and the new one both work against it.

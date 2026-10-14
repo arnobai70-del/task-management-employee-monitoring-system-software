@@ -61,6 +61,10 @@ Employee Desktop refreshes the policy periodically while signed in and displays 
 
 Expired activity segments are purged by a server background job. Administrative activity queries are also bounded by the configured retention cutoff and a maximum 31-day explicit query window. The default Admin view requests recent activity rather than an unbounded history.
 
+## Network use
+
+Measured on fictional data through the production Caddy proxy (`docs/audit/evidence/2026-10-14/G09-desktop-bandwidth.txt`): a signed-in Employee Desktop sends about 4 MB per 8-hour shift for presence heartbeats, agent health, approved-activity samples at a 30-second interval, policy refreshes and service liveness. Notifications add under 1 MB while the realtime connection is up, because the desktop then refreshes only the latest 100 every 5 minutes and accepts compressed responses; while realtime is down it refreshes every 30 seconds (about 6 MB per shift). A shorter sample interval raises the activity share proportionally.
+
 ## Authorization
 
 Organization-wide monitoring access is separate from ordinary employee, attendance, task and reporting permissions:

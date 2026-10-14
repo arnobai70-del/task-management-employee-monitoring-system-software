@@ -23,6 +23,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance edge-case tests for 20:30→09:00/09:30/10:00 night shifts, breaks, early leave and DST transitions (G-06).
 
 ### Changed
+- Employee Desktop uses far less network: it fetches only the latest 100 notifications (and says how many there are in total), refreshes them every 5 minutes while the realtime connection is up instead of every 30 seconds, and accepts compressed responses. With 1000 stored notifications one employee went from about 370 MB to under 1 MB of notification traffic per 8-hour shift (G-09, G-57).
 - Website assignment audit records now store only the site's host instead of the full URL, so a token in a URL's query string no longer ends up in the audit log. The assignment itself still keeps the full URL (G-39).
 - Admin Web background refreshes pause while the tab is hidden and catch up when it is shown again, slow down while the server answers 429/5xx or is unreachable (honouring Retry-After), and a page that failed to load for those reasons retries on its own. A hidden tab used to send 28-40 requests a minute (G-46).
 - The Admin Web header and sidebar badge now show whether the console is live, reconnecting or offline. Before, they always said live, even with the network gone (G-45).
