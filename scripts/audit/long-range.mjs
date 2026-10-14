@@ -29,7 +29,8 @@ const checks = [
   ['follow-up SLA 367d (over limit)', `/api/reports/website-work/follow-up-sla?from=${day(-368)}&to=${day(-1)}`, 400],
   ['attendance list 366d p1', `/api/attendance?from=${day(-366)}&to=${day(-1)}&page=1&pageSize=100`, 200],
   ['attendance list 366d last page', `/api/attendance?from=${day(-366)}&to=${day(-1)}&page=10000&pageSize=100`, 200],
-  ['attendance list 367d (over limit)', `/api/attendance?from=${day(-368)}&to=${day(-1)}&page=1&pageSize=100`, 400],
+  // The attendance list clamps a longer range to its last 366 days (AttendanceCoreService.GetAttendanceAsync) instead of refusing it.
+  ['attendance list 367d (clamped to 366)', `/api/attendance?from=${day(-368)}&to=${day(-1)}&page=1&pageSize=100`, 200],
   ['attendance list pageSize 100000 (clamped)', `/api/attendance?from=${day(-30)}&to=${day(-1)}&page=1&pageSize=100000`, 200],
   ['employees p1', '/api/employees?page=1&pageSize=100', 200],
   ['employees search', '/api/employees?search=EMPLOYEE%20100999&page=1&pageSize=50', 200],
@@ -39,7 +40,9 @@ const checks = [
   ['audit export 366d', `/api/security-observability/audit-export.csv?fromUtc=${iso(-366)}&toUtc=${iso(0)}`, 200],
   ['audit export 400d (over limit)', `/api/security-observability/audit-export.csv?fromUtc=${iso(-400)}&toUtc=${iso(0)}`, 400],
   ['monitoring activity 31d', `/api/monitoring/activity?fromUtc=${iso(-31)}&toUtc=${iso(0)}&page=1&pageSize=100`, 200],
-  ['monitoring activity 60d (over limit)', `/api/monitoring/activity?fromUtc=${iso(-60)}&toUtc=${iso(0)}&page=1&pageSize=100`, 400],
+  // Monitoring activity moves a start older than the retention cutoff up to it, so 60 days fits; 31 days is enforced inside retention.
+  ['monitoring activity 60d (clamped to retention)', `/api/monitoring/activity?fromUtc=${iso(-60)}&toUtc=${iso(0)}&page=1&pageSize=100`, 200],
+  ['monitoring activity future 40d (over limit)', `/api/monitoring/activity?fromUtc=${iso(-1)}&toUtc=${iso(39)}&page=1&pageSize=100`, 400],
   ['security dashboard max window', '/api/security-observability/dashboard?windowHours=100000', 200],
   ['operations overview', '/api/operations/overview', 200],
 ];
