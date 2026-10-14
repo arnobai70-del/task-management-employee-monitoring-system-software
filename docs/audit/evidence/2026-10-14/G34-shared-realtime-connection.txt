@@ -1,0 +1,55 @@
+G-34 / G-35: one shared realtime connection per Admin Web tab, client library loaded on demand
+Date: 2026-10-14
+Branch: perf/admin-web-shared-realtime, base main after #79
+
+Status: G-34 OPPORTUNITY (now implemented), G-35 initial-bundle target reached
+
+Change:
+  New src/AdminWeb/src/realtime.ts: one HubConnection per tab, created on the first subscription and
+  stopped when the last subscriber leaves (deferred by a microtask so a page change keeps it).
+  @microsoft/signalr is imported dynamically. PresencePanel, OperationsIncidentRealtimeNotice,
+  SecurityAlertRealtimeNotice and WebsiteWorkRealtimeNotice subscribe to their events through it.
+  A connection opened for one signed-in user is never reused for another (the token subject is checked).
+  The server side is unchanged: RealtimeHub.OnConnectedAsync puts the connection in groups by
+  permission, so one connection receives the same events the four separate ones did.
+
+Real-stack check (scripts/audit/realtime-shared-connection.mjs):
+  Local API from main, scratch PostgreSQL DB tm_rt_check (dropped afterwards), Jwt__AccessTokenMinutes=1,
+  Vite dev server, Playwright + Chromium. The script signs in as the bootstrap audit admin, moves
+  through four pages with the sidebar, lets a fictional employee start and submit a website-work target,
+  waits 80 s so the access token expires (the server closes the hub, G-22), then submits a second one.
+
+--- before (main)
+  after sign-in (/dashboard): hub sockets created=4 open=4
+  after navigating to Attendance: created=4 open=3
+  after navigating to Website Work: created=4 open=3
+  after navigating to Departments: created=4 open=3
+  after navigating to Dashboard: created=5 open=4
+  websiteWorkSubmitted toast shown: true
+  after 80 s (token expiry): created=10 open=4; second submission reached the page: true
+  after sign-out: open=0
+  console errors: 4 x "Failed to start the connection: Error: The connection was stopped during negotiation."
+    (pages unmount and remount the shell on navigation, which stopped connections mid-negotiation;
+     this is the SignalR console noise noted during the G-28 browser check)
+
+--- after (this branch)
+  after sign-in (/dashboard): hub sockets created=1 open=1
+  after navigating to Attendance: created=1 open=1
+  after navigating to Website Work: created=1 open=1
+  after navigating to Departments: created=1 open=1
+  after navigating to Dashboard: created=1 open=1
+  websiteWorkSubmitted toast shown: true
+  after 80 s (token expiry): created=2 open=1; second submission reached the page: true
+  after sign-out: open=0
+  console errors: none
+
+Bundle (npm run build): initial JS = index 88,400 + jsx-runtime 4,788 + rolldown-runtime 597
+  = 93.8 kB gzip (main after #79: ~107 kB; before #79: 145.6 kB). Gate 5 target < 100 kB: MET.
+  The SignalR client is a separate 13.9 kB gzip chunk fetched after sign-in.
+  /login JS downloaded (uncompressed): 303,612 bytes (main after #79: 357,362).
+Route smoke (scripts/audit/admin-route-smoke.mjs, production build): 20/20 routes render, 0 page errors.
+Screenshot: G34-shared-realtime-toast.png (fictional employee "Realtime Check after2").
+
+Not covered: presence events from a real Windows agent (BLOCKED, no Windows host); incident and
+security-alert events were not triggered live (same subscription code path as website work).
+Rollback: revert the commit; frontend only.

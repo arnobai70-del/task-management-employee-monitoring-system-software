@@ -136,7 +136,7 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 | 2 Security & data integrity | IN PROGRESS — G-20…G-23 fixed (#69, #70); HTTP authorization matrix merged (#72), no defect | G-27 owner decision (manager team scoping), F-04/F-05, backup encryption review |
 | 3 Attendance/breaks | TESTED (#73 merged); G-28 auto-close + admin correction merged (#75, owner chose "both"); not deployed; Correct form and live auto-close verified in browser | G-29, G-30 |
 | 4 Tasks/Website Work | TESTED (#74 merged) — HTTP lifecycle, generic-route guard, durable notifications; no defect (G-32) | G-31 dead `CompleteAsync`; survey flows review |
-| 5 UI redesign | IN PROGRESS — status-pill overlap fixed (G-33, #78 merged); route code splitting 145.6 → ~107 kB gzip (G-35, PR open); [DESIGN_SYSTEM.md](../ui/DESIGN_SYSTEM.md) draft | tokens/dark theme, components, G-08 labels, G-34, G-35 < 100 kB |
+| 5 UI redesign | IN PROGRESS — status-pill overlap fixed (G-33, #78 merged); route code splitting 145.6 → 93.8 kB gzip (G-35, #79 merged + shared realtime G-34, PR open); [DESIGN_SYSTEM.md](../ui/DESIGN_SYSTEM.md) draft | tokens/dark theme, components, G-08 labels |
 | 6 Tab screenshot | RFC DRAFT ONLY — **implementation needs owner's written policy approval** | [SCREENSHOT_CAPTURE_RFC.md](SCREENSHOT_CAPTURE_RFC.md) |
 | 7 RDP support | BLOCKED — no Windows Server RDP test host | owner to provide a test VPS |
 | 8 Performance/observability | NOT STARTED — PR #17 to rebase | |

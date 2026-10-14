@@ -11,7 +11,8 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance edge-case tests for 20:30→09:00/09:30/10:00 night shifts, breaks, early leave and DST transitions (G-06).
 
 ### Changed
-- Admin Web loads each page on demand. The first download drops from 145.6 kB to about 107 kB gzip (G-35).
+- Admin Web loads each page on demand and starts the realtime client only after sign-in. The first download drops from 145.6 kB to 93.8 kB gzip (G-35).
+- Each Admin Web tab now uses one realtime (SignalR) connection instead of up to four, and keeps it across page changes (G-34).
 - Work sessions left open are closed automatically at the scheduled shift end after `Attendance:AutoCloseAfterShiftEndMinutes` (default 240). A late checkout no longer records hours after the shift ended (G-28).
 - Attendance managers (`attendance.manage`) can correct a session's start and end with a required reason. The change is audited with before and after values, and the Admin Web Attendance page has a Correct action (G-28).
 

@@ -1,8 +1,8 @@
-import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { apiFetch, apiUrl, getValidAccessToken } from './api';
+import { apiFetch } from './api';
 import { useAuth } from './auth';
+import { subscribeRealtime } from './realtime';
 import { StatusRailItem } from './StatusRail';
 
 export interface WebsiteWorkCompletion {
@@ -236,57 +236,47 @@ export default function WebsiteWorkRealtimeNotice() {
   useEffect(() => {
     if (!allowed) return;
 
-    const connection = new HubConnectionBuilder()
-      .withUrl(apiUrl('/hubs/realtime'), { accessTokenFactory: getValidAccessToken })
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-      .configureLogging(LogLevel.Warning)
-      .build();
-
-    connection.on('websiteWorkSubmitted', (submission: WebsiteWorkSubmission) => {
-      showNotice({
-        title: 'Work submitted for review',
-        message: submission.message,
-        detail: `${submission.projectName} · ${submission.employeeCode}`
-      });
-      void loadPending();
-    });
-
-    connection.on('websiteWorkCompleted', (completion: WebsiteWorkCompletion) => {
-      showNotice({
-        title: 'Work completed',
-        message: completion.message,
-        detail: `${completion.projectName} · ${completion.employeeCode}`
-      });
-      window.dispatchEvent(new CustomEvent<WebsiteWorkCompletion>(websiteWorkCompletedEvent, { detail: completion }));
-    });
-
-    connection.on('websiteWorkFollowUpChanged', (followUp: WebsiteWorkFollowUpRealtime) => {
-      window.dispatchEvent(new CustomEvent<WebsiteWorkFollowUpRealtime>(websiteWorkFollowUpChangedEvent, { detail: followUp }));
-      void loadFollowUps(false);
-    });
-
-    connection.on('adminNotificationCreated', (notification: AdminNotificationRealtime) => {
-      showNotice({
-        title: notification.title,
-        message: notification.message,
-        detail: notification.kind === 'FollowUpOverdue'
-          ? 'Overdue · saved in Notifications'
-          : notification.kind === 'FollowUpDueSoon'
-            ? 'Due soon · saved in Notifications'
-            : 'Saved in Notifications'
-      });
-      window.dispatchEvent(new CustomEvent<AdminNotificationRealtime>(adminNotificationChangedEvent, { detail: notification }));
-      void loadAdminSummary();
-      void loadFollowUps(false);
-    });
-
-    void connection.start().catch(() => {
-      // Pending review/follow-up polling and durable server notifications remain available if realtime reconnects later.
+    // Pending review/follow-up polling and durable server notifications remain available if realtime reconnects later.
+    const unsubscribe = subscribeRealtime({
+      websiteWorkSubmitted: (submission: WebsiteWorkSubmission) => {
+        showNotice({
+          title: 'Work submitted for review',
+          message: submission.message,
+          detail: `${submission.projectName} · ${submission.employeeCode}`
+        });
+        void loadPending();
+      },
+      websiteWorkCompleted: (completion: WebsiteWorkCompletion) => {
+        showNotice({
+          title: 'Work completed',
+          message: completion.message,
+          detail: `${completion.projectName} · ${completion.employeeCode}`
+        });
+        window.dispatchEvent(new CustomEvent<WebsiteWorkCompletion>(websiteWorkCompletedEvent, { detail: completion }));
+      },
+      websiteWorkFollowUpChanged: (followUp: WebsiteWorkFollowUpRealtime) => {
+        window.dispatchEvent(new CustomEvent<WebsiteWorkFollowUpRealtime>(websiteWorkFollowUpChangedEvent, { detail: followUp }));
+        void loadFollowUps(false);
+      },
+      adminNotificationCreated: (notification: AdminNotificationRealtime) => {
+        showNotice({
+          title: notification.title,
+          message: notification.message,
+          detail: notification.kind === 'FollowUpOverdue'
+            ? 'Overdue · saved in Notifications'
+            : notification.kind === 'FollowUpDueSoon'
+              ? 'Due soon · saved in Notifications'
+              : 'Saved in Notifications'
+        });
+        window.dispatchEvent(new CustomEvent<AdminNotificationRealtime>(adminNotificationChangedEvent, { detail: notification }));
+        void loadAdminSummary();
+        void loadFollowUps(false);
+      }
     });
 
     return () => {
       if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current);
-      void connection.stop();
+      unsubscribe();
     };
   }, [allowed, loadAdminSummary, loadFollowUps, loadPending, showNotice]);
 

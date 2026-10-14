@@ -1,8 +1,8 @@
-import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { NavLink } from 'react-router-dom';
-import { apiFetch, apiUrl, getValidAccessToken } from './api';
+import { apiFetch } from './api';
 import { useAuth } from './auth';
+import { subscribeRealtime } from './realtime';
 import MonitoringManagementPage from './MonitoringManagement';
 
 interface PresenceItem {
@@ -253,29 +253,19 @@ export default function PresencePanel() {
 
   useEffect(() => {
     if (!presenceAllowed) return;
-    const connection = new HubConnectionBuilder()
-      .withUrl(apiUrl('/hubs/realtime'), { accessTokenFactory: getValidAccessToken })
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-      .configureLogging(LogLevel.Warning)
-      .build();
-
-    connection.on('presenceChanged', (presence: PresenceItem) => {
-      setItems(current => {
-        const next = current.some(item => item.employeeId === presence.employeeId)
-          ? current.map(item => item.employeeId === presence.employeeId ? presence : item)
-          : [...current, presence];
-        return next.sort((a, b) => a.fullName.localeCompare(b.fullName));
-      });
+    return subscribeRealtime({
+      presenceChanged: (presence: PresenceItem) => {
+        setItems(current => {
+          const next = current.some(item => item.employeeId === presence.employeeId)
+            ? current.map(item => item.employeeId === presence.employeeId ? presence : item)
+            : [...current, presence];
+          return next.sort((a, b) => a.fullName.localeCompare(b.fullName));
+        });
+      }
+    }, (state, failure) => {
+      setLive(state === 'connected');
+      if (failure) setError(failure);
     });
-    connection.onreconnecting(() => setLive(false));
-    connection.onreconnected(() => setLive(true));
-    connection.onclose(() => setLive(false));
-
-    void connection.start()
-      .then(() => setLive(true))
-      .catch(caught => setError(caught instanceof Error ? caught.message : 'Realtime connection failed.'));
-
-    return () => { void connection.stop(); };
   }, [presenceAllowed]);
 
   async function runAttentionAction(taskId: string, path: string, body: unknown) {
