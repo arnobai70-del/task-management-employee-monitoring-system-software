@@ -1,0 +1,70 @@
+G-13 / G-17 remainder — Admin Web visual regression (Playwright screenshots)
+Date: 2026-10-14 (UTC). Base: main 01abc1d. Branch: test/g13-visual-regression.
+Data: fictional only (tests/e2e/visual/mock-api.ts). No API or database; every /api call is answered
+with fixed data, realtime is kept offline, the clock is frozen at 2026-03-02 09:30 UTC.
+The baseline PNGs are pictures of the Admin Web with that fictional data, not employee screenshots.
+
+Environment
+- Image: mcr.microsoft.com/playwright:v1.56.1-noble (same image in the CI job admin-web-visual)
+- Admin Web: npm run build + vite preview on 127.0.0.1:4173
+- Config: tests/e2e/playwright.visual.config.ts — full-page screenshots, animations disabled,
+  deviceScaleFactor 1, locale en-US, timezone UTC, maxDiffPixels 50
+- A test also fails if the page throws (a crash after first paint would otherwise be saved as a blank baseline)
+
+Coverage: 5 pages x 2 widths (375 phone, 1440 desktop) x 2 schemes (light, dark) = 20 baselines
+  login, dashboard, employees, forbidden, not-found
+
+What the first attempt found (fixed before committing)
+1. The dashboard baseline was blank: the mock lacked the attention report and the page crashed
+   ("Cannot read properties of undefined (reading 'longWorkingMinutes')") after the ready text showed.
+   Fix: complete mock + the page-error check above.
+2. maxDiffPixelRatio 0.01 let a real change through: widening the status badge padding
+   (admin-experience.css .status-badge, 9px -> 12px) still passed 20/20. Switched to maxDiffPixels 50.
+
+== Baselines and repeat runs ==
+--update-snapshots: 20 passed
+run 1 (maxDiffPixels 50): 20 passed (20.6s)
+run 2 (maxDiffPixels 50): 20 passed (21.4s)
+
+== Negative control ==
+admin-experience.css .status-badge given padding: 0 12px (reverted afterwards). Expected: every page
+that shows a status badge (dashboard, employees) fails in all 4 width/scheme combinations; pages
+without badges (login, forbidden, not-found) still pass.
+  ✓   1 visual/admin-pages.visual.spec.ts:24:9 › phone light › login (808ms)
+  ✘   2 visual/admin-pages.visual.spec.ts:24:9 › phone light › dashboard (2.1s)
+  ✘   3 visual/admin-pages.visual.spec.ts:24:9 › phone light › employees (1.3s)
+  ✓   4 visual/admin-pages.visual.spec.ts:24:9 › phone light › forbidden (889ms)
+  ✓   5 visual/admin-pages.visual.spec.ts:24:9 › phone light › not-found (753ms)
+  ✓   6 visual/admin-pages.visual.spec.ts:24:9 › phone dark › login (709ms)
+  ✘   7 visual/admin-pages.visual.spec.ts:24:9 › phone dark › dashboard (2.1s)
+  ✘   8 visual/admin-pages.visual.spec.ts:24:9 › phone dark › employees (1.3s)
+  ✓   9 visual/admin-pages.visual.spec.ts:24:9 › phone dark › forbidden (829ms)
+  ✓  10 visual/admin-pages.visual.spec.ts:24:9 › phone dark › not-found (823ms)
+  ✓  11 visual/admin-pages.visual.spec.ts:24:9 › desktop light › login (1.0s)
+  ✘  12 visual/admin-pages.visual.spec.ts:24:9 › desktop light › dashboard (3.1s)
+  ✘  13 visual/admin-pages.visual.spec.ts:24:9 › desktop light › employees (1.7s)
+  ✓  14 visual/admin-pages.visual.spec.ts:24:9 › desktop light › forbidden (986ms)
+  ✓  15 visual/admin-pages.visual.spec.ts:24:9 › desktop light › not-found (954ms)
+  ✓  16 visual/admin-pages.visual.spec.ts:24:9 › desktop dark › login (885ms)
+  ✘  17 visual/admin-pages.visual.spec.ts:24:9 › desktop dark › dashboard (2.8s)
+  ✘  18 visual/admin-pages.visual.spec.ts:24:9 › desktop dark › employees (1.7s)
+  ✓  19 visual/admin-pages.visual.spec.ts:24:9 › desktop dark › forbidden (1.0s)
+  ✓  20 visual/admin-pages.visual.spec.ts:24:9 › desktop dark › not-found (929ms)
+    Error: expect(page).toHaveScreenshot(expected) failed
+      1206 pixels (ratio 0.01 of all image pixels) are different.
+    Error: expect(page).toHaveScreenshot(expected) failed
+      1374 pixels (ratio 0.01 of all image pixels) are different.
+    Error: expect(page).toHaveScreenshot(expected) failed
+      1239 pixels (ratio 0.01 of all image pixels) are different.
+    Error: expect(page).toHaveScreenshot(expected) failed
+      1367 pixels (ratio 0.01 of all image pixels) are different.
+    Error: expect(page).toHaveScreenshot(expected) failed
+      4050 pixels (ratio 0.01 of all image pixels) are different.
+    Error: expect(page).toHaveScreenshot(expected) failed
+      5116 pixels (ratio 0.01 of all image pixels) are different.
+    Error: expect(page).toHaveScreenshot(expected) failed
+      4016 pixels (ratio 0.01 of all image pixels) are different.
+    Error: expect(page).toHaveScreenshot(expected) failed
+      5105 pixels (ratio 0.01 of all image pixels) are different.
+  8 failed
+  12 passed (34.5s)

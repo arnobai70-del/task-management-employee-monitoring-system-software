@@ -5,6 +5,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 ## [Unreleased]
 
 ### Added
+- Visual regression tests for the Admin Web: the sign-in, dashboard, employees, permission and not-found pages are compared with committed screenshots on a phone and a desktop, in light and dark, using fixed fictional data. They run in CI as the new `admin-web-visual` job (G-13).
 - Browser end-to-end tests in `tests/e2e` (Playwright): sign-in and sign-out, an employee without admin permissions is sent to the permission page and refused by the API, a team lead sees only their own team, and an admin creates an employee through the form. They run in CI as the new `admin-web-e2e` job against a fresh database with fictional people (G-17).
 - Team scoping for managers (phase 1): without the new `employees.scope.all` permission, employee lists, attendance, presence, monitoring activity, website work and the productivity report show only the user and the people who report to them, directly or indirectly. Existing roles keep seeing everyone after the upgrade (G-27).
 - Team scoping phase 2: the same limit now covers the dashboard and the daily attendance, workload and follow-up SLA reports, the attention report and its actions, project tasks, access and survey-link assignments, survey assignments and reviews, Website Work edits and reviews, and live presence and Website Work events. Unassigned work stays visible (G-27).
