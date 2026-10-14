@@ -155,14 +155,16 @@ if (only.includes('hidden')) {
   }, hidden);
   for (const route of ['/dashboard', '/website-work', '/operations']) {
     await page.goto(WEB + route); await page.waitForTimeout(3000);
+    // Each window is summarised as soon as it ends, so later requests are not counted in it.
+    const windowSummary = t => `${countSince(state, t)} API requests (${topPaths(state, t) || 'none'})`;
     const v = Date.now(); await page.waitForTimeout(WINDOW_MS);
-    const visible = countSince(state, v);
+    const visible = windowSummary(v);
     await setHidden(true);
     const h = Date.now(); await page.waitForTimeout(2 * WINDOW_MS);
-    const hidden = countSince(state, h);
+    const hidden = windowSummary(h);
     await setHidden(false);
     const s0 = Date.now(); await page.waitForTimeout(3000);
-    log(`hidden ${route}: visible 30 s ${visible} API requests (${topPaths(state, v) || 'none'}); hidden 60 s ${hidden} (${topPaths(state, h) || 'none'}); first 3 s after shown ${countSince(state, s0)} (${topPaths(state, s0) || 'none'}); page errors ${state.pageErrors.length}`);
+    log(`hidden ${route}: visible 30 s ${visible}; hidden 60 s ${hidden}; first 3 s after shown ${windowSummary(s0)}; page errors ${state.pageErrors.length}`);
   }
   await context.close();
 }
