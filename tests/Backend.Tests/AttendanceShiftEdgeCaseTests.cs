@@ -212,7 +212,7 @@ public sealed class AttendanceShiftEdgeCaseTests
     }
 
     [Fact]
-    public async Task Shift_starting_in_the_spring_forward_gap_cannot_be_resolved_on_that_day()
+    public async Task Shift_starting_in_the_spring_forward_gap_starts_at_the_first_valid_minute()
     {
         var ct = TestContext.Current.CancellationToken;
         var (options, userId) = await SeedAsync(new TimeOnly(2, 30), new TimeOnly(10, 30), NewYork, new DateOnly(2026, 3, 8), ct, new DateOnly(2026, 3, 8));
@@ -220,10 +220,40 @@ public sealed class AttendanceShiftEdgeCaseTests
 
         var checkIn = await RunAsync(options, clock, s => s.CheckInAsync(Actor(userId), ct));
 
-        // G-29 (RISK, low for Asia/Dhaka which has no DST): the invalid local
-        // start makes the assignment unresolvable instead of shifting to 03:00.
-        Assert.Equal(OperationStatus.Invalid, checkIn.Status);
-        Assert.Equal("shift_not_assigned", checkIn.ErrorCode);
+        // G-29: the missing 02:30 start moves to 03:00 EDT, the first local minute that exists,
+        // instead of the shift being unresolvable that day (it answered shift_not_assigned).
+        Assert.Equal(OperationStatus.Success, checkIn.Status);
+        Assert.Equal(new DateOnly(2026, 3, 8), checkIn.Value!.WorkDate);
+        Assert.Equal(Utc("2026-03-08T07:00:00Z").UtcDateTime, checkIn.Value.ScheduledStartUtc);
+        Assert.Equal(Utc("2026-03-08T14:30:00Z").UtcDateTime, checkIn.Value.ScheduledEndUtc); // 10:30 EDT
+        Assert.Equal(30, checkIn.Value.LateMinutes);
+    }
+
+    [Fact]
+    public async Task Overnight_shift_ending_in_the_spring_forward_gap_ends_at_the_first_valid_minute()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (options, userId) = await SeedAsync(new TimeOnly(18, 0), new TimeOnly(2, 30), NewYork, new DateOnly(2026, 3, 7), ct, new DateOnly(2026, 3, 7));
+        var clock = new MutableTimeProvider(Utc("2026-03-07T23:00:00Z")); // 18:00 EST on Mar 7
+
+        var checkIn = await RunAsync(options, clock, s => s.CheckInAsync(Actor(userId), ct));
+
+        Assert.Equal(OperationStatus.Success, checkIn.Status);
+        Assert.Equal(Utc("2026-03-07T23:00:00Z").UtcDateTime, checkIn.Value!.ScheduledStartUtc);
+        Assert.Equal(Utc("2026-03-08T07:00:00Z").UtcDateTime, checkIn.Value.ScheduledEndUtc); // 03:00 EDT
+    }
+
+    [Theory]
+    [InlineData("2026-03-08T02:00:00", "2026-03-08T07:00:00Z")] // gap start -> 03:00 EDT
+    [InlineData("2026-03-08T02:59:30", "2026-03-08T07:00:00Z")] // seconds inside the gap
+    [InlineData("2026-03-08T03:00:00", "2026-03-08T07:00:00Z")] // first valid minute, unchanged
+    [InlineData("2026-03-08T01:59:00", "2026-03-08T06:59:00Z")] // last minute before the gap, unchanged
+    [InlineData("2026-11-01T01:30:00", "2026-11-01T06:30:00Z")] // repeated fall-back hour: standard time, as before
+    public void Local_to_utc_moves_gap_times_forward_and_leaves_valid_times_alone(string local, string expectedUtc)
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(NewYork);
+        var result = AttendanceCoreService.LocalToUtc(DateTime.Parse(local, System.Globalization.CultureInfo.InvariantCulture), zone);
+        Assert.Equal(Utc(expectedUtc).UtcDateTime, result);
     }
 
     private static async Task<(DbContextOptions<AppDbContext> Options, Guid UserId)> SeedAsync(
