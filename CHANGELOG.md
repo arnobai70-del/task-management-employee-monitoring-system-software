@@ -10,10 +10,12 @@ All notable changes to this project are recorded here. Dates are UTC.
 - `scripts/audit/signalr-expiry.mjs`, `scripts/audit/signalr-reconnect.mjs` evidence scripts for realtime session expiry.
 - Admin Web dark theme with a System / Light / Dark selector in the top bar. The choice is kept in the browser, and System follows the operating system setting (G-37).
 - Optional private observability stack (OpenTelemetry collector, Prometheus, Loki, Grafana) bound to localhost, from the earlier observability work brought up to date with main. Telemetry export stays off until `Observability:OtlpEndpoint` is set (G-15).
+- `scripts/audit/csp-connect-src.mjs` browser check for the production CSP against a local API.
 - `scripts/audit/perf-seed.sql` and `scripts/audit/api-latency.mjs` for repeatable API latency baselines on fictional data.
 - Attendance edge-case tests for 20:30→09:00/09:30/10:00 night shifts, breaks, early leave and DST transitions (G-06).
 
 ### Changed
+- The production Content-Security-Policy allows browser connections only to the site's own origin (`connect-src 'self'`). The realtime hub keeps working because it is served from the same origin (G-25).
 - Admin Web presence shows "On shift", "On break", "Connected, not on shift" and "Offline" instead of "Working"/"Idle", and started website work shows "In progress". The labels now say what is measured, not effort (G-08).
 - Removed the unused `WebsiteWorkService.CompleteAsync`, which could mark work done without review; completion always goes through submit and approve (G-31).
 - Admin Web loads each page on demand and starts the realtime client only after sign-in. The first download drops from 145.6 kB to 93.8 kB gzip (G-35).

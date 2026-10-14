@@ -34,7 +34,7 @@ Method: STRIDE per trust boundary, grounded in code read during the audit. Each 
 | **R** Admin action repudiation | B1 | Audit log rows for auth, role, employee, website work actions; hash-verifiable export (`SecurityObservabilityService.cs:107-152`) | Export formula injection — **fixed** (G-23). |
 | **I** Horizontal data access (Employee A reads B) | B1/B4 | Fallback policy requires auth; permission policies; self-scoped `api/me/*` controllers | Needs explicit two-employee/two-manager tests (G-10). |
 | **I** Realtime leakage after revoke/disable | B1/B4 | Group membership by permission claims at connect (`RealtimeHub.cs:106-148`) | Sockets outlived token expiry — **fixed** with `CloseOnAuthenticationExpiration` (G-22). Max staleness now = access-token lifetime (15 min). |
-| **I** XSS token theft | B1 | CSP `script-src 'self'`, no inline script, React escaping, refresh token not JS-readable | Access token in `sessionStorage` (G-05); `connect-src ws: wss:` (G-25). |
+| **I** XSS token theft | B1 | CSP `script-src 'self'`, no inline script, React escaping, refresh token not JS-readable | Access token in `sessionStorage` (G-05); `connect-src` limited to `'self'` (G-25, PR open). |
 | **I** Secrets in repo | B7 | `.gitignore` covers env/secrets/backups; gitleaks clean (fixtures only) | Add gitleaks to CI (OPPORTUNITY). |
 | **D** Request floods | B1 | Per-IP auth limiter, device limiter | No global limiter on authenticated endpoints; report range limits exist (366 days export). |
 | **D** Long report queries | B3 | `Take(limit)` in reporting, export cap `ExportMaxRecords` | No EXPLAIN baseline (G-12). |

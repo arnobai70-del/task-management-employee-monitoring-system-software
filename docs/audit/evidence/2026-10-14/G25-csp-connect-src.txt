@@ -1,0 +1,31 @@
+G-25 CSP connect-src browser check, 2026-10-14T14:49:53Z
+Chromium 141.0.7390.37
+Local API 127.0.0.1:5080 on scratch DB tm_perf; Admin Web dist built from main b3394c1; single-origin proxy like Caddy.
+
+== Before (old policy) ==
+[before] csp connect-src: connect-src 'self' ws: wss:
+[before] signed in: true
+[before] realtime websockets: 1 (with frames: 1) ws://127.0.0.1:5181/hubs/realtime?id=s8Jx8-P5Usrh7774Hl0ClA&access_token=<redacted>
+[before] csp violations: 0
+[before] console errors: 0
+[before] RESULT: PASS
+
+== After (deploy/production/Caddyfile as committed) ==
+[after] csp connect-src: connect-src 'self'
+[after] signed in: true
+[after] realtime websockets: 1 (with frames: 1) ws://127.0.0.1:5181/hubs/realtime?id=SJzyV4Vwi5e5GLbI4eqOCA&access_token=<redacted>
+[after] csp violations: 0
+[after] console errors: 0
+[after] RESULT: PASS
+
+== Negative control: connect-src 'none' must be caught ==
+[control] csp connect-src: connect-src 'none'
+[control] signed in: false
+[control] realtime websockets: 0 (with frames: 0) 
+[control] csp violations: 1
+  connect-src blocked http://127.0.0.1:5181/api/auth/web/login
+[control] console errors: 2
+  Refused to connect to 'http://127.0.0.1:5181/api/auth/web/login' because it violates the following Content Security Policy directive: "connect-src 'none'".
+
+  Fetch API cannot load http://127.0.0.1:5181/api/auth/web/login. Refused to connect because it violates the document's Content Security Policy.
+[control] RESULT: FAIL

@@ -108,10 +108,10 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 - **Fix:** prefix `'` to text cells starting with `= + - @ \t \r` (server and both client exporters; numeric cells unchanged). **Status: FIXED — merged in #69. Not deployed.**
 
 ### F-04 Rate-limit rejections each write an audit row — RISK, P2 (G-24)
-- `Program.cs:207-236`: every 429 performs a synchronous DB insert. A flood against `/api/auth/*` turns rate limiting into DB write amplification. Suggest: sample/aggregate (e.g. one row per partition per window). Not changed yet.
+- `Program.cs:207-236`: every 429 performed a synchronous DB insert (control: 15 rows for 15 rejections), and a User-Agent over 512 characters made the insert fail. **Status: FIXED — `RateLimitAuditSampler` writes one row per source per 10 s (with `suppressedBefore`) and at most 50 rows per 10 s overall; fields truncated. Merged in #88. Not deployed.**
 
 ### F-05 CSP `connect-src` allows any WebSocket host — RISK, P2 (G-25)
-- `deploy/production/Caddyfile:187`: `connect-src 'self' ws: wss:`. `'self'` already covers same-origin `wss:` in current browsers; the bare schemes allow exfiltration to any host if XSS ever lands. Suggest `connect-src 'self'` after verifying SignalR in the target browsers.
+- `deploy/production/Caddyfile:187`: `connect-src 'self' ws: wss:`. `'self'` already covers same-origin `wss:` in current browsers; the bare schemes allow exfiltration to any host if XSS ever lands. **Status: FIXED (PR open)** — now line 27, changed to `connect-src 'self'`. Chromium 141 check through a single-origin proxy like Caddy (`scripts/audit/csp-connect-src.mjs`): sign-in works, the realtime hub connects over a WebSocket and receives frames, 0 CSP violations; a `connect-src 'none'` control is caught. `'self'` matching same-origin `wss:` follows CSP Level 3 and is supported in current Chrome, Edge, Firefox and Safari (inferred from the spec and browser release notes, not tested here on Firefox/Safari).
 
 ### F-06 Stale admin auth documentation — VERIFIED (doc defect), P2 (G-05)
 - `docs/admin-web.md:33-49` described JSON refresh tokens in `sessionStorage`. Corrected in this PR. Remaining exposure: the 15-minute **access** token is still in `sessionStorage` (XSS-readable); mitigated by CSP `script-src 'self'`. Kept as RISK.
@@ -139,6 +139,6 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 | 5 UI redesign | IN PROGRESS — status-pill overlap fixed (G-33, #78 merged); route code splitting 145.6 → 93.8 kB gzip (G-35 #79, G-34 #80 merged); G-08 labels (#82 merged); dark theme + WCAG AA contrast fixes, 0 issues on 38/38 page checks (G-37, #83 merged); [DESIGN_SYSTEM.md](../ui/DESIGN_SYSTEM.md) draft | brand accent (owner decision), components |
 | 6 Tab screenshot | RFC DRAFT ONLY — **implementation needs owner's written policy approval** | [SCREENSHOT_CAPTURE_RFC.md](SCREENSHOT_CAPTURE_RFC.md) |
 | 7 RDP support | BLOCKED — no Windows Server RDP test host | owner to provide a test VPS |
-| 8 Performance/observability | IN PROGRESS — #85 merged (G-15, CI green incl. observability acceptance); API latency baseline on 1000 employees / 60 days published, 17/20 endpoints p95 < 300 ms; security dashboard row bound (G-40, #87 merged); 429 audit sampling (G-24, PR open); production run BLOCKED | audit search index decision (G-41), load/degradation tests |
+| 8 Performance/observability | IN PROGRESS — #85 merged (G-15, CI green incl. observability acceptance); API latency baseline on 1000 employees / 60 days published, 17/20 endpoints p95 < 300 ms; security dashboard row bound (G-40, #87 merged); 429 audit sampling (G-24, #88 merged); CSP connect-src tightened (G-25, PR open); production run BLOCKED | audit search index decision (G-41), load/degradation tests |
 | 9 Production pipeline | BLOCKED — no production host/secret/deploy access | [DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md) |
 | 10 Final E2E | NOT STARTED | |
