@@ -1,4 +1,4 @@
-// Usage: PW=$(npm root -g)/playwright node scripts/audit/degradation.mjs [shotDir]
+// Usage: PW=$(npm root -g)/playwright node scripts/audit/degradation.mjs [shotDir]   (ONLY=baseline,errors,offline,slow to pick)
 // Serves src/AdminWeb/dist on 127.0.0.1:5182 and proxies /api and /hubs (WebSocket upgrades too) to a local API on
 // 127.0.0.1:5080, like Caddy. Signs in with RT_ADMIN_EMAIL/RT_ADMIN_PASSWORD (local scratch admin, fictional data) and
 // checks how the Admin Web behaves under HTTP 429, HTTP 500, a lost connection and a slow link: what the page shows,
@@ -72,11 +72,13 @@ const visibleAlerts = page => page.evaluate(() => [...document.querySelectorAll(
 const mainText = page => page.evaluate(() => (document.querySelector('main')?.innerText ?? document.body.innerText).trim().length);
 const shot = async (page, name) => { if (shotDir) await page.screenshot({ path: join(shotDir, `${name}.png`) }); };
 
+const only = (process.env.ONLY ?? 'baseline,errors,offline,slow').split(',');
+const headerStatus = page => page.locator('.topbar-title span').innerText().catch(() => '');
 const ROUTES = ['/dashboard', '/employees', '/attendance', '/audit-logs'];
 const WINDOW_MS = 30000;
 
 // 1. Idle baseline: how many API calls a healthy page makes in 30 s.
-{
+if (only.includes('baseline')) {
   const context = await browser.newContext({ viewport: { width: 1366, height: 860 } });
   const { page, state } = await signedInPage(context);
   for (const route of ROUTES) {
@@ -88,7 +90,7 @@ const WINDOW_MS = 30000;
 }
 
 // 2/3. Server answers 429 or 500 to every API call except token refresh, for 30 s, then recovers.
-for (const [status, body, headers] of [
+if (only.includes('errors')) for (const [status, body, headers] of [
   [429, { code: 'rate_limited', message: 'Too many requests.' }, { 'retry-after': '30' }],
   [500, { code: 'server_error', message: 'An unexpected error occurred.' }, {}]]) {
   // One sign-in per status: the auth endpoints allow 10 requests per minute per client.
@@ -116,17 +118,19 @@ for (const [status, body, headers] of [
 }
 
 // 4. Connection lost for 30 s, then back.
-{
+if (only.includes('offline')) {
   const context = await browser.newContext({ viewport: { width: 1366, height: 860 } });
   const { page, state } = await signedInPage(context);
   await page.goto(WEB + '/dashboard'); await page.waitForTimeout(3000);
+  const headerBefore = await headerStatus(page);
   const socketsBefore = state.sockets.length;
   const failedBefore = state.failed;
   await context.setOffline(true);
   const t = Date.now(); await page.waitForTimeout(WINDOW_MS);
   const alerts = await visibleAlerts(page);
+  const headerOffline = await headerStatus(page);
   await shot(page, 'offline_dashboard');
-  log(`offline /dashboard: ${countSince(state, t)} API requests attempted in 30 s (${state.failed - failedBefore} failed); message: ${JSON.stringify(alerts)}; page errors: ${state.pageErrors.length}; signed in: ${!new URL(page.url()).pathname.startsWith('/login')}`);
+  log(`offline /dashboard: ${countSince(state, t)} API requests attempted in 30 s (${state.failed - failedBefore} failed); message: ${JSON.stringify(alerts)}; page errors: ${state.pageErrors.length}; signed in: ${!new URL(page.url()).pathname.startsWith('/login')}; header before: "${headerBefore}", while offline: "${headerOffline}"`);
   await context.setOffline(false);
   const r0 = Date.now();
   let reconnected = null;
@@ -135,12 +139,12 @@ for (const [status, body, headers] of [
     if (state.sockets.length > socketsBefore && state.sockets.at(-1).frames > 0) { reconnected = Date.now() - r0; break; }
   }
   const okAfter = await page.waitForResponse(r => isApi(r.url()) && r.status() < 400, { timeout: 60000 }).then(() => true).catch(() => false);
-  log(`online again: realtime reconnected ${reconnected === null ? 'not within 90 s' : `after ${Math.round(reconnected / 1000)} s`}; API data request succeeded: ${okAfter}; still signed in: ${!new URL(page.url()).pathname.startsWith('/login')}; page errors: ${state.pageErrors.length}`);
+  log(`online again: realtime reconnected ${reconnected === null ? 'not within 90 s' : `after ${Math.round(reconnected / 1000)} s`}; API data request succeeded: ${okAfter}; still signed in: ${!new URL(page.url()).pathname.startsWith('/login')}; page errors: ${state.pageErrors.length}; header now: "${await headerStatus(page)}"`);
   await context.close();
 }
 
 // 5. Slow link (about 400 kbit/s down, 400 ms latency): time from sign-in click to a rendered dashboard.
-{
+if (only.includes('slow')) {
   const context = await browser.newContext({ viewport: { width: 1366, height: 860 } });
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);

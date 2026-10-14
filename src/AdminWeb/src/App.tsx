@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState, type FormEvent, type ReactNode } f
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
+import { watchRealtimeState, type RealtimeState } from './realtime';
 import SecurityAlertRealtimeNotice from './SecurityAlertRealtimeNotice';
 import { StatusRail } from './StatusRail';
 import { ThemeSelect } from './theme';
@@ -127,18 +128,48 @@ function LoginPage() {
   );
 }
 
+type ConnectionStatus = 'live' | 'reconnecting' | 'offline';
+
+const connectionLabels: Record<ConnectionStatus, string> = {
+  live: 'Live server data',
+  reconnecting: 'Reconnecting to the server…',
+  offline: 'Offline. Showing the last loaded data.'
+};
+
+// The header used to say "Live server data" even with the network gone, so stale numbers looked current.
+function useConnectionStatus(): ConnectionStatus {
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const [realtime, setRealtime] = useState<RealtimeState>('disconnected');
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    const stopWatching = watchRealtimeState(next => setRealtime(next));
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+      stopWatching();
+    };
+  }, []);
+
+  if (!online) return 'offline';
+  return realtime === 'reconnecting' ? 'reconnecting' : 'live';
+}
+
 function AppShell({ children }: { children: ReactNode }) {
   const { claims, can, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
   const visibleItems = navItems.filter(item => can(item.permission));
+  const connection = useConnectionStatus();
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
   return (
     <div className="app-shell">
       <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
-        <div className="sidebar-brand">
+        <div className="sidebar-brand" data-connection={connection}>
           <div className="brand-mark">TM</div>
           <div><strong>Task Monitor</strong><small>Admin Console</small></div>
         </div>
@@ -155,7 +186,7 @@ function AppShell({ children }: { children: ReactNode }) {
       <div className="workspace">
         <header className="topbar">
           <button className="menu-button" type="button" onClick={() => setMenuOpen(value => !value)} aria-label="Toggle navigation">☰</button>
-          <div className="topbar-title"><strong>Operations Console</strong><span>Live server data</span></div>
+          <div className="topbar-title" data-connection={connection}><strong>Operations Console</strong><span role="status">{connectionLabels[connection]}</span></div>
           <div className="account-area">
             <div className="account-copy"><strong>{claims.email || 'Signed in'}</strong><span>{claims.roles.join(', ') || 'Authorized user'}</span></div>
             <ThemeSelect />

@@ -1,0 +1,33 @@
+G-45 header shows connection state, 2026-10-14T15:27:21Z
+
+== before (main) ==
+offline /dashboard: 14 API requests attempted in 30 s (14 failed); message: []; page errors: 0; signed in: true; header before: "Live server data", while offline: "Live server data"
+online again: realtime reconnected after 5 s; API data request succeeded: true; still signed in: true; page errors: 0; header now: "Live server data"
+== after ==
+offline /dashboard: 14 API requests attempted in 30 s (14 failed); message: []; page errors: 0; signed in: true; header before: "Live server data", while offline: "Offline. Showing the last loaded data."
+online again: realtime reconnected after 4 s; API data request succeeded: true; still signed in: true; page errors: 0; header now: "Live server data"
+
+== Route smoke with all /api returning 503 (scripts/audit/admin-route-smoke.mjs) on the new build ==
+g45 /login JS bytes (uncompressed) = 305232
+g45 /dashboard -> url=/dashboard h1="Dashboard" pageErrors=0
+g45 /productivity -> url=/productivity h1="Employee Productivity" pageErrors=0
+g45 /sla-analytics -> url=/sla-analytics h1="Escalation & SLA Analytics" pageErrors=0
+g45 /operations -> url=/operations h1="Operations & Agent Health" pageErrors=0
+g45 /security-alerts -> url=/security-alerts h1="Security alerts" pageErrors=0
+g45 /employees -> url=/employees h1="Employees & roles" pageErrors=0
+g45 /departments -> url=/departments h1="Departments" pageErrors=0
+g45 /shifts -> url=/shifts h1="Shifts & assignments" pageErrors=0
+g45 /attendance -> url=/attendance h1="Attendance" pageErrors=0
+g45 /projects -> url=/projects h1="Projects & members" pageErrors=0
+g45 /tasks -> url=/tasks h1="Tasks" pageErrors=0
+g45 /website-work -> url=/website-work h1="Website Work" pageErrors=0
+g45 /follow-ups -> url=/follow-ups h1="My Follow-ups" pageErrors=0
+g45 /surveys -> url=/surveys h1="Survey website assignments" pageErrors=0
+g45 /access/rdp -> url=/access/rdp h1="RDP Assignments" pageErrors=0
+g45 /access/ip -> url=/access/ip h1="IP Assignments" pageErrors=0
+g45 /access/websites -> url=/access/websites h1="Website Assignments" pageErrors=0
+g45 /audit-logs -> url=/audit-logs h1="Security observability & audit" pageErrors=0
+g45 /forbidden -> url=/forbidden h1="Permission required" pageErrors=0
+g45 /nope -> url=/nope h1="Page not found" pageErrors=0
+
+npm run build: dark theme check, tsc and vite build pass; main chunk 89.85 kB gzip.

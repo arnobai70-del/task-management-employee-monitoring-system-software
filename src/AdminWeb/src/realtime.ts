@@ -102,6 +102,13 @@ function ensureConnection() {
     });
 }
 
+/** Reports connection state changes without opening or keeping a connection. Returns the cleanup for useEffect. */
+export function watchRealtimeState(onState: StateListener): () => void {
+  stateListeners.add(onState);
+  onState(state);
+  return () => { stateListeners.delete(onState); };
+}
+
 /**
  * Subscribes to hub events and, optionally, connection state. Returns the cleanup for useEffect.
  * The shared connection stops once the last subscriber leaves; the stop is deferred by a microtask

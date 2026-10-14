@@ -1,0 +1,28 @@
+Phase 8 degradation checks (scripts/audit/degradation.mjs), 2026-10-14T15:27:21Z
+Chromium 141; local API on scratch DB tm_perf (1000 fictional employees, 60 days); Admin Web dist from main; single-origin proxy like Caddy.
+Each failure window is 30 s; 429 carries Retry-After: 30; /api/auth/* is left working so the session can refresh.
+
+baseline /dashboard: 14 API requests in 30 s idle (/api/website-work×6, /api/website-work/follow-ups/mine×2, /api/reports/website-work/attention×2, /api/admin-notifications/summary×1); page errors 0
+baseline /employees: 11 API requests in 30 s idle (/api/website-work×6, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×1, /api/security-alerts/summary×1); page errors 0
+baseline /attendance: 11 API requests in 30 s idle (/api/website-work×6, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×1, /api/security-alerts/summary×1); page errors 0
+baseline /audit-logs: 11 API requests in 30 s idle (/api/website-work×6, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×1, /api/security-alerts/summary×1); page errors 0
+429 /dashboard: 14 API requests in 30 s while failing (/api/website-work×8, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 5 s; main text after: 169 chars
+429 /employees: 15 API requests in 30 s while failing (/api/website-work×8, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 5 s; main text after: 248 chars
+429 /attendance: 12 API requests in 30 s while failing (/api/website-work×8, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 5 s; main text after: 225 chars
+429 /audit-logs: 13 API requests in 30 s while failing (/api/website-work×8, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 5 s; main text after: 500 chars
+500 /dashboard: 14 API requests in 30 s while failing (/api/website-work×8, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 5 s; main text after: 180 chars
+500 /employees: 15 API requests in 30 s while failing (/api/website-work×8, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 5 s; main text after: 259 chars
+500 /attendance: 12 API requests in 30 s while failing (/api/website-work×8, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 5 s; main text after: 236 chars
+500 /audit-logs: 18 API requests in 30 s while failing (/api/website-work×8, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 5 s; main text after: 522 chars
+offline /dashboard: 14 API requests attempted in 30 s (14 failed); message: ["Incidents 501 · 1 critical"]; page errors: 0; signed in: true
+online again: realtime reconnected after 4 s; API data request succeeded: true; still signed in: true; page errors: 0
+slow link (400 ms, 50 KB/s): sign-in page usable after 7.5 s; dashboard content after sign-in 1.0 s
+
+Note: 'message: []' above is a selector miss in the first run; screenshots show the error panel 'Could not load this view.' with the server message and a Retry button on every route (429: 'Too many requests.', 500: 'An unexpected error occurred.'). The selector now targets .error-panel.
+
+Reading:
+- No crash, no sign-out, 0 page errors under 429, 500 and offline.
+- No retry storm: requests during failure (12-18 per 30 s) match the healthy idle rate (11-14 per 30 s).
+- Background polls recover by themselves within 5 s; the main view keeps its error panel until Retry or navigation (G-46).
+- Offline keeps the last loaded data on screen, realtime reconnects 4-5 s after the network returns, but the header kept saying 'Live server data' while offline (G-45).
+- Slow link (400 ms, 50 KB/s): sign-in page usable in 7.5 s, dashboard 1.0 s after sign-in.
