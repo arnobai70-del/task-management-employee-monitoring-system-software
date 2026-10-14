@@ -1,0 +1,51 @@
+G-17 — Browser E2E and RBAC suite (Playwright)
+Date: 2026-10-14 (UTC). Base: main 8d4b67f. Branch: test/g17-e2e-rbac.
+Data: fictional only. People are created per run with codes E2E-<KEY>-<run> and
+@example.invalid addresses. The admin password is generated per run and never written to the repo.
+
+Environment (local)
+- API: Release build, Development environment, AutoMigrate on, local PostgreSQL 16, http://127.0.0.1:5081
+- Admin Web: npm run build + vite preview on http://127.0.0.1:4173, /api proxied to the API
+- Playwright 1.56.1, Chromium /opt/pw-browsers/chromium, 1 worker, 0 retries
+- tests/e2e/seed-roles.sql applied: TeamLead gets employees.read only (no employees.scope.all)
+- CI: new job admin-web-e2e in .github/workflows/ci.yml does the same against postgres:17-alpine
+
+Suite
+- auth.spec.ts           wrong password refused; admin signs in, reaches /dashboard, signs out, /employees then redirects to /login
+- rbac.spec.ts           an Employee-role user is sent to /forbidden on 4 admin routes and gets 403 from 4 admin API endpoints
+- team-scope.spec.ts     a TeamLead sees their report and not an outsider, outsider detail is 404; admin sees all three
+- employee-create.spec.ts admin creates an employee through the form (supervisor + role) and finds the row
+
+== Positive run ==
+$ npx playwright test --reporter=list
+
+Running 6 tests using 1 worker
+
+  ✓  1 specs/auth.spec.ts:3:1 › a wrong password is refused and keeps the user on the sign-in page (730ms)
+  ✓  2 specs/auth.spec.ts:9:1 › the administrator signs in, lands on the dashboard and signs out (989ms)
+  ✓  3 specs/employee-create.spec.ts:3:1 › the administrator creates an employee through the form and finds them in the directory (1.3s)
+  ✓  4 specs/rbac.spec.ts:4:1 › an employee without admin permissions gets the permission page, in the browser and from the API (988ms)
+  ✓  5 specs/team-scope.spec.ts:4:1 › a team lead sees their own report and not an employee outside the team (1.1s)
+  ✓  6 specs/team-scope.spec.ts:18:1 › the administrator sees everyone, including the employee outside the team (649ms)
+
+  6 passed (7.4s)
+
+== Negative control ==
+Permissions deliberately loosened in the local DB, then the suite re-run:
+  UPDATE: TeamLead granted employees.scope.all; Employee granted employees.read.
+Expected: rbac and lead-scope tests fail, proving they test the permission rules and not just page loads.
+(Long "Received string" values trimmed.)
+  ✘  1 specs/rbac.spec.ts:4:1 › an employee without admin permissions gets the permission page, in the browser and from the API (5.7s)
+  ✘  2 specs/team-scope.spec.ts:4:1 › a team lead sees their own report and not an employee outside the team (6.2s)
+  ✓  3 specs/team-scope.spec.ts:18:1 › the administrator sees everyone, including the employee outside the team (844ms)
+    Error: expect(page).toHaveURL(expected) failed
+    Expected pattern: /\/forbidden$/
+    Received string:  "http://127.0.0.1:4173/employees"
+    test-results/rbac-an-employee-without-a-3b6fd-he-browser-and-from-the-API/test-failed-1.png
+    Error: expect(locator).not.toContainText(expected) failed
+    Expected substring: not "E2E Outsider MV8JRHBD"
+    Received string: "EmployeeJob / departmentSupervisorRolesStatusE2E Lead MV8JNFWXE2E-LEAD-MV8JNFWX · e2e-lead-mv8jnfwx@example.invalidFictional testerNo depar …" (trimmed)
+    test-results/team-scope-a-team-lead-see-1de4c-n-employee-outside-the-team/test-failed-1.png
+  2 failed
+  1 passed (16.8s)
+Grants reverted afterwards; the positive run above was taken after the revert.
