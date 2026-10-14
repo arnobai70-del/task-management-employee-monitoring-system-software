@@ -1,0 +1,28 @@
+G-39 website assignment audit records host only, 2026-10-14
+Owner left the rule to Claude ('jaita sobidha hoy'). Fictional URLs and tokens only.
+
+== Control: new test without the AccessAssignmentService change ==
+Build succeeded.
+failed Backend.Tests.AccessAssignmentServiceTests.Website_assignment_audit_records_host_without_path_or_query (192ms)
+  Assert.Contains() Failure: Sub-string not found
+/src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64) failed with 1 error(s) (2s 623ms)
+  total: 26
+  failed: 1
+  succeeded: 25
+
+== With the fix: AccessAssignmentServiceTests ==
+Build succeeded.
+  total: 26
+  failed: 0
+  succeeded: 26
+
+== Full backend suite + refresh-race test x5 (local PostgreSQL 16, .NET 10 SDK container) ==
+Build succeeded.
+  total: 214
+  failed: 0
+  succeeded: 214
+  failed: 0   succeeded: 1  (race run 1)
+  failed: 0   succeeded: 1  (race run 2)
+  failed: 0   succeeded: 1  (race run 3)
+  failed: 0   succeeded: 1  (race run 4)
+  failed: 0   succeeded: 1  (race run 5)
