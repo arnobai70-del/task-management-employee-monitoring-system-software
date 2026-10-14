@@ -9,6 +9,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - `docs/ui/DESIGN_SYSTEM.md` Phase 5 design draft and route inventory.
 - `scripts/audit/signalr-expiry.mjs`, `scripts/audit/signalr-reconnect.mjs` evidence scripts for realtime session expiry.
 - Admin Web dark theme with a System / Light / Dark selector in the top bar. The choice is kept in the browser, and System follows the operating system setting (G-37).
+- Optional private observability stack (OpenTelemetry collector, Prometheus, Loki, Grafana) bound to localhost, from the earlier observability work brought up to date with main. Telemetry export stays off until `Observability:OtlpEndpoint` is set (G-15).
 - Attendance edge-case tests for 20:30→09:00/09:30/10:00 night shifts, breaks, early leave and DST transitions (G-06).
 
 ### Changed

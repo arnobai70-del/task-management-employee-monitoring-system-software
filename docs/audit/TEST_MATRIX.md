@@ -48,6 +48,7 @@ All timestamps UTC.
 | G28-01 | `AttendanceAutoCloseAndCorrectionTests` (15) + `HttpAttendanceCorrectionTests` (2): auto-close timing, breaks, late checkout, next-day check-in, correction math/validation, 401/403/400/200, concurrent close exactly once (control without token: 8 rows) | Unit + HTTP + PostgreSQL | L | PASS 17/17; suite 173/173; migration up/down/up OK | 2026-10-13 | [G28-attendance-auto-close-correction.txt](evidence/2026-10-14/G28-attendance-auto-close-correction.txt) |
 | P4-02 (G-38) | `AccessAssignmentServiceTests` (+13): shorthand/hex/octal/zone IPs rejected, full IPv4/IPv6 accepted, RDP host with scheme/port/path/user/space rejected, hostname/IP accepted, unchanged legacy values still deactivate/release | fictional 10.x / 2001:db8:: / example.internal | L | Control without fix: 12/12 malformed inputs accepted; with fix 25/25; full suite PASS 205/205 | 2026-10-14 02:10 | [P4 access/survey log](evidence/2026-10-14/P4-access-assignment-validation-survey-review.txt) |
 | P4-03 | Survey flows review (`SurveyCoreServiceTests` 8, `ExternalSurveyServiceTests` 3) | code review + existing tests | L | PASS, no defect; history kept as revisions; external links store no third-party data | 2026-10-14 02:10 | same |
+| P8-01 (G-15) | #17 observability merged onto main: restore, vulnerable-package scan, Release build, full backend suite | merged tree | L | PASS: no vulnerable packages, build OK, 207/207 | 2026-10-14 02:25 | [P8 observability log](evidence/2026-10-14/P8-observability-merge.txt) |
 
 ## Not yet run (planned)
 | Area | Reason | Phase |

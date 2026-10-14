@@ -1,0 +1,41 @@
+P8 Bring PR #17 (private production observability) up to date with main (G-15)
+Date: 2026-10-14 (UTC). Base: origin/main 09016f5 (after #84). Branch: perf/observability-on-main.
+Method: merge commit of origin/feat/production-observability (head 59203d1) into current main.
+No history on #17's branch was rewritten; #17 itself is left open for the owner to close.
+Nothing was deployed and no production host was touched.
+
+Conflicts (5 files) and how they were resolved - both sides kept:
+- .github/workflows/ci.yml: main's release idempotency / pinned-certificate / immutable-version
+  checks stay in the production acceptance step; #17's "Start private observability stack" and
+  "Verify observability telemetry acceptance" steps follow it.
+- deploy/production/production.env.example: AGENT_UPDATE_ENROLLMENT_KEY_SECRET_FILE (main) and
+  GRAFANA_ADMIN_PASSWORD_SECRET_FILE (#17).
+- scripts/production/init-production-secrets.sh: one secret_paths list with main's agent update
+  key and #17's optional Grafana password; main's symlink refusal and chmod 600 loop now cover
+  the Grafana secret too.
+- src/Backend/TaskMonitoring.Api/Program.cs: #17's OpenTelemetry logs/metrics block (only when
+  Observability:OtlpEndpoint is set); #17's own forwarded-headers block dropped because main
+  already configures it through SecurityRegistration.ConfigureTrustedForwardedHeaders.
+- src/Backend/TaskMonitoring.Api/appsettings.json: all of main's sections plus Observability
+  (OtlpEndpoint empty by default, so telemetry export is off unless configured).
+
+Privacy / exposure review of what #17 adds:
+- All Grafana, Prometheus, Loki and collector ports are published on
+  ${OBSERVABILITY_BIND:-127.0.0.1} only (observability.compose.yml:19,34,52,76); Caddy does not
+  route to them.
+- Metrics tags are HTTP method and status class only (ApiTelemetryMiddleware.cs). The request log
+  line records method, path (no query string), status and duration - no bodies, headers, tokens,
+  screenshots or keystrokes. Paths can contain record GUIDs.
+- Loki keeps logs for 168 h (loki.yml:30).
+
+Checks on the merged tree (local, .NET 10 SDK container, PostgreSQL 16):
+- dotnet restore: OK; `dotnet list package --vulnerable --include-transitive`: no vulnerable packages
+  (OpenTelemetry 1.19.x).
+- dotnet build TaskMonitoring.slnx -c Release (TreatWarningsAsErrors): Build succeeded.
+- dotnet test: total 207, failed 0 (205 on main + 2 ApiTelemetryMiddlewareTests);
+  RefreshTokenConcurrencyTests 5/5 repeated runs green.
+- The observability stack start + acceptance scripts run in CI (production acceptance job); they
+  were not run locally (Docker Hub image pulls are rate-limited here).
+
+BLOCKED: running the stack on the real production host (no production access).
+Rollback: revert the PR; observability is opt-in (empty OtlpEndpoint, separate compose file).
