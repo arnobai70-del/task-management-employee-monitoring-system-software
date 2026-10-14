@@ -6,6 +6,7 @@ using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
 using TaskMonitoring.Api.Hubs;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -36,8 +37,12 @@ public sealed class RealtimeWorkspaceService(
     AppDbContext dbContext,
     TimeProvider timeProvider,
     IOptions<PresenceOptions> presenceOptions,
-    IRealtimeEventPublisher eventPublisher) : IRealtimeWorkspaceService
+    IRealtimeEventPublisher eventPublisher,
+    ITeamScope? teamScope = null) : IRealtimeWorkspaceService
 {
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     private readonly PresenceOptions _presenceOptions = presenceOptions.Value;
 
     public async Task<OperationResult<EmployeePresenceResponse>> RecordHeartbeatAsync(
@@ -117,6 +122,11 @@ public sealed class RealtimeWorkspaceService(
         var now = UtcNow();
         var cutoff = OnlineCutoff(now);
         var query = dbContext.Employees.AsNoTracking().Include(x => x.Department).Where(x => x.IsActive && x.User.IsActive);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null)
+        {
+            query = query.Where(x => scope.Contains(x.Id));
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {

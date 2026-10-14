@@ -192,8 +192,9 @@ public sealed class HttpAttendanceCorrectionTests(HttpAttendanceCorrectionTests.
                 return user;
             }
 
-            var readerRole = AddRole("CorrectionReader", PermissionCatalog.AttendanceRead);
-            var managerRole = AddRole("CorrectionManager", PermissionCatalog.AttendanceRead, PermissionCatalog.AttendanceManage);
+            // Organisation-wide roles, as every pre-existing role is after the G-27 data migration.
+            var readerRole = AddRole("CorrectionReader", PermissionCatalog.AttendanceRead, PermissionCatalog.EmployeesScopeAll);
+            var managerRole = AddRole("CorrectionManager", PermissionCatalog.AttendanceRead, PermissionCatalog.AttendanceManage, PermissionCatalog.EmployeesScopeAll);
             var employeeUser = AddUser(EmployeeEmail, employeeRole);
             AddUser(ReaderEmail, readerRole);
             var managerUser = AddUser(ManagerEmail, managerRole);

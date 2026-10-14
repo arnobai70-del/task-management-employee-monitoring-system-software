@@ -5,6 +5,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 ## [Unreleased]
 
 ### Added
+- Team scoping for managers (phase 1): without the new `employees.scope.all` permission, employee lists, attendance, presence, monitoring activity, website work and the productivity report show only the user and the people who report to them, directly or indirectly. Existing roles keep seeing everyone after the upgrade (G-27).
 - Phase 8 large-range results: every ranged or paged endpoint stays bounded with 5000 fictional employees and a year of attendance.
 - `scripts/audit/degradation.mjs`, `scripts/audit/long-range.mjs` and `scripts/audit/perf-extend-history.sql` for Phase 8 degradation and large-range checks on fictional data.
 - Prometheus alerts for slow API responses and for monitoring data retention that is stale or failing, with rule unit tests in `scripts/audit/prometheus-alerts.test.yml`, and an alarm map in the deployment runbook (G-43).

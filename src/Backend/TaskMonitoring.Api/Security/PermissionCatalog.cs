@@ -6,6 +6,7 @@ public static class PermissionCatalog
     public const string UsersManage = "users.manage";
     public const string EmployeesRead = "employees.read";
     public const string EmployeesManage = "employees.manage";
+    public const string EmployeesScopeAll = "employees.scope.all";
     public const string DepartmentsRead = "departments.read";
     public const string DepartmentsManage = "departments.manage";
     public const string RolesRead = "roles.read";
@@ -44,6 +45,7 @@ public static class PermissionCatalog
         [UsersManage] = "Create, update, disable, and assign user accounts.",
         [EmployeesRead] = "View employee profiles and reporting relationships.",
         [EmployeesManage] = "Create and update employee profiles, access roles, and employment status.",
+        [EmployeesScopeAll] = "See every employee in employee lists, attendance, presence, monitoring activity, website work and productivity reports. Without it, those views show only the user and the employees who report to them, directly or indirectly.",
         [DepartmentsRead] = "View departments and their active status.",
         [DepartmentsManage] = "Create and update departments.",
         [RolesRead] = "View roles and permission assignments.",

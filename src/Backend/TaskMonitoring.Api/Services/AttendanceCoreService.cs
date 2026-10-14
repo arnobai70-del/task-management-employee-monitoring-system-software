@@ -5,6 +5,7 @@ using TaskMonitoring.Api.Configuration;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -28,8 +29,12 @@ public interface IAttendanceCoreService
 public sealed class AttendanceCoreService(
     AppDbContext dbContext,
     TimeProvider timeProvider,
-    IOptions<AttendanceOptions>? options = null) : IAttendanceCoreService
+    IOptions<AttendanceOptions>? options = null,
+    ITeamScope? teamScope = null) : IAttendanceCoreService
 {
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     public const string AutoClosedAction = "attendance.auto_closed";
     public const string CorrectedAction = "attendance.corrected";
     private const int AutoCloseBatchSize = 200;
@@ -247,6 +252,12 @@ public sealed class AttendanceCoreService(
         }
 
         var query = SessionQuery().AsNoTracking().Where(x => x.WorkDate >= fromDate && x.WorkDate <= toDate);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null)
+        {
+            query = query.Where(x => scope.Contains(x.EmployeeId));
+        }
+
         if (employeeId.HasValue)
         {
             query = query.Where(x => x.EmployeeId == employeeId.Value);
@@ -530,7 +541,8 @@ public sealed class AttendanceCoreService(
         }
 
         var session = await SessionQuery().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (session is null)
+        var correctionScope = await VisibleEmployeesAsync(cancellationToken);
+        if (session is null || (correctionScope is not null && !correctionScope.Contains(session.EmployeeId)))
         {
             return OperationResult<WorkSessionResponse>.NotFound("work_session_not_found", "Work session was not found.");
         }

@@ -46,6 +46,29 @@ Every alarm the master plan names, and where it fires today. "In-app" alarms are
 
 Alert delivery (email/chat) is not configured: Prometheus has no Alertmanager in the stack. Owner decision needed on where alerts go before production.
 
+## 4b. Team scoping for managers (G-27)
+Employee lists, attendance, presence, monitoring activity, website work (list, progress, recent completions) and the website productivity report and timeline are limited to a user's own reporting line (themselves and everyone below them through the employee's **Supervisor**) unless one of the user's roles has the permission `employees.scope.all`.
+
+- Upgrading changes nothing: migration `20261014170000_EmployeeScopeAll` grants `employees.scope.all` to every existing role that already had `employees.read`, `attendance.read`, `presence.read`, `monitoring.read`, `tasks.read`, `tasks.manage` or `reports.read`. SuperAdmin always has every permission.
+- A role created after the upgrade does not get it automatically, so its users see only their own reporting line until it is granted.
+- There is no screen to edit role permissions yet, so an operator changes it in the database (fictional role name shown):
+
+```sql
+-- Limit the "TeamLead" role to each lead's own reporting line:
+DELETE FROM role_permissions
+WHERE "RoleId" = (SELECT "Id" FROM roles WHERE "Name" = 'TeamLead')
+  AND "PermissionId" = (SELECT "Id" FROM permissions WHERE "Code" = 'employees.scope.all');
+-- Undo (let the role see every employee again):
+INSERT INTO role_permissions ("RoleId", "PermissionId")
+SELECT r."Id", p."Id" FROM roles r, permissions p
+WHERE r."Name" = 'TeamLead' AND p."Code" = 'employees.scope.all'
+ON CONFLICT DO NOTHING;
+```
+
+Users pick up the change at their next sign-in or token refresh (access tokens last `Jwt:AccessTokenMinutes`). Each lead's employee profile must have the right Supervisor set on their reports (Employees page).
+
+Not scoped yet (still organisation-wide for anyone with the read permission): dashboard totals and other `/api/reports/*` summaries, follow-up SLA and attention reports, project tasks, access assignments, survey assignments, single website-work items and their actions, and realtime broadcasts (presence and website-work events go to everyone with the read permission). Keep `employees.scope.all` on a role until these are scoped if the role must not see other teams at all.
+
 ## 5. Rollback
 - Application: redeploy previous image tag/commit via `deploy.sh` with the previous checkout.
 - Database: `bash scripts/production/restore-postgres.sh --env <env> --backup <path> --confirm-restore` (destructive — operator confirmation required; CI proves the restore path on synthetic data).

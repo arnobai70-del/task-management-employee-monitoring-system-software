@@ -196,6 +196,8 @@ builder.Services.AddScoped<IOperationsHealthService, OperationsHealthService>();
 builder.Services.AddScoped<IOperationsIncidentService, OperationsIncidentService>();
 builder.Services.AddScoped<IAgentUpdateService, AgentUpdateService>();
 builder.Services.AddScoped<IAgentUpdateIncidentBridge, AgentUpdateIncidentBridge>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITeamScope, TeamScope>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<ISecurityObservabilityService, SecurityObservabilityService>();
 builder.Services.AddScoped<ISecurityAlertService, SecurityAlertService>();

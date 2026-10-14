@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -23,8 +24,11 @@ public interface IMonitoringTelemetryService
     Task<int> PurgeExpiredAsync(CancellationToken cancellationToken);
 }
 
-public sealed class MonitoringTelemetryService(AppDbContext dbContext, TimeProvider timeProvider) : IMonitoringTelemetryService
+public sealed class MonitoringTelemetryService(AppDbContext dbContext, TimeProvider timeProvider, ITeamScope? teamScope = null) : IMonitoringTelemetryService
 {
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     public async Task<MonitoringPolicyResponse> GetPolicyAsync(CancellationToken cancellationToken)
         => ToPolicyResponse(await dbContext.MonitoringPolicies.AsNoTracking().OrderBy(x => x.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken));
 
@@ -320,6 +324,11 @@ public sealed class MonitoringTelemetryService(AppDbContext dbContext, TimeProvi
             .Include(x => x.Employee)
             .ThenInclude(x => x.Department)
             .Where(x => x.LastObservedAtUtc >= from && x.StartedAtUtc <= to);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null)
+        {
+            query = query.Where(x => scope.Contains(x.EmployeeId));
+        }
         if (employeeId.HasValue)
         {
             query = query.Where(x => x.EmployeeId == employeeId.Value);

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -18,8 +19,12 @@ public interface IWebsiteWorkTimelineService
 
 public sealed class WebsiteWorkTimelineService(
     AppDbContext dbContext,
-    TimeProvider timeProvider) : IWebsiteWorkTimelineService
+    TimeProvider timeProvider,
+    ITeamScope? teamScope = null) : IWebsiteWorkTimelineService
 {
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     private const int MaximumReportDays = 366;
 
     public async Task<OperationResult<WebsiteWorkEmployeeTimelineResponse>> GetEmployeeAsync(
@@ -68,7 +73,8 @@ public sealed class WebsiteWorkTimelineService(
             .AsNoTracking()
             .Include(x => x.Department)
             .SingleOrDefaultAsync(x => x.Id == employeeId, cancellationToken);
-        if (employee is null)
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (employee is null || (scope is not null && !scope.Contains(employee.Id)))
         {
             return OperationResult<WebsiteWorkEmployeeTimelineResponse>.NotFound(
                 "employee_not_found",

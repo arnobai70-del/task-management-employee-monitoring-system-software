@@ -208,7 +208,8 @@ public sealed class HttpAuthorizationMatrixTests(HttpAuthorizationMatrixTests.Ap
             var employeeRole = await db.Roles.SingleAsync(x => x.Name == "Employee");
             var managerRole = new Role { Name = "MatrixTaskManager" };
             var taskPermissions = await db.Permissions
-                .Where(x => x.Code == PermissionCatalog.TasksRead || x.Code == PermissionCatalog.TasksManage)
+                .Where(x => x.Code == PermissionCatalog.TasksRead || x.Code == PermissionCatalog.TasksManage ||
+                             x.Code == PermissionCatalog.EmployeesScopeAll) // organisation-wide, as pre-existing roles are after the G-27 migration
                 .ToListAsync();
             foreach (var permission in taskPermissions)
             {
