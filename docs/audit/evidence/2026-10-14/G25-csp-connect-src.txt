@@ -29,3 +29,7 @@ Local API 127.0.0.1:5080 on scratch DB tm_perf; Admin Web dist built from main b
 
   Fetch API cannot load http://127.0.0.1:5181/api/auth/web/login. Refused to connect because it violates the document's Content Security Policy.
 [control] RESULT: FAIL
+
+== Caddyfile syntax: caddy validate (placeholder hostnames app/updates.example.test) ==
+Valid configuration
+v2.11.7 h1:yj0Y4fYZGPkSvibBJ1sTWE33xC0fxztVyXEW5iIdUT4=
