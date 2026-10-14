@@ -50,7 +50,13 @@ if [[ ! -s "$temporary_path" ]]; then
   exit 1
 fi
 
-cat "$temporary_path" | compose exec -T postgres pg_restore --list >/dev/null
+# Read the whole archive back (not just its table of contents) so a cut-off dump is caught here.
+# Redirect, not `cat |`: pg_restore can stop reading early, and under pipefail the writer's SIGPIPE
+# failed every backup larger than a few hundred kilobytes (G-50).
+if ! compose exec -T postgres pg_restore --file=/dev/null < "$temporary_path"; then
+  echo "Backup archive could not be read back; keeping $temporary_path for inspection." >&2
+  exit 1
+fi
 mv "$temporary_path" "$backup_path"
 (
   cd "$backup_root"

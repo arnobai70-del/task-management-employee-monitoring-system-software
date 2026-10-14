@@ -36,6 +36,8 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance managers (`attendance.manage`) can correct a session's start and end with a required reason. The change is audited with before and after values, and the Admin Web Attendance page has a Correct action (G-28).
 
 ### Fixed
+- Database backups no longer fail on real-size databases: the check that read the archive back died of a broken pipe on anything over a few hundred kilobytes, which also stopped deployments at their pre-deployment backup (G-50).
+- Database restore is now all-or-nothing and replaces the whole schema, so rolling back to a backup from before a release that added tables works, and a failed restore leaves the database exactly as it was (G-49).
 - A team-limited lead could rename an employee outside their team (the change was saved although the page said "not found") and reset that employee's password. Both now answer "not found" without changing anything (G-48).
 - Refresh tokens are single-use under concurrency: a second simultaneous refresh with the same token gets `409 refresh_conflict` and no tokens (G-21, #69).
 - Realtime (SignalR) connections close when the access token expires; clients reconnect with fresh claims (G-22, #69).

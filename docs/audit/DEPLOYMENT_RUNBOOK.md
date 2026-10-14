@@ -77,7 +77,7 @@ Realtime connections work out their scope when they connect; after a Supervisor 
 
 ## 5. Rollback
 - Application: redeploy previous image tag/commit via `deploy.sh` with the previous checkout.
-- Database: `bash scripts/production/restore-postgres.sh --env <env> --backup <path> --confirm-restore` (destructive — operator confirmation required; CI proves the restore path on synthetic data).
+- Database: `bash scripts/production/restore-postgres.sh --env <env> --backup <path> --confirm-restore` (destructive — operator confirmation required). It replaces the whole `public` schema in one transaction, so tables added by a newer release are removed too and a failed restore changes nothing (G-49). After restoring a pre-deployment backup, deploy the matching older release, or rerun the migrator to move forward again. Rehearsed on 729 MB of fictional data: backup 32 s, restore 26 s (G-12 log). CI proves the path on every run with a >1 MB archive.
 - Windows agents: previous version stays in the immutable archive; follow `scripts/windows/rollback-employee-windows.ps1` / central update controls.
 
 ## 6. Audit status of each step
