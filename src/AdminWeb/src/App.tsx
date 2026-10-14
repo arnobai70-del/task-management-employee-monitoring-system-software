@@ -1,22 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
-import AccessAssignmentsPage from './AccessAssignments';
-import AuditLogsPage from './AuditLogs';
-import EscalationSlaAnalyticsPage from './EscalationSlaAnalytics';
-import OperationsDashboardPage from './OperationsDashboard';
-import SecurityAlertsPage from './SecurityAlerts';
 import SecurityAlertRealtimeNotice from './SecurityAlertRealtimeNotice';
 import { StatusRail } from './StatusRail';
-import { DepartmentManagementPage, EmployeeManagementPage } from './EmployeeDepartmentManagement';
-import PresencePanel from './PresencePanel';
-import ProductivityReportsPage from './ProductivityReports';
-import SurveyManagementPage from './SurveyManagement';
-import WebsiteWorkFollowUpsPage from './WebsiteWorkFollowUps';
-import WebsiteWorkManagementPage from './WebsiteWorkManagement';
 import WebsiteWorkRealtimeNotice from './WebsiteWorkRealtimeNotice';
-import { ProjectManagementPage, ShiftManagementPage, TaskManagementPage } from './WorkManagement';
 import type {
   AttendanceDailyMetric,
   DashboardOverview,
@@ -28,6 +16,23 @@ import type {
   SurveyForm,
   WorkSession
 } from './types';
+
+// Route pages load on demand so the sign-in screen and shell do not download every module.
+const AccessAssignmentsPage = lazy(() => import('./AccessAssignments'));
+const AuditLogsPage = lazy(() => import('./AuditLogs'));
+const EscalationSlaAnalyticsPage = lazy(() => import('./EscalationSlaAnalytics'));
+const OperationsDashboardPage = lazy(() => import('./OperationsDashboard'));
+const SecurityAlertsPage = lazy(() => import('./SecurityAlerts'));
+const DepartmentManagementPage = lazy(() => import('./EmployeeDepartmentManagement').then(module => ({ default: module.DepartmentManagementPage })));
+const EmployeeManagementPage = lazy(() => import('./EmployeeDepartmentManagement').then(module => ({ default: module.EmployeeManagementPage })));
+const PresencePanel = lazy(() => import('./PresencePanel'));
+const ProductivityReportsPage = lazy(() => import('./ProductivityReports'));
+const SurveyManagementPage = lazy(() => import('./SurveyManagement'));
+const WebsiteWorkFollowUpsPage = lazy(() => import('./WebsiteWorkFollowUps'));
+const WebsiteWorkManagementPage = lazy(() => import('./WebsiteWorkManagement'));
+const ProjectManagementPage = lazy(() => import('./WorkManagement').then(module => ({ default: module.ProjectManagementPage })));
+const ShiftManagementPage = lazy(() => import('./WorkManagement').then(module => ({ default: module.ShiftManagementPage })));
+const TaskManagementPage = lazy(() => import('./WorkManagement').then(module => ({ default: module.TaskManagementPage })));
 
 interface NavItem {
   path: string;
@@ -156,7 +161,7 @@ function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <StatusRail />
-        <main className="content">{children}</main>
+        <main className="content"><Suspense fallback={<p className="muted" role="status">Loading…</p>}>{children}</Suspense></main>
       </div>
       <WebsiteWorkRealtimeNotice />
       <SecurityAlertRealtimeNotice />
@@ -265,7 +270,7 @@ function DashboardPage() {
               </div>
             </article>
           </section>
-          <PresencePanel />
+          <Suspense fallback={null}><PresencePanel /></Suspense>
           <article className="panel table-panel">
             <div className="panel-heading"><div><h2>Highest open workload</h2><p>Tasks and active survey assignments</p></div><NavLink className="text-link" to="/employees">Employees →</NavLink></div>
             <div className="table-wrap"><table><thead><tr><th>Employee</th><th>Department</th><th>Open tasks</th><th>Urgent</th><th>Overdue</th><th>Survey work</th><th>Total</th></tr></thead><tbody>
