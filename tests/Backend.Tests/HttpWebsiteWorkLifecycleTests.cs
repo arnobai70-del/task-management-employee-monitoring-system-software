@@ -19,6 +19,7 @@ namespace Backend.Tests;
 /// Phase 4 Gate: Website Work lifecycle end to end through HTTP (assign, start, open, submit, reopen, approve),
 /// durable employee notifications, and the generic task routes that must not bypass the review state machine.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class HttpWebsiteWorkLifecycleTests(HttpWebsiteWorkLifecycleTests.ApiFixture api) : IClassFixture<HttpWebsiteWorkLifecycleTests.ApiFixture>
 {
     [Fact]
