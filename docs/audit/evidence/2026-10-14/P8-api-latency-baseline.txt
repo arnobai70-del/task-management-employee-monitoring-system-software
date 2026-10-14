@@ -1,0 +1,92 @@
+P8 API latency baseline on synthetic data, and security dashboard row bound (G-40, G-41)
+Date: 2026-10-14 (UTC). Base: origin/main 6682384. Branch: perf/phase8-baseline.
+Host: audit Linux container, 4 vCPU, 16 GB RAM; API (.NET 10, Release, Development environment,
+log level Warning) and PostgreSQL 16 on the same host, no network hop. Numbers are relative, not a
+production SLA. Nothing was deployed.
+
+Data: scratch database tm_perf seeded with scripts/audit/perf-seed.sql
+(-v employees=1000 -v days=60), all fictional: 1000 employees in 10 departments, 42,000 closed
+work sessions with breaks, 50 projects, 20,000 tasks, 336,000 application activity segments
+(no window titles), 300,000 audit rows (about 105,000 in the last 7 days). Database size 199 MB.
+Tool: scripts/audit/api-latency.mjs, 60 requests per endpoint after 3 warm-ups, 4 concurrent
+clients; credentials from environment only.
+
+Baseline (main):
+requests=60 concurrency=4 base=http://127.0.0.1:5080
+endpoint                         status       KB   p50ms   p95ms   p99ms   maxms
+dashboard                        200         0.7      84     105     124     124
+attendance daily 30d             200         5.1      91     121     125     125
+attendance daily 60d             200        10.1     207     285     363     363
+workload                         200         6.5      33      44      52      52
+projects report                  200        13.9      32      44      68      68
+website-work productivity 30d    200         5.3       7      10      13      13
+follow-up SLA 30d                200         1.4       6      14      20      20
+attendance list p1               200        33.0      17      24      34      34
+attendance list p500             200        32.9      26      35      40      40
+employees p1                     200        26.0      14      20      26      26
+employees search                 200         5.8      11      18      20      20
+tasks p1                         200        23.4      29      37      41      41
+presence                         200        30.6      15      19      25      25
+audit logs p1                    200        53.8      41      54      60      60
+audit logs search                200        17.3     698    1066    1207    1207
+audit logs p2000                 200        17.3     149     201     211     211
+monitoring activity 7d           200        21.7      98     121     138     138
+security dashboard 24h           200        51.5      48      75      96      96
+security dashboard 168h          200        51.5     841    1755    1970    1970
+operations overview              200       134.0      24      55      86      86
+
+After this PR (same data, same tool):
+requests=60 concurrency=4 base=http://127.0.0.1:5080
+endpoint                         status       KB   p50ms   p95ms   p99ms   maxms
+dashboard                        200         0.7      92     145     171     171
+attendance daily 30d             200         5.1     116     164     198     198
+attendance daily 60d             200        10.1     218     291     324     324
+workload                         200         6.5      30      48      68      68
+projects report                  200        13.9      32      42      51      51
+website-work productivity 30d    200         5.3       6      10      11      11
+follow-up SLA 30d                200         1.4       5       7       8       8
+attendance list p1               200        33.0      18      32      39      39
+attendance list p500             200        32.9      25      38      47      47
+employees p1                     200        26.0      13      20      29      29
+employees search                 200         5.8      11      14      16      16
+tasks p1                         200        23.4      32      42      56      56
+presence                         200        30.6      15      19      23      23
+audit logs p1                    200        51.2      44      61      77      77
+audit logs search                200        17.3     750    1070    1233    1233
+audit logs p2000                 200        17.3     161     191     216     216
+monitoring activity 7d           200        21.7      99     134     139     139
+security dashboard 24h           200        51.5      57      83     103     103
+security dashboard 168h          200        51.5     783     952    1086    1086
+operations overview              200       134.0      27      40      47      47
+
+Reading (differences under ~20% between runs are noise on this host):
+- 17 of 20 endpoints have p95 under 300 ms at 1000 employees / 60 days.
+- attendance daily 60d: p95 ~290 ms, grows with the range; acceptable, watch with larger ranges.
+- G-40 (fixed here) security dashboard 168h: p95 1755 -> 952 ms, p99 1970 -> 1086 ms.
+  Cause: SecurityObservabilityService.GetDashboardAsync loaded EVERY audit row in the window into
+  memory (105,479 rows for 7 days here) and filtered in C#. Growth was unbounded in window x
+  activity. Now security events (auth.* and rate-limit rows: 20,982 here) and the newest 50
+  privileged actions are queried directly; privileged and window totals are SQL COUNTs; the
+  integrity fingerprint loads only its own capped prefix (ExportMaxRecords, default 50,000) as
+  before. Rows materialised per request: 105,479 -> at most 20,982 + 50 + 50,000.
+  Remaining cost is hashing the 50,000-row fingerprint on every dashboard load (unchanged design).
+  Behaviour note: the auth./security. prefix match moved from C# OrdinalIgnoreCase to SQL
+  (case-sensitive); every action name in the code base is lower-case.
+- G-41 (proposal, not changed) audit log free-text search: p50 ~700 ms, p99 ~1.2 s under 4 clients.
+  Cause: AuditLogService search uses lower(col) LIKE '%term%' on Action, TargetType, TargetId and
+  IpAddress, so both the page query and the COUNT do a parallel sequential scan (EXPLAIN ANALYZE,
+  single client: 117-138 ms per query at 300k rows; linear in table size).
+  Trial on tm_perf with pg_trgm GIN indexes on the four lower() expressions:
+    rare term (a target GUID): page 138 -> 6.9 ms, count 116 -> 6.1 ms
+    IP 10.0.7.33:              page 131 -> 4.6 ms, count 128 -> 6.5 ms
+    frequent term checked_in:  page 117 -> 1.2 ms, count 129 -> 77 ms
+  Cost: 55 MB of indexes for a 46 MB table and four GIN updates on every audit insert, plus the
+  pg_trgm extension in production. Needs an owner decision; trial indexes were dropped.
+
+Tests: SecurityObservabilityServiceTests 4/4 (adds
+Dashboard_counts_whole_window_but_loads_only_bounded_rows: 130 privileged + 5 login rows with
+ExportMaxRecords=100 -> totals 130/5, 50 newest privileged in order, 135 fingerprinted window
+records, Truncated=true, status Partial). It passes on old and new code: it pins behaviour, it does
+not reproduce a defect. The PostgreSQL translation was exercised by the latency run (HTTP 200).
+Full backend suite: 208/208; RefreshTokenConcurrencyTests 5/5 repeated runs.
+Rollback: revert the PR; no schema change.

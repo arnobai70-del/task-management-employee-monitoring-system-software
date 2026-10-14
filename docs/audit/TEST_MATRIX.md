@@ -49,6 +49,7 @@ All timestamps UTC.
 | P4-02 (G-38) | `AccessAssignmentServiceTests` (+13): shorthand/hex/octal/zone IPs rejected, full IPv4/IPv6 accepted, RDP host with scheme/port/path/user/space rejected, hostname/IP accepted, unchanged legacy values still deactivate/release | fictional 10.x / 2001:db8:: / example.internal | L | Control without fix: 12/12 malformed inputs accepted; with fix 25/25; full suite PASS 205/205 | 2026-10-14 02:10 | [P4 access/survey log](evidence/2026-10-14/P4-access-assignment-validation-survey-review.txt) |
 | P4-03 | Survey flows review (`SurveyCoreServiceTests` 8, `ExternalSurveyServiceTests` 3) | code review + existing tests | L | PASS, no defect; history kept as revisions; external links store no third-party data | 2026-10-14 02:10 | same |
 | P8-01 (G-15) | #17 observability merged onto main: restore, vulnerable-package scan, Release build, full backend suite | merged tree | L | PASS: no vulnerable packages, build OK, 207/207 | 2026-10-14 02:25 | [P8 observability log](evidence/2026-10-14/P8-observability-merge.txt) |
+| P8-02 (G-40/G-41) | `scripts/audit/api-latency.mjs` 20 endpoints, 60 req, 4 clients; EXPLAIN ANALYZE of slow queries | `scripts/audit/perf-seed.sql` 1000 employees / 60 days (fictional) | L | Baseline + after published; dashboard 168h p95 1755 -> 952 ms; full suite 208/208 | 2026-10-14 15:05 | [P8 latency log](evidence/2026-10-14/P8-api-latency-baseline.txt) |
 
 ## Not yet run (planned)
 | Area | Reason | Phase |

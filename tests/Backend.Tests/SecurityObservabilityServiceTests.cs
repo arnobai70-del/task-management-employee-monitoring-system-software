@@ -140,7 +140,44 @@ public sealed class SecurityObservabilityServiceTests
         Assert.DoesNotContain(",\"=", dataRow);
     }
 
-    private static SecurityObservabilityService CreateService(AppDbContext db)
+    [Fact]
+    public async Task Dashboard_counts_whole_window_but_loads_only_bounded_rows()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var now = DateTime.UtcNow;
+        var actor = new User { Email = "bulk-admin@example.com", NormalizedEmail = "BULK-ADMIN@EXAMPLE.COM", PasswordHash = "hash" };
+        db.Users.Add(actor);
+        for (var index = 0; index < 130; index++)
+        {
+            db.AuditLogs.Add(new AuditLog
+            {
+                ActorUserId = actor.Id,
+                Action = "task.updated",
+                TargetType = "ProjectTask",
+                TargetId = Guid.NewGuid().ToString(),
+                CreatedAtUtc = now.AddMinutes(-index - 1)
+            });
+        }
+        for (var index = 0; index < 5; index++)
+        {
+            db.AuditLogs.Add(new AuditLog { Action = "auth.login.succeeded", TargetType = "User", IpAddress = "192.0.2.5", CreatedAtUtc = now.AddMinutes(-index - 1) });
+        }
+        db.AuditLogs.Add(new AuditLog { ActorUserId = actor.Id, Action = "task.updated", TargetType = "ProjectTask", CreatedAtUtc = now.AddHours(-30) });
+        await db.SaveChangesAsync(cancellationToken);
+
+        var dashboard = await CreateService(db, exportMaxRecords: 100).GetDashboardAsync(24, cancellationToken);
+
+        Assert.Equal(130, dashboard.Overview.PrivilegedActions);
+        Assert.Equal(5, dashboard.Overview.SuccessfulLogins);
+        Assert.Equal(50, dashboard.RecentPrivilegedActions.Count);
+        Assert.True(dashboard.RecentPrivilegedActions.Zip(dashboard.RecentPrivilegedActions.Skip(1)).All(pair => pair.First.CreatedAtUtc >= pair.Second.CreatedAtUtc));
+        Assert.Equal(135, dashboard.Integrity.RecordCount);
+        Assert.True(dashboard.Integrity.Truncated);
+        Assert.Equal("Partial", dashboard.Integrity.Status);
+    }
+
+    private static SecurityObservabilityService CreateService(AppDbContext db, int exportMaxRecords = 50_000)
         => new(
             db,
             Options.Create(new SecurityObservabilityOptions
@@ -151,7 +188,7 @@ public sealed class SecurityObservabilityServiceTests
                 FailedLoginThreshold = 5,
                 RateLimitThreshold = 3,
                 MinimumAuditRetentionDays = 90,
-                ExportMaxRecords = 50_000
+                ExportMaxRecords = exportMaxRecords
             }),
             TimeProvider.System);
 

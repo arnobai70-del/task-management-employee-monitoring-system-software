@@ -36,16 +36,24 @@ public sealed class SecurityObservabilityService(
         var now = UtcNow();
         var hours = Math.Clamp(windowHours ?? _options.DefaultWindowHours, 1, _options.MaxWindowHours);
         var from = now.AddHours(-hours);
-        var logs = await dbContext.AuditLogs
+        // Filter and aggregate in SQL: loading every audit row in the window (heartbeats, task edits...)
+        // grew without bound with the window size and employee count.
+        var window = dbContext.AuditLogs
             .AsNoTracking()
-            .Where(x => x.CreatedAtUtc >= from && x.CreatedAtUtc <= now)
+            .Where(x => x.CreatedAtUtc >= from && x.CreatedAtUtc <= now);
+        var securityLogs = await window
+            .Where(x => x.Action.StartsWith("auth.") || x.Action == RateLimitRejectedAction)
             .OrderByDescending(x => x.CreatedAtUtc)
             .ThenByDescending(x => x.Id)
             .ToArrayAsync(cancellationToken);
-
-        var securityLogs = logs.Where(IsSecurityEvent).ToArray();
-        var privilegedAll = logs.Where(IsPrivilegedAction).ToArray();
-        var privilegedLogs = privilegedAll.Take(50).ToArray();
+        var privileged = window
+            .Where(x => x.ActorUserId.HasValue && !x.Action.StartsWith("auth.") && !x.Action.StartsWith("security."));
+        var privilegedCount = await privileged.CountAsync(cancellationToken);
+        var privilegedLogs = await privileged
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .ThenByDescending(x => x.Id)
+            .Take(50)
+            .ToArrayAsync(cancellationToken);
         var recentSecurity = securityLogs.Take(100).ToArray();
         var actorIds = recentSecurity
             .Concat(privilegedLogs)
@@ -76,7 +84,7 @@ public sealed class SecurityObservabilityService(
             .ToArray();
 
         var correlations = BuildCorrelations(securityLogs, now);
-        var integrity = await BuildIntegrityAsync(logs, from, now, cancellationToken);
+        var integrity = await BuildIntegrityAsync(window, from, now, cancellationToken);
 
         return new SecurityDashboardResponse(
             new SecurityOverviewResponse(
@@ -88,7 +96,7 @@ public sealed class SecurityObservabilityService(
                 securityLogs.Count(x => x.Action == "auth.login.succeeded"),
                 securityLogs.Count(x => x.Action == "auth.refresh.reuse_detected"),
                 securityLogs.Count(x => x.Action == RateLimitRejectedAction),
-                privilegedAll.Length,
+                privilegedCount,
                 securityLogs.Where(x => !string.IsNullOrWhiteSpace(x.IpAddress)).Select(x => x.IpAddress!).Distinct(StringComparer.OrdinalIgnoreCase).Count()),
             recentSecurity.Select(log => ToSecurityEvent(log, actorEmails)).ToArray(),
             sources,
@@ -153,7 +161,7 @@ public sealed class SecurityObservabilityService(
     }
 
     private async Task<AuditIntegrityResponse> BuildIntegrityAsync(
-        IReadOnlyCollection<AuditLog> windowLogs,
+        IQueryable<AuditLog> window,
         DateTime from,
         DateTime to,
         CancellationToken cancellationToken)
@@ -169,10 +177,15 @@ public sealed class SecurityObservabilityService(
             .Select(x => (DateTime?)x.CreatedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
         var maxRecords = Math.Clamp(_options.ExportMaxRecords, 100, 100_000);
-        var ordered = windowLogs.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id).ToArray();
-        var truncated = ordered.Length > maxRecords;
-        var hashed = ordered.Take(maxRecords).ToArray();
-        var structurallyInvalid = ordered.Count(x => string.IsNullOrWhiteSpace(x.Action) || string.IsNullOrWhiteSpace(x.TargetType));
+        var recordCount = await window.CountAsync(cancellationToken);
+        // Only the fingerprinted prefix is loaded; the rest of the window is counted in SQL.
+        var hashed = await window
+            .OrderBy(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id)
+            .Take(maxRecords)
+            .ToArrayAsync(cancellationToken);
+        var truncated = recordCount > maxRecords;
+        var structurallyInvalid = await window.CountAsync(x => x.Action == null || x.Action.Trim() == "" || x.TargetType == null || x.TargetType.Trim() == "", cancellationToken);
         var coverageDays = oldest.HasValue ? Math.Max(0, (to - oldest.Value).TotalDays) : 0;
         var minimumRetention = Math.Clamp(_options.MinimumAuditRetentionDays, 1, 3650);
         var hasCoverage = coverageDays >= minimumRetention;
@@ -181,7 +194,7 @@ public sealed class SecurityObservabilityService(
         return new AuditIntegrityResponse(
             from,
             to,
-            ordered.Length,
+            recordCount,
             CanonicalSha256(hashed),
             truncated,
             minimumRetention,
@@ -264,15 +277,6 @@ public sealed class SecurityObservabilityService(
             log.UserAgent,
             log.MetadataJson,
             log.CreatedAtUtc);
-
-    private static bool IsSecurityEvent(AuditLog log)
-        => log.Action.StartsWith("auth.", StringComparison.OrdinalIgnoreCase) ||
-           string.Equals(log.Action, RateLimitRejectedAction, StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsPrivilegedAction(AuditLog log)
-        => log.ActorUserId.HasValue &&
-           !log.Action.StartsWith("auth.", StringComparison.OrdinalIgnoreCase) &&
-           !log.Action.StartsWith("security.", StringComparison.OrdinalIgnoreCase);
 
     private static string CanonicalSha256(IEnumerable<AuditLog> logs)
     {
