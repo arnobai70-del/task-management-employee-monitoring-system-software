@@ -54,7 +54,12 @@ else
   echo "Warning: no checksum sidecar found for $backup_path" >&2
 fi
 
-cat "$backup_path" | compose exec -T postgres pg_restore --list >/dev/null
+# Read the whole archive before stopping the API, so a damaged file is rejected without downtime.
+# Redirect, not `cat |`, for the same SIGPIPE reason as in backup-postgres.sh (G-50).
+if ! compose exec -T postgres pg_restore --file=/dev/null < "$backup_path"; then
+  echo "Backup archive could not be read: $backup_path" >&2
+  exit 1
+fi
 
 api_was_running=0
 if compose ps --status running --services | grep -qx 'api'; then
@@ -69,18 +74,28 @@ restart_api() {
 }
 trap restart_api EXIT
 
-cat "$backup_path" | compose exec -T postgres sh -ec '
+# The whole restore is one transaction that first replaces the public schema. `pg_restore --clean`
+# only drops objects that are in the archive, so rolling back a release that added tables failed on
+# their foreign keys and left the database with most constraints dropped (G-49). COMMIT is sent only
+# after pg_restore has produced the complete script; on any error psql stops, the transaction is
+# rolled back, and the database is exactly as it was before the restore.
+compose exec -T postgres sh -ec '
+  set -o pipefail
   export PGPASSWORD="$(cat /run/secrets/postgres_password)"
-  exec pg_restore \
+  export PGOPTIONS="-c client_min_messages=warning"
+  {
+    printf "BEGIN;\nDROP SCHEMA IF EXISTS public CASCADE;\nCREATE SCHEMA public;\n"
+    pg_restore --no-owner --no-acl --exit-on-error --file=- || exit 1
+    printf "COMMIT;\n"
+  } | psql \
     --host=127.0.0.1 \
     --username="$POSTGRES_USER" \
     --dbname="$POSTGRES_DB" \
-    --clean \
-    --if-exists \
-    --no-owner \
-    --no-acl \
-    --exit-on-error
-'
+    --no-psqlrc \
+    --quiet \
+    --output=/dev/null \
+    -v ON_ERROR_STOP=1
+' < "$backup_path"
 
 restart_api
 trap - EXIT

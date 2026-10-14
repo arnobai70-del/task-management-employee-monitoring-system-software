@@ -247,9 +247,14 @@ jobs:
         shell: bash
         run: |
           compose=(docker compose --env-file deploy/production/production.ci.env -f deploy/production/docker-compose.yml)
-          "${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -v ON_ERROR_STOP=1 -c 'CREATE TABLE ci_restore_probe(id integer primary key, value text not null); INSERT INTO ci_restore_probe VALUES (1, '\''before-backup'\'');'
+          # 200k incompressible rows make the archive several MB: the backup's read-back check used to
+          # die of SIGPIPE on anything over a few hundred kB (G-50), which a tiny probe never showed.
+          "${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -v ON_ERROR_STOP=1 -c 'CREATE TABLE ci_restore_probe(id integer primary key, value text not null); INSERT INTO ci_restore_probe VALUES (1, '\''before-backup'\''); INSERT INTO ci_restore_probe SELECT g, md5(random()::text) FROM generate_series(2, 200000) g;'
           backup_path="$(bash scripts/production/backup-postgres.sh deploy/production/production.ci.env restore-probe)"
-          "${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -v ON_ERROR_STOP=1 -c 'DELETE FROM ci_restore_probe;'
+          test "$(wc -c < "$backup_path")" -gt 1000000
+          # A table created after the backup (as a newer release's migration would) with a foreign key
+          # into restored data: --clean used to fail on it and leave constraints dropped (G-49).
+          "${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -v ON_ERROR_STOP=1 -c 'DELETE FROM ci_restore_probe WHERE id > 1; CREATE TABLE ci_restore_after_backup(id integer primary key REFERENCES ci_restore_probe(id));'
           bash scripts/production/restore-postgres.sh --env deploy/production/production.ci.env --backup "$backup_path" --confirm-restore
           for attempt in {1..60}; do
             if curl --fail --silent --max-time 5 http://app.localhost:18080/health/ready >/dev/null; then
@@ -259,6 +264,10 @@ jobs:
           done
           count="$("${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -tAc 'SELECT count(*) FROM ci_restore_probe WHERE id=1 AND value='\''before-backup'\'';' | tr -d '[:space:]')"
           test "$count" = "1"
+          rows="$("${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -tAc 'SELECT count(*) FROM ci_restore_probe;' | tr -d '[:space:]')"
+          test "$rows" = "200000"
+          leftover="$("${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -tAc "SELECT count(*) FROM information_schema.tables WHERE table_name = 'ci_restore_after_backup';" | tr -d '[:space:]')"
+          test "$leftover" = "0"
           "${compose[@]}" exec -T postgres psql -U task_monitoring -d task_monitoring -v ON_ERROR_STOP=1 -c 'DROP TABLE ci_restore_probe;'
 
       - name: Verify atomic immutable update publication and public acceptance

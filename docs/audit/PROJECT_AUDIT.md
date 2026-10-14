@@ -128,6 +128,12 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 ### F-10 Team-scoped lead could edit and reset the password of an employee outside the team — VERIFIED BUG, P1 (G-48)
 Found while extending `HttpTeamScopeTests` for G-27 phase 2, on main `961ca31` (phase 1, not deployed). `EmployeeCoreService.UpdateEmployeeAsync` loaded the employee without the team scope, saved the change, and then answered 404 because the response was built by the scoped `GetEmployeeAsync`. `EmployeesController.ResetPassword` read the employee straight from the database and reset an outsider's password (204). It needs `employees.manage` and `roles.manage` on a role without `employees.scope.all`; no existing role is set up that way. Evidence: [G27-team-scope-phase2.txt](evidence/2026-10-14/G27-team-scope-phase2.txt).
 
+### F-11 Restore could not roll back a release that added tables, and left the database half-dropped — VERIFIED BUG, P1 (G-49)
+`restore-postgres.sh` used `pg_restore --clean --if-exists --exit-on-error`, which only drops objects that are in the archive. Restoring a pre-deployment backup after a release that added tables failed on their foreign keys, stopped after dropping 62 of 74 constraints, and restarted the API on that database. Fixed by restoring into a freshly recreated schema in one transaction. Evidence: [G12-backup-restore-rehearsal.txt](evidence/2026-10-14/G12-backup-restore-rehearsal.txt).
+
+### F-12 Every backup over a few hundred kilobytes failed silently — VERIFIED BUG, P1 (G-50)
+Both scripts checked the archive with `cat archive | compose exec -T postgres pg_restore --list` under `pipefail`. `pg_restore --list` stops reading after the table of contents, so `cat` gets SIGPIPE (exit 141). The backup left only a `.partial` file and printed nothing, and `deploy.sh` stopped at its pre-deployment backup. CI's probe database is tiny, so CI stayed green. Fixed by feeding the archive with a redirect and reading it in full.
+
 ### Other observations (not defects)
 - Production config is sound on inspected points: `AutoMigrate=false` + explicit migrate container, forwarded headers restricted to the backend CIDR with `ForwardLimit=1`, HSTS, `frame-ancestors 'none'`, JWT HS256 only, 30 s skew, 15 min access / 7 day refresh, lockout 5 attempts / 15 min, auth rate limit 10/min/IP.
 - NuGet packages were one patch behind (10.0.12 → 10.0.13). This became G-42 when an advisory was published on 2026-10-13.

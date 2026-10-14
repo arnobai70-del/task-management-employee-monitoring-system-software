@@ -124,7 +124,7 @@ Create an on-demand backup:
 bash scripts/production/backup-postgres.sh deploy/production/production.env manual
 ```
 
-The result is a PostgreSQL custom-format archive and a SHA-256 sidecar under `BACKUP_ROOT`. The script validates that `pg_restore --list` can read the archive before finalizing it.
+The result is a PostgreSQL custom-format archive and a SHA-256 sidecar under `BACKUP_ROOT`. The script reads the whole archive back with `pg_restore` before finalizing it, so a cut-off dump is caught.
 
 Copy backups to independent/off-host storage according to the organization's retention policy. A backup that exists only on the same disk as PostgreSQL is not sufficient disaster recovery.
 
@@ -142,9 +142,9 @@ bash scripts/production/restore-postgres.sh \
 The restore script:
 
 - validates the archive checksum when the sidecar exists;
-- verifies the archive can be listed;
+- reads the whole archive before touching anything, so a damaged file is rejected without downtime;
 - stops the API if it is running;
-- restores with `--clean --if-exists --no-owner --no-acl --exit-on-error`;
+- in one transaction, drops and recreates the `public` schema and restores the archive into it (`--no-owner --no-acl --exit-on-error`); objects created after the backup, such as tables from a newer release, are removed, and any error rolls the whole restore back;
 - restarts the API when it had been running.
 
 After any real restore, verify `/health/ready`, sign in through the Admin Web and confirm a known recent business record before reopening normal operations.
