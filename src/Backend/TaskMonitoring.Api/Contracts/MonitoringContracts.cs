@@ -13,9 +13,9 @@ public sealed record MonitoringPolicyResponse(
 
 public sealed record UpdateMonitoringPolicyRequest(
     bool IsEnabled,
-    [property: Range(15, 300)] int SampleIntervalSeconds,
-    [property: Range(1, 365)] int RetentionDays,
-    [property: Required, StringLength(2000, MinimumLength = 40)] string DisclosureText);
+    [Range(15, 300)] int SampleIntervalSeconds,
+    [Range(1, 365)] int RetentionDays,
+    [Required, StringLength(2000, MinimumLength = 40)] string DisclosureText);
 
 public sealed record ApprovedApplicationResponse(
     Guid Id,
@@ -27,8 +27,8 @@ public sealed record ApprovedApplicationResponse(
     DateTime UpdatedAtUtc);
 
 public sealed record UpsertApprovedApplicationRequest(
-    [property: Required, StringLength(120)] string ProcessName,
-    [property: Required, StringLength(160)] string DisplayName,
+    [Required, StringLength(120)] string ProcessName,
+    [Required, StringLength(160)] string DisplayName,
     bool CaptureWindowTitle,
     bool IsActive);
 
@@ -42,8 +42,8 @@ public sealed record ApprovedBusinessDomainResponse(
     DateTime UpdatedAtUtc);
 
 public sealed record UpsertApprovedBusinessDomainRequest(
-    [property: Required, StringLength(253)] string Domain,
-    [property: Required, StringLength(160)] string DisplayName,
+    [Required, StringLength(253)] string Domain,
+    [Required, StringLength(160)] string DisplayName,
     bool IncludeSubdomains,
     bool IsActive);
 
@@ -56,11 +56,11 @@ public sealed record EmployeeMonitoringPolicyResponse(
     IReadOnlyCollection<ApprovedBusinessDomainResponse> BusinessDomains);
 
 public sealed record RecordApplicationActivityRequest(
-    [property: Required, StringLength(120)] string ProcessName,
-    [property: StringLength(300)] string? WindowTitle);
+    [Required, StringLength(120)] string ProcessName,
+    [StringLength(300)] string? WindowTitle);
 
 public sealed record RecordBusinessDomainActivityRequest(
-    [property: Required, StringLength(253)] string Domain);
+    [Required, StringLength(253)] string Domain);
 
 public sealed record MonitoringIngestResponse(bool Accepted, string? Reason);
 

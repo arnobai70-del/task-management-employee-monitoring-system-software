@@ -137,6 +137,9 @@ Both scripts checked the archive with `cat archive | compose exec -T postgres pg
 ### F-13 Admin Web keyboard and screen-reader gaps — VERIFIED BUG, P3 (G-52, G-53, G-54, G-55)
 Found while adding keyboard and state checks for G-13, on main `4c43680`. On phones the closed menu stayed in the Tab order off screen and its button had no `aria-expanded`; no page had a skip link; Quick jump (`aria-modal`) let Tab reach the page behind it; 17 error banners and the load-error panel were not announced. Empty, loading and sign-in keyboard flows had no defect. Evidence: [G13-keyboard-and-states.txt](evidence/2026-10-14/G13-keyboard-and-states.txt).
 
+### F-14 Every monitoring write endpoint answered 500 — VERIFIED BUG, P1 (G-56)
+Found while measuring Employee Desktop traffic for G-09, on main `ba7708d`. `Contracts/MonitoringContracts.cs` put its validation attributes on record properties (`[property: ...]`); ASP.NET Core MVC rejects that at model validation, so the policy update, approved application/domain create and update, and both desktop activity endpoints failed with 500 since the feature was added (`87e5fb5`). Reads worked. No approved-activity segment could ever be recorded through the API. **Deployment note:** once fixed and deployed, recording starts working as documented in `docs/monitoring-telemetry.md`; the owner should confirm the policy and disclosure first. Evidence: [G56-monitoring-write-endpoints.txt](evidence/2026-10-14/G56-monitoring-write-endpoints.txt).
+
 ### Other observations (not defects)
 - Production config is sound on inspected points: `AutoMigrate=false` + explicit migrate container, forwarded headers restricted to the backend CIDR with `ForwardLimit=1`, HSTS, `frame-ancestors 'none'`, JWT HS256 only, 30 s skew, 15 min access / 7 day refresh, lockout 5 attempts / 15 min, auth rate limit 10/min/IP.
 - NuGet packages were one patch behind (10.0.12 → 10.0.13). This became G-42 when an advisory was published on 2026-10-13.
