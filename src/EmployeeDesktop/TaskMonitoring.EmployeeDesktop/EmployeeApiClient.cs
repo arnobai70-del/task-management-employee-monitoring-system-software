@@ -8,7 +8,8 @@ namespace TaskMonitoring.EmployeeDesktop;
 
 public sealed class EmployeeApiClient : IDisposable
 {
-    private readonly HttpClient _http = new();
+    // Accept compressed responses: the production proxy compresses JSON, but only when the client asks for it (G-09).
+    private readonly HttpClient _http = new(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All });
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private string? _accessToken;
     private DateTime _accessTokenExpiresAtUtc;
@@ -143,10 +144,13 @@ public sealed class EmployeeApiClient : IDisposable
                ?? throw new InvalidOperationException("The server returned an empty presence response.");
     }
 
-    public Task<PagedResponse<EmployeeNotificationResponse>> GetMyNotificationsAsync(bool unreadOnly = false, CancellationToken cancellationToken = default)
-        => GetAllPagesAsync<EmployeeNotificationResponse>(
-            page => $"api/me/notifications?unreadOnly={unreadOnly.ToString().ToLowerInvariant()}&page={page}&pageSize=100",
+    /// <summary>The most recent notifications only (one page), so a background refresh stays small however many have built up.</summary>
+    public Task<PagedResponse<EmployeeNotificationResponse>> GetMyLatestNotificationsAsync(bool unreadOnly = false, CancellationToken cancellationToken = default)
+        => GetAuthorizedAsync<PagedResponse<EmployeeNotificationResponse>>(
+            $"api/me/notifications?unreadOnly={unreadOnly.ToString().ToLowerInvariant()}&page=1&pageSize={LatestNotificationCount}",
             cancellationToken);
+
+    public const int LatestNotificationCount = 100;
 
     public async Task MarkNotificationReadAsync(Guid notificationId, CancellationToken cancellationToken = default)
     {

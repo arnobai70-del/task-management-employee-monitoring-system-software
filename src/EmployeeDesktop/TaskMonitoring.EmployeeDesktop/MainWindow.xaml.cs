@@ -17,6 +17,11 @@ public partial class MainWindow : Window
     private DateTime _monitoringPolicyRefreshAtUtc;
     private bool _monitoringTickRunning;
     private bool _allowClose;
+    // New notifications arrive over the realtime connection, so while it is up the 30-second timer only
+    // re-reads the list as a fallback every few minutes (G-09).
+    private static readonly TimeSpan NotificationFallbackInterval = TimeSpan.FromMinutes(5);
+    private bool _realtimeConnected;
+    private DateTime _notificationsRefreshedAtUtc;
 
     public MainWindow()
     {
@@ -211,7 +216,10 @@ public partial class MainWindow : Window
         try
         {
             await SendPresenceHeartbeatAsync();
-            await RefreshNotificationsAsync();
+            if (!_realtimeConnected || DateTime.UtcNow - _notificationsRefreshedAtUtc >= NotificationFallbackInterval)
+            {
+                await RefreshNotificationsAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -282,6 +290,7 @@ public partial class MainWindow : Window
     {
         _ = Dispatcher.InvokeAsync(() =>
         {
+            _realtimeConnected = connected;
             RealtimeStatusText.Text = connected ? "Notifications: realtime connected" : "Notifications: reconnecting";
         });
     }
@@ -571,9 +580,12 @@ public partial class MainWindow : Window
 
     private async Task RefreshNotificationsAsync()
     {
-        var result = await _api.GetMyNotificationsAsync(UnreadNotificationsOnlyBox.IsChecked == true);
+        var result = await _api.GetMyLatestNotificationsAsync(UnreadNotificationsOnlyBox.IsChecked == true);
+        _notificationsRefreshedAtUtc = DateTime.UtcNow;
         NotificationsGrid.ItemsSource = result.Items;
-        NotificationsCountText.Text = $"{result.TotalCount} notification(s)";
+        NotificationsCountText.Text = result.TotalCount > result.Items.Count
+            ? $"Latest {result.Items.Count} of {result.TotalCount} notification(s)"
+            : $"{result.TotalCount} notification(s)";
     }
 
     private void ResetSignedOutUi(string connectionStatus = "Server: signed out")

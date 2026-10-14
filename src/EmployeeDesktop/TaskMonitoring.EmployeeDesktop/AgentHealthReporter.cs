@@ -6,7 +6,7 @@ namespace TaskMonitoring.EmployeeDesktop;
 
 internal sealed class AgentHealthReporter(EmployeeApiClient apiClient) : IDisposable
 {
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private readonly HttpClient _http = new(new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.All }) { Timeout = TimeSpan.FromSeconds(10) };
     private readonly AgentHealthCollector _collector = new();
 
     public async Task ReportAsync(CancellationToken cancellationToken = default)
