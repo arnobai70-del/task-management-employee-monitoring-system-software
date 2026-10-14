@@ -36,6 +36,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance managers (`attendance.manage`) can correct a session's start and end with a required reason. The change is audited with before and after values, and the Admin Web Attendance page has a Correct action (G-28).
 
 ### Fixed
+- A shift that starts or ends at a local time skipped by a daylight-saving change (for example 02:30 on the spring-forward night) now starts or ends at the first minute that exists (03:00) instead of check-in failing with "no shift assigned" that day (G-29).
 - A team-limited lead could rename an employee outside their team (the change was saved although the page said "not found") and reset that employee's password. Both now answer "not found" without changing anything (G-48).
 - Refresh tokens are single-use under concurrency: a second simultaneous refresh with the same token gets `409 refresh_conflict` and no tokens (G-21, #69).
 - Realtime (SignalR) connections close when the access token expires; clients reconnect with fresh claims (G-22, #69).

@@ -1,0 +1,33 @@
+G-29 DST gap shift start/end, 2026-10-14
+Branch fix/g29-dst-gap from main 8d4b67f. In-memory EF tests; zone America/New_York (spring forward 2026-03-08 02:00->03:00, fall back 2026-11-01). Asia/Dhaka has no DST, so production in Dhaka was not affected.
+
+== Control: new scenarios run against main 8d4b67f (LocalToUtc theory removed, it does not exist there) ==
+Build succeeded.
+failed Backend.Tests.AttendanceShiftEdgeCaseTests.Shift_starting_in_the_spring_forward_gap_starts_at_the_first_valid_minute (35ms)
+  Assert.Equal() Failure: Values differ
+  Expected: Success
+  Actual:   Invalid
+failed Backend.Tests.AttendanceShiftEdgeCaseTests.Overnight_shift_ending_in_the_spring_forward_gap_ends_at_the_first_valid_minute (7ms)
+  Assert.Equal() Failure: Values differ
+  Expected: Success
+  Actual:   Invalid
+  total: 14
+  failed: 2
+  succeeded: 12
+
+== With the fix: AttendanceShiftEdgeCaseTests ==
+  total: 19
+  failed: 0
+  succeeded: 19
+
+== Full backend suite with the fix (plus refresh-token race test 5 times) ==
+Build succeeded.
+  total: 224
+  failed: 0
+  succeeded: 224
+  skipped: 0
+  failed: 0   succeeded: 1  (race run 1)
+  failed: 0   succeeded: 1  (race run 2)
+  failed: 0   succeeded: 1  (race run 3)
+  failed: 0   succeeded: 1  (race run 4)
+  failed: 0   succeeded: 1  (race run 5)
