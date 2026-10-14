@@ -42,3 +42,34 @@ groups:
         annotations:
           summary: TaskMonitoring API server error rate is elevated
           description: More than 5% of TaskMonitoring API requests have returned 5xx responses for ten minutes.
+
+      - alert: TaskMonitoringApiSlowResponses
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(taskmonitoring_api_request_duration_seconds_bucket[5m]))) > 1
+          and
+          sum(rate(taskmonitoring_api_requests_total[5m])) > 0.1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: TaskMonitoring API p95 latency is above one second
+          description: The 95th percentile API response time has stayed above one second for fifteen minutes. The 2026-10-14 baseline was under 300 ms for most endpoints.
+
+  - name: taskmonitoring-data-lifecycle
+    rules:
+      - alert: TaskMonitoringRetentionStale
+        expr: time() - max(taskmonitoring_retention_last_success_timestamp) > 13 * 3600
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Monitoring data retention purge has not succeeded recently
+          description: The retention purge runs every six hours. No successful run has been reported for more than thirteen hours, so activity records older than the retention policy may still be stored.
+
+      - alert: TaskMonitoringRetentionFailing
+        expr: increase(taskmonitoring_retention_failures_total[12h]) >= 2
+        labels:
+          severity: warning
+        annotations:
+          summary: Monitoring data retention purge is failing
+          description: The retention purge failed at least twice in twelve hours. Check API logs for "Monitoring telemetry retention purge failed".

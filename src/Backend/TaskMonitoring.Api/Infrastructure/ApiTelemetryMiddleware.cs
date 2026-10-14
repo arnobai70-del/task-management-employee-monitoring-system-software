@@ -22,6 +22,19 @@ public static class ApiTelemetry
         "taskmonitoring.api.up",
         () => 1L,
         description: "Reports 1 while the TaskMonitoring API telemetry pipeline is running.");
+    private static long _retentionLastSuccessUnixSeconds;
+    private static readonly ObservableGauge<long> RetentionLastSuccess = Meter.CreateObservableGauge(
+        "taskmonitoring.retention.last_success_timestamp",
+        () => Interlocked.Read(ref _retentionLastSuccessUnixSeconds),
+        description: "Unix time in seconds of the last successful monitoring retention purge; 0 until the first one.");
+    private static readonly Counter<long> RetentionFailures = Meter.CreateCounter<long>(
+        "taskmonitoring.retention.failures",
+        description: "Monitoring retention purge runs that failed.");
+
+    internal static void RetentionSucceeded(DateTimeOffset at) =>
+        Interlocked.Exchange(ref _retentionLastSuccessUnixSeconds, at.ToUnixTimeSeconds());
+
+    internal static void RetentionFailed() => RetentionFailures.Add(1);
 
     internal static void RequestStarted(string method)
     {
