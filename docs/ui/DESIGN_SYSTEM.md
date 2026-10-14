@@ -38,7 +38,7 @@ Status: **DRAFT** — direction and inventory only. No UI code has been changed 
 | `--surface` | `#FFFFFF` | `#152233` | cards, tables |
 | `--ink` | `#152233` | `#E8EEF3` | primary text |
 | `--muted` | `#5B6B7B` | `#9AA8B6` | secondary text (≥4.5:1 to be verified) |
-| `--accent` | `#087F76` | `#3BB3A8` | primary actions, active nav |
+| `--accent` | `#2563EB` (blue, kept) | `#2563EB` (same; dark `--accent-soft` `#1B2A4A`) | primary actions, active nav. Owner decision 2026-10-14: keep the existing blue accent; the teal proposal is withdrawn |
 | `--warning` | `#D69B36` | `#E7B45C` | warnings (never text on white without dark ink) |
 | `--danger` | `#B42318` | `#F0776B` | errors |
 | `--radius` | 12 px (cards), 8 px (controls) | same | |

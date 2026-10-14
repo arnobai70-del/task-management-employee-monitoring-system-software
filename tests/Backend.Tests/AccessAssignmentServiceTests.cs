@@ -131,6 +131,144 @@ public sealed class AccessAssignmentServiceTests
         Assert.Equal(OperationStatus.Success, reused.Status);
     }
 
+    [Theory]
+    [InlineData("192.168.10")]
+    [InlineData("10.1")]
+    [InlineData("3232238130")]
+    [InlineData("0x0A000001")]
+    [InlineData("192.168.010.025")]
+    [InlineData("fe80::1%eth0")]
+    public async Task Ip_assignment_rejects_shorthand_or_ambiguous_addresses(string ipAddress)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var employee = CreateEmployee("EMP-IPF", "IP Format", "ipformat@example.com");
+        db.AddRange(employee.User, employee);
+        await db.SaveChangesAsync(cancellationToken);
+        var service = new AccessAssignmentService(db, TimeProvider.System);
+
+        var result = await service.CreateIpAssignmentAsync(new UpsertIpAssignmentRequest
+        {
+            EmployeeId = employee.Id,
+            IpAddress = ipAddress,
+            DeviceName = "PC-F"
+        }, new RequestActor(Guid.NewGuid(), null, "tests"), cancellationToken);
+
+        Assert.Equal(OperationStatus.Invalid, result.Status);
+        Assert.Equal("invalid_ip_address", result.ErrorCode);
+        Assert.Empty(db.Set<IpAssignment>());
+    }
+
+    [Theory]
+    [InlineData(" 192.168.10.25 ", "192.168.10.25")]
+    [InlineData("2001:DB8::25", "2001:db8::25")]
+    public async Task Ip_assignment_accepts_full_ipv4_and_ipv6(string ipAddress, string expected)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var employee = CreateEmployee("EMP-IPV", "IP Valid", "ipvalid@example.com");
+        db.AddRange(employee.User, employee);
+        await db.SaveChangesAsync(cancellationToken);
+        var service = new AccessAssignmentService(db, TimeProvider.System);
+
+        var result = await service.CreateIpAssignmentAsync(new UpsertIpAssignmentRequest
+        {
+            EmployeeId = employee.Id,
+            IpAddress = ipAddress,
+            DeviceName = "PC-V"
+        }, new RequestActor(Guid.NewGuid(), null, "tests"), cancellationToken);
+
+        Assert.Equal(OperationStatus.Success, result.Status);
+        Assert.Equal(expected, result.Value?.IpAddress);
+    }
+
+    [Theory]
+    [InlineData("rdp host.example.internal")]
+    [InlineData("https://rdp.example.internal")]
+    [InlineData("rdp.example.internal:3389")]
+    [InlineData("rdp.example.internal/path")]
+    [InlineData("user@rdp.example.internal")]
+    [InlineData("192.168.10")]
+    public async Task Rdp_assignment_rejects_host_that_is_not_a_plain_hostname_or_ip(string host)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var employee = CreateEmployee("EMP-RDH", "RDP Host", "rdphost@example.com");
+        db.AddRange(employee.User, employee);
+        await db.SaveChangesAsync(cancellationToken);
+        var service = new AccessAssignmentService(db, TimeProvider.System);
+
+        var result = await service.CreateRdpAssignmentAsync(new UpsertRdpAssignmentRequest
+        {
+            EmployeeId = employee.Id,
+            Name = "Host check",
+            Host = host,
+            Port = 3389
+        }, new RequestActor(Guid.NewGuid(), null, "tests"), cancellationToken);
+
+        Assert.Equal(OperationStatus.Invalid, result.Status);
+        Assert.Equal("invalid_rdp_host", result.ErrorCode);
+        Assert.Empty(db.Set<RdpAssignment>());
+    }
+
+    [Theory]
+    [InlineData("rdp-01.example.internal", "rdp-01.example.internal")]
+    [InlineData("RDP01", "rdp01")]
+    [InlineData("10.0.0.20", "10.0.0.20")]
+    [InlineData("2001:db8::20", "2001:db8::20")]
+    public async Task Rdp_assignment_accepts_hostname_or_ip(string host, string expected)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var employee = CreateEmployee("EMP-RDV", "RDP Valid", "rdpvalid@example.com");
+        db.AddRange(employee.User, employee);
+        await db.SaveChangesAsync(cancellationToken);
+        var service = new AccessAssignmentService(db, TimeProvider.System);
+
+        var result = await service.CreateRdpAssignmentAsync(new UpsertRdpAssignmentRequest
+        {
+            EmployeeId = employee.Id,
+            Name = "Host ok",
+            Host = host,
+            Port = 3389
+        }, new RequestActor(Guid.NewGuid(), null, "tests"), cancellationToken);
+
+        Assert.Equal(OperationStatus.Success, result.Status);
+        Assert.Equal(expected, result.Value?.Host);
+    }
+
+    [Fact]
+    public async Task Rows_saved_before_strict_validation_can_still_be_deactivated_or_released()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var employee = CreateEmployee("EMP-LEG", "Legacy Row", "legacy@example.com");
+        var rdp = new RdpAssignment { EmployeeId = employee.Id, Name = "Legacy RDP", Host = "legacy rdp:3389", Port = 3389 };
+        var ip = new IpAssignment { EmployeeId = employee.Id, IpAddress = "fe80::1%eth0", DeviceName = "PC-L", Status = IpAssignmentStatus.Active };
+        db.AddRange(employee.User, employee, rdp, ip);
+        await db.SaveChangesAsync(cancellationToken);
+        var service = new AccessAssignmentService(db, TimeProvider.System);
+        var actor = new RequestActor(Guid.NewGuid(), null, "tests");
+
+        var deactivated = await service.UpdateRdpAssignmentAsync(rdp.Id, new UpsertRdpAssignmentRequest
+        {
+            EmployeeId = employee.Id, Name = "Legacy RDP", Host = "legacy rdp:3389", Port = 3389, IsActive = false
+        }, actor, cancellationToken);
+        var changedToInvalid = await service.UpdateRdpAssignmentAsync(rdp.Id, new UpsertRdpAssignmentRequest
+        {
+            EmployeeId = employee.Id, Name = "Legacy RDP", Host = "other host", Port = 3389, IsActive = false
+        }, actor, cancellationToken);
+        var released = await service.UpdateIpAssignmentAsync(ip.Id, new UpsertIpAssignmentRequest
+        {
+            EmployeeId = employee.Id, IpAddress = "fe80::1%eth0", DeviceName = "PC-L", Status = IpAssignmentStatus.Released
+        }, actor, cancellationToken);
+
+        Assert.Equal(OperationStatus.Success, deactivated.Status);
+        Assert.Equal("legacy rdp:3389", deactivated.Value?.Host);
+        Assert.Equal("invalid_rdp_host", changedToInvalid.ErrorCode);
+        Assert.Equal(OperationStatus.Success, released.Status);
+    }
+
     [Fact]
     public async Task Website_assignment_requires_absolute_http_or_https_url()
     {
