@@ -250,6 +250,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddTaskMonitoringAuthorization();
 
+builder.Services.AddSingleton<RateLimitAuditSampler>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -258,19 +259,29 @@ builder.Services.AddRateLimiter(options =>
         try
         {
             var httpContext = context.HttpContext;
+            var source = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            if (!httpContext.RequestServices.GetRequiredService<RateLimitAuditSampler>().ShouldAudit(source, out var suppressedBefore))
+            {
+                return;
+            }
+
             var dbContext = httpContext.RequestServices.GetRequiredService<AppDbContext>();
+            var target = $"{httpContext.Request.Method} {httpContext.Request.Path}";
+            var userAgent = httpContext.Request.Headers.UserAgent.ToString();
             dbContext.AuditLogs.Add(new AuditLog
             {
                 Action = SecurityObservabilityService.RateLimitRejectedAction,
                 TargetType = "Endpoint",
-                TargetId = $"{httpContext.Request.Method} {httpContext.Request.Path}",
+                // Column limits (TargetId 100, UserAgent 512): an over-long value must not make the insert fail.
+                TargetId = target.Length <= 100 ? target : target[..100],
                 MetadataJson = System.Text.Json.JsonSerializer.Serialize(new
                 {
                     method = httpContext.Request.Method,
-                    path = httpContext.Request.Path.Value
+                    path = httpContext.Request.Path.Value,
+                    suppressedBefore
                 }),
-                IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
-                UserAgent = httpContext.Request.Headers.UserAgent.ToString(),
+                IpAddress = source.Length <= 64 ? source : source[..64],
+                UserAgent = userAgent.Length <= 512 ? userAgent : userAgent[..512],
                 CreatedAtUtc = DateTime.UtcNow
             });
             await dbContext.SaveChangesAsync(cancellationToken);
