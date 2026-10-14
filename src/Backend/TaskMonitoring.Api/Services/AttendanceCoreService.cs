@@ -804,17 +804,37 @@ public sealed class AttendanceCoreService(
             var localStart = workDate.ToDateTime(assignment.Shift.StartTime, DateTimeKind.Unspecified);
             var endDate = overnight ? workDate.AddDays(1) : workDate;
             var localEnd = endDate.ToDateTime(assignment.Shift.EndTime, DateTimeKind.Unspecified);
-            if (timeZone!.IsInvalidTime(localStart) || timeZone.IsInvalidTime(localEnd))
-            {
-                continue;
-            }
-
-            var scheduledStartUtc = TimeZoneInfo.ConvertTimeToUtc(localStart, timeZone);
-            var scheduledEndUtc = TimeZoneInfo.ConvertTimeToUtc(localEnd, timeZone);
+            var scheduledStartUtc = LocalToUtc(localStart, timeZone!);
+            var scheduledEndUtc = LocalToUtc(localEnd, timeZone!);
             return new ResolvedShift(assignment, workDate, scheduledStartUtc, scheduledEndUtc);
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Converts a shift's local wall-clock time to UTC. A time that falls in a daylight-saving gap
+    /// (02:30 on a spring-forward night) does not exist, so it moves forward to the first local minute
+    /// that does (03:00) instead of making the whole shift unresolvable for that day (G-29). Times in
+    /// the repeated fall-back hour keep TimeZoneInfo's default (standard time).
+    /// </summary>
+    public static DateTime LocalToUtc(DateTime local, TimeZoneInfo timeZone)
+    {
+        if (timeZone.IsInvalidTime(local))
+        {
+            var minute = new DateTime(local.Ticks - local.Ticks % TimeSpan.TicksPerMinute, DateTimeKind.Unspecified);
+            // Gaps are at most a few hours in every IANA zone; the bound only guards against a broken zone.
+            for (var step = 1; step <= 24 * 60; step++)
+            {
+                local = minute.AddMinutes(step);
+                if (!timeZone.IsInvalidTime(local))
+                {
+                    break;
+                }
+            }
+        }
+
+        return TimeZoneInfo.ConvertTimeToUtc(local, timeZone);
     }
 
     private async Task<ApiOperationError?> ValidateShiftUniquenessAsync(Guid? id, string normalizedCode, string normalizedName, CancellationToken cancellationToken)
