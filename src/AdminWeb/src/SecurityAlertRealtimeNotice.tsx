@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
 import { subscribeRealtime } from './realtime';
 import { StatusRailItem } from './StatusRail';
 import { startPolling } from './polling';
+import { notifyDesktop } from './desktopAlerts';
 
 interface SecurityAlertSummary {
   open: number;
@@ -34,6 +35,7 @@ export default function SecurityAlertRealtimeNotice() {
   const [summary, setSummary] = useState<SecurityAlertSummary | null>(null);
   const [latest, setLatest] = useState<SecurityAlertChanged | null>(null);
   const dismissTimer = useRef<number | null>(null);
+  const navigate = useNavigate();
 
   const loadSummary = useCallback(async () => {
     if (!allowed) {
@@ -69,6 +71,7 @@ export default function SecurityAlertRealtimeNotice() {
         void loadSummary();
         if (alert.action === 'Detected' || alert.action === 'Reopened' || alert.action === 'Escalated' || alert.severity === 'Critical') {
           show(alert);
+          notifyDesktop({ tag: `security-alert-${alert.id}`, title: `${alert.severity} security alert · ${alert.action}`, body: `${alert.title}\n${alert.message}`, onClick: () => navigate('/security-alerts') });
         }
       }
     });
@@ -77,7 +80,7 @@ export default function SecurityAlertRealtimeNotice() {
       if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current);
       unsubscribe();
     };
-  }, [allowed, loadSummary, show]);
+  }, [allowed, loadSummary, show, navigate]);
 
   const activeCount = (summary?.open ?? 0) + (summary?.acknowledged ?? 0) + (summary?.escalated ?? 0);
 
