@@ -1,0 +1,34 @@
+G-24 Every HTTP 429 became one audit insert; over-long User-Agent made the audit insert fail
+Date: 2026-10-14 (UTC). Base: origin/main 2479975 (after #87). Branch: fix/g24-rate-limit-audit-sampling.
+Nothing was deployed.
+
+What was wrong (src/Backend/TaskMonitoring.Api/Program.cs, AddRateLimiter OnRejected, before):
+1. RISK confirmed: each rejected request inserted one audit_logs row, so a client hammering a
+   rate-limited endpoint (sign-in, agent enrollment, agent device) turned the limiter into a
+   database write amplifier.
+2. VERIFIED BUG: TargetId (max 100), IpAddress (max 64) and UserAgent (max 512) were not truncated.
+   A request with a User-Agent longer than 512 characters made SaveChanges fail; the exception was
+   caught and logged, and the rejection was never audited, so a client could hide its rate-limit
+   trail from the security dashboard and alerts by sending a long User-Agent.
+
+Control run (new HTTP tests against the unfixed pipeline, real PostgreSQL):
+  Repeated_rejections_from_one_source_write_one_audit_row   Expected: 1  Actual: 15
+  Rejection_with_an_over_long_user_agent_is_still_audited   Expected: 1  Actual: 0
+  failed: 2  succeeded: 0
+
+Fix:
+- New RateLimitAuditSampler (singleton): at most one audit row per source IP per 10 seconds, and at
+  most 50 rows per 10 seconds across all sources. The audited row records "suppressedBefore" (how
+  many rejections from that source were folded in since its previous row). Idle source entries are
+  pruned once more than 10,000 are tracked.
+- TargetId, IpAddress and UserAgent are truncated to their column lengths.
+
+Effect on alerts: SecurityAlertService raises RateLimitBurst when a source has >= RateLimitThreshold
+(default 3) audited rejections within CorrelationWindowMinutes (default 15). With sampling a steady
+attack still produces up to 6 rows per minute per source, so the Warning fires within about 20 s
+and Critical (>= 6 rows) within about 50 s. Dashboard and alert counts now mean "audited
+rejections"; the true number is the row count plus the suppressedBefore values.
+
+After: RateLimitAuditSamplerTests 2/2, HttpRateLimitAuditTests 2/2; full backend suite 212/212;
+RefreshTokenConcurrencyTests 5/5 repeated runs.
+Rollback: revert the PR; no schema change.

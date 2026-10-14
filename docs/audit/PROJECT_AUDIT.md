@@ -139,6 +139,6 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 | 5 UI redesign | IN PROGRESS — status-pill overlap fixed (G-33, #78 merged); route code splitting 145.6 → 93.8 kB gzip (G-35 #79, G-34 #80 merged); G-08 labels (#82 merged); dark theme + WCAG AA contrast fixes, 0 issues on 38/38 page checks (G-37, #83 merged); [DESIGN_SYSTEM.md](../ui/DESIGN_SYSTEM.md) draft | brand accent (owner decision), components |
 | 6 Tab screenshot | RFC DRAFT ONLY — **implementation needs owner's written policy approval** | [SCREENSHOT_CAPTURE_RFC.md](SCREENSHOT_CAPTURE_RFC.md) |
 | 7 RDP support | BLOCKED — no Windows Server RDP test host | owner to provide a test VPS |
-| 8 Performance/observability | IN PROGRESS — #85 merged (G-15, CI green incl. observability acceptance); API latency baseline on 1000 employees / 60 days published, 17/20 endpoints p95 < 300 ms; security dashboard row bound (G-40, #87 open); production run BLOCKED | audit search index decision (G-41), G-24, load/degradation tests |
+| 8 Performance/observability | IN PROGRESS — #85 merged (G-15, CI green incl. observability acceptance); API latency baseline on 1000 employees / 60 days published, 17/20 endpoints p95 < 300 ms; security dashboard row bound (G-40, #87 merged); 429 audit sampling (G-24, PR open); production run BLOCKED | audit search index decision (G-41), load/degradation tests |
 | 9 Production pipeline | BLOCKED — no production host/secret/deploy access | [DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md) |
 | 10 Final E2E | NOT STARTED | |
