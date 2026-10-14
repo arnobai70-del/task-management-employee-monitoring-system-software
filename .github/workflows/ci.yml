@@ -181,6 +181,49 @@ jobs:
         if: failure()
         run: cat "$RUNNER_TEMP/api.log" || true
 
+  admin-web-visual:
+    name: Admin web visual regression (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Same image the baselines were rendered in, so fonts and anti-aliasing match.
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+      options: --ipc=host
+    env:
+      E2E_BASE_URL: http://127.0.0.1:4173
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Build and serve the Admin Web
+        working-directory: src/AdminWeb
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          nohup npx vite preview --host 127.0.0.1 --port 4173 --strictPort > "$RUNNER_TEMP/preview.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:4173/ > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/preview.log"
+          exit 1
+
+      - name: Compare pages with the committed screenshots
+        working-directory: tests/e2e
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright test -c playwright.visual.config.ts
+
+      - name: Upload the differences
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-web-visual-diff
+          path: |
+            tests/e2e/playwright-report-visual
+            tests/e2e/test-results
+          retention-days: 7
+
   production-environment:
     name: Production environment, backup/restore and observability acceptance
     runs-on: ubuntu-latest
