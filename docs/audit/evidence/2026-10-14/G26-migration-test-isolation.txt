@@ -1,0 +1,21 @@
+G-26 DatabaseMigrationTests could not be rerun on the same database
+Date: 2026-10-14 (UTC). Base: origin/main 6682384. Branch: fix/g26-migration-test-isolation.
+
+What was wrong: tests/Backend.Tests/DatabaseMigrationTests.cs migrated and seeded the database named
+in TEST_POSTGRES_CONNECTION directly and inserted fixed rows. A second run on the same database
+(any local rerun, or a CI retry on a reused service container) failed.
+
+Before (same database, two runs in a row, .NET 10 SDK container, PostgreSQL 16):
+  run 1: failed: 0  succeeded: 1
+  run 2: failed Migrations_apply_to_real_postgres_and_foundation_seed_is_idempotent
+         Npgsql.PostgresException : 23505: duplicate key value violates unique constraint
+         "IX_approved_monitoring_applications_NormalizedProcessName"
+
+Fix: the test now creates its own database (tm_migrations_<guid>) from the base connection string,
+the same pattern RefreshTokenConcurrencyTests and the HTTP fixtures already use, and drops it on
+dispose (EnsureDeletedAsync), even when an assertion fails.
+
+After: three runs in a row: failed 0 / succeeded 1 each; databases left behind matching
+tm_migrations_%: 0. CI does not depend on the shared test database being migrated by this test
+(`dotnet ef migrations has-pending-model-changes` compares the model with the snapshot).
+Rollback: revert the PR. Test-only change; no production impact.

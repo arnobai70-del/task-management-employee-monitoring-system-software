@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
@@ -17,13 +18,20 @@ public sealed class DatabaseMigrationTests
     public async Task Migrations_apply_to_real_postgres_and_foundation_seed_is_idempotent()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var connectionString = Environment.GetEnvironmentVariable("TEST_POSTGRES_CONNECTION");
-        Assert.False(string.IsNullOrWhiteSpace(connectionString), "TEST_POSTGRES_CONNECTION is required for migration tests.");
+        var baseConnection = Environment.GetEnvironmentVariable("TEST_POSTGRES_CONNECTION");
+        Assert.False(string.IsNullOrWhiteSpace(baseConnection), "TEST_POSTGRES_CONNECTION is required for migration tests.");
 
+        // A fresh database per run: the test inserts fixed rows, so reusing a database fails on rerun.
+        var connectionString = new NpgsqlConnectionStringBuilder(baseConnection)
+        {
+            Database = $"tm_migrations_{Guid.NewGuid():N}"
+        }.ConnectionString;
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseNpgsql(connectionString)
             .Options;
 
+        // Declared before db so it is disposed after it, dropping the database once the test ends.
+        await using var cleanup = new DropDatabaseOnDispose(options);
         await using var db = new AppDbContext(options);
         await db.Database.MigrateAsync(cancellationToken);
 
@@ -363,6 +371,15 @@ public sealed class DatabaseMigrationTests
         var monitoringAudit = await db.AuditLogs.AsNoTracking().SingleAsync(x => x.Action == "monitoring.policy.updated", cancellationToken);
         Assert.Contains("\"RetentionDays\":7", monitoringAudit.MetadataJson, StringComparison.Ordinal);
         Assert.DoesNotContain("Approved work applications", monitoringAudit.MetadataJson, StringComparison.Ordinal);
+    }
+
+    private sealed class DropDatabaseOnDispose(DbContextOptions<AppDbContext> options) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await using var db = new AppDbContext(options);
+            await db.Database.EnsureDeletedAsync();
+        }
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider

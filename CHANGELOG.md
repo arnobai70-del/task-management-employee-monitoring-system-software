@@ -28,6 +28,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Admin Web text meets WCAG AA contrast on every page in both themes: the "Ctrl K" hint and status badges in panel headings were too faint (G-37).
 - IP assignments reject shorthand, whole-number, hex and zero-padded addresses that were silently saved as a different address (for example `192.168.010.025` became `192.168.8.21`). RDP hosts must be a hostname or IP address without scheme, port or path (G-38).
 - The security dashboard no longer loads every audit row in the selected window into memory; a 7-day view at 1000 employees answers in about half the time (G-40).
+- The database migration test uses its own temporary database, so it can be rerun on the same server (G-26).
 - Approving website work now sends the live "Work completed" event, so managers see the toast and the Website Work completions list updates without a reload (G-36).
 - Admin Web live status pills (incidents, security, notifications, follow-ups) no longer overlap each other or the page title; they share one wrapping row under the top bar (G-33).
 - Admin Web dependencies are locked (`package-lock.json`) and installed with `npm ci` in CI, Docker and the Windows launcher (G-20, #70).
