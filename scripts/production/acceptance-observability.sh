@@ -47,9 +47,14 @@ wait_http "Loki" "$loki_url/ready"
 wait_http "Grafana" "$grafana_url/api/health"
 wait_for_app_ready 60
 
-# Generate normal request telemetry without authentication or query-string data.
+# Generate request telemetry without credentials or query-string data. Production does not expose
+# OpenAPI (acceptance-server.sh requires 401/404), so call a protected endpoint and expect 401.
 for _ in {1..5}; do
-  curl --fail --silent --show-error --max-time 10 "${APP_PUBLIC_URL%/}/openapi/v1.json" >/dev/null
+  status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 "${APP_PUBLIC_URL%/}/api/admin-notifications")"
+  if [[ "$status" != "401" ]]; then
+    echo "Expected HTTP 401 from an anonymous request to a protected endpoint; received HTTP $status." >&2
+    exit 1
+  fi
   sleep 1
 done
 
