@@ -1,3 +1,5 @@
+using TaskMonitoring.Api.Infrastructure;
+
 namespace TaskMonitoring.Api.Services;
 
 public sealed class MonitoringRetentionHostedService(
@@ -13,6 +15,7 @@ public sealed class MonitoringRetentionHostedService(
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var service = scope.ServiceProvider.GetRequiredService<IMonitoringTelemetryService>();
                 var deleted = await service.PurgeExpiredAsync(stoppingToken);
+                ApiTelemetry.RetentionSucceeded(DateTimeOffset.UtcNow);
                 if (deleted > 0)
                 {
                     logger.LogInformation("Purged {Count} expired monitoring activity segments.", deleted);
@@ -24,6 +27,7 @@ public sealed class MonitoringRetentionHostedService(
             }
             catch (Exception ex)
             {
+                ApiTelemetry.RetentionFailed();
                 logger.LogError(ex, "Monitoring telemetry retention purge failed.");
             }
 

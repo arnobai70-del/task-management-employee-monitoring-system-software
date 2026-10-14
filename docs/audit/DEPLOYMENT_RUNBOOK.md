@@ -22,10 +22,29 @@ Windows signing (GitHub Actions secrets, see `docs/windows-production-deployment
 4. Publish Windows release (signed bundle only): `bash scripts/production/publish-windows-release.sh --env <env> --bundle <dir>` (ZIP first, `release.json` last, immutable versions).
 
 ## 4. Smoke checks
-- `curl -f https://<APP>/health/live` and `/health/ready` → 200.
+- `curl -f https://<APP>/health/live` and `/health/ready` → 200. Ready is 503 while any database migration is pending.
 - Admin login with a non-production test account, open Dashboard, Attendance, Website Work.
 - `bash scripts/production/acceptance-server.sh --env <env> --channel stable`.
 - One Employee Desktop sign-in and heartbeat visible in Presence.
+
+## 4a. Alarms (Phase 8)
+Every alarm the master plan names, and where it fires today. "In-app" alarms are Operations incidents shown in the Admin Web and raised by `OperationsIncidentHostedService` every 60 s (`Operations:IncidentScanIntervalSeconds`). "Prometheus" alarms live in `deploy/production/observability/prometheus-alerts.yml` and need the private observability stack (`observability-up.sh`). Rule unit tests: `scripts/audit/prometheus-alerts.test.yml`.
+
+| Plan alarm | Where it fires | Condition (default) | Status |
+| --- | --- | --- | --- |
+| Backups stale | In-app `BackupStale` (`OperationsIncidentService.cs:432`) | no backup status file, or last success older than 26 h (`Operations:BackupStaleHours`) | EXISTS |
+| API error rate | Prometheus `TaskMonitoringApiHighServerErrorRate` | 5xx above 5 % for 10 min | EXISTS |
+| API slow responses | Prometheus `TaskMonitoringApiSlowResponses` | p95 above 1 s for 15 min with traffic above 0.1 req/s | ADDED (G-43) |
+| API or telemetry down | Prometheus `TaskMonitoringApiTelemetryMissing`, `CollectorScrapeDown`, `LokiScrapeDown` | metric absent 3 min / scrape down 2 min | EXISTS |
+| Database slow | In-app `DatabaseDegraded` (`OperationsIncidentService.cs:452`) | probe at or above 1000 ms | EXISTS |
+| Missing migrations | `/health/ready` returns 503 while a migration is pending (`DatabaseReadinessHealthCheck.cs`); `deploy.sh` and `acceptance-server.sh` fail on it | any pending EF migration | ADDED (G-43) |
+| Windows agent disconnects | In-app `AgentOffline` (`:470`), `ServiceStopped` (`:486`) | no heartbeat for 5 min; service reported stopped | EXISTS |
+| Update failures | In-app `UpdateFailed` (`AgentUpdateIncidentBridge.cs:102`), `RollbackDetected` (`:516`), `OutdatedRuntime` (`:500`) | failed update report; rollback; older than stable | EXISTS |
+| Retention lag | Prometheus `TaskMonitoringRetentionStale`, `TaskMonitoringRetentionFailing` | no successful purge for 13 h (runs every 6 h); 2 failures in 12 h | ADDED (G-43) |
+| Upload failures | none | the only upload in the plan is screenshots (Phase 6) | BLOCKED — Phase 6 needs written policy approval |
+| Storage near quota | none for disk; screenshot storage does not exist | host disk is outside the app | OPEN — host-level alarm (node exporter or provider alert) to set up on the production host, BLOCKED without host access |
+
+Alert delivery (email/chat) is not configured: Prometheus has no Alertmanager in the stack. Owner decision needed on where alerts go before production.
 
 ## 5. Rollback
 - Application: redeploy previous image tag/commit via `deploy.sh` with the previous checkout.

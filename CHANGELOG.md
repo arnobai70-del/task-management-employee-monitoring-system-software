@@ -5,6 +5,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 ## [Unreleased]
 
 ### Added
+- Prometheus alerts for slow API responses and for monitoring data retention that is stale or failing, with rule unit tests in `scripts/audit/prometheus-alerts.test.yml`, and an alarm map in the deployment runbook (G-43).
 - `docs/audit/` audit workspace from the owner's master plan: project audit, gap register, feature matrix, threat model, screenshot-capture RFC (draft, awaiting policy approval), test matrix, deployment runbook, release report, committed evidence logs (2026-10-13 baseline `c38dca3`).
 - `docs/ui/DESIGN_SYSTEM.md` Phase 5 design draft and route inventory.
 - `scripts/audit/signalr-expiry.mjs`, `scripts/audit/signalr-reconnect.mjs` evidence scripts for realtime session expiry.
@@ -16,6 +17,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 
 ### Changed
 - Microsoft ASP.NET Core, EF Core and Extensions packages updated from 10.0.12 to 10.0.13. This clears advisory GHSA-334f-vvp4-7g6p in SignalR.Common, which was failing the Windows client build (G-42).
+- `/health/ready` reports unhealthy while any database migration is pending, so a deploy fails instead of serving an out-of-date schema (G-43).
 - The production Content-Security-Policy allows browser connections only to the site's own origin (`connect-src 'self'`). The realtime hub keeps working because it is served from the same origin (G-25).
 - Admin Web presence shows "On shift", "On break", "Connected, not on shift" and "Offline" instead of "Working"/"Idle", and started website work shows "In progress". The labels now say what is measured, not effort (G-08).
 - Removed the unused `WebsiteWorkService.CompleteAsync`, which could mark work done without review; completion always goes through submit and approve (G-31).

@@ -88,8 +88,24 @@ if [[ "$request_metric_ok" -ne 1 ]]; then
   exit 1
 fi
 
+# The retention purge runs once at API start, so its success timestamp must reach Prometheus.
+retention_metric_ok=0
+for _ in {1..30}; do
+  if curl --fail --silent --show-error --max-time 10 --get \
+      --data-urlencode 'query=taskmonitoring_retention_last_success_timestamp > 0' \
+      "$prometheus_url/api/v1/query" | json_query_has_result; then
+    retention_metric_ok=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$retention_metric_ok" -ne 1 ]]; then
+  echo "Prometheus did not receive a successful monitoring retention run from the API." >&2
+  exit 1
+fi
+
 rules_payload="$(curl --fail --silent --show-error --max-time 10 "$prometheus_url/api/v1/rules")"
-if ! python3 -c 'import json,sys; payload=json.load(sys.stdin); names={rule.get("name") for group in payload.get("data",{}).get("groups",[]) for rule in group.get("rules",[])}; required={"TaskMonitoringApiTelemetryMissing","TaskMonitoringCollectorScrapeDown","TaskMonitoringLokiScrapeDown","TaskMonitoringApiHighServerErrorRate"}; raise SystemExit(0 if required.issubset(names) else 1)' <<<"$rules_payload"; then
+if ! python3 -c 'import json,sys; payload=json.load(sys.stdin); names={rule.get("name") for group in payload.get("data",{}).get("groups",[]) for rule in group.get("rules",[])}; required={"TaskMonitoringApiTelemetryMissing","TaskMonitoringCollectorScrapeDown","TaskMonitoringLokiScrapeDown","TaskMonitoringApiHighServerErrorRate","TaskMonitoringApiSlowResponses","TaskMonitoringRetentionStale","TaskMonitoringRetentionFailing"}; raise SystemExit(0 if required.issubset(names) else 1)' <<<"$rules_payload"; then
   echo "Prometheus alert rules are missing or failed to load." >&2
   exit 1
 fi

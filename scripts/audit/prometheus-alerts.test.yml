@@ -1,0 +1,95 @@
+# Usage: docker run --rm -v "$PWD":/w -w /w --entrypoint promtool prom/prometheus:v3.15.0 \
+#   test rules scripts/audit/prometheus-alerts.test.yml
+# Unit tests for deploy/production/observability/prometheus-alerts.yml on synthetic series.
+rule_files:
+  - ../../deploy/production/observability/prometheus-alerts.yml
+evaluation_interval: 1m
+tests:
+  - name: retention stale fires after thirteen hours without success, not before
+    interval: 1m
+    input_series:
+      - series: 'taskmonitoring_retention_last_success_timestamp{service_name="TaskMonitoring.Api"}'
+        values: '0+0x900'
+    alert_rule_test:
+      - eval_time: 10h
+        alertname: TaskMonitoringRetentionStale
+        exp_alerts: []
+      - eval_time: 14h
+        alertname: TaskMonitoringRetentionStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Monitoring data retention purge has not succeeded recently
+              description: The retention purge runs every six hours. No successful run has been reported for more than thirteen hours, so activity records older than the retention policy may still be stored.
+
+  - name: retention fresh does not fire
+    interval: 1m
+    input_series:
+      # Success timestamp follows the clock (60 s per sample), as a healthy six-hourly purge keeps it recent.
+      - series: 'taskmonitoring_retention_last_success_timestamp{service_name="TaskMonitoring.Api"}'
+        values: '0+60x900'
+    alert_rule_test:
+      - eval_time: 14h
+        alertname: TaskMonitoringRetentionStale
+        exp_alerts: []
+
+  - name: two retention failures in twelve hours fire
+    interval: 1m
+    input_series:
+      - series: 'taskmonitoring_retention_failures_total{service_name="TaskMonitoring.Api"}'
+        values: '0x60 1x360 2x60'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: TaskMonitoringRetentionFailing
+        exp_alerts: []
+      - eval_time: 7h30m
+        alertname: TaskMonitoringRetentionFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service_name: TaskMonitoring.Api
+            exp_annotations:
+              summary: Monitoring data retention purge is failing
+              description: The retention purge failed at least twice in twelve hours. Check API logs for "Monitoring telemetry retention purge failed".
+
+  - name: slow responses fire only with sustained traffic above one second p95
+    interval: 1m
+    input_series:
+      # 1 request/s, all slower than 1 s for the first 40 minutes.
+      - series: 'taskmonitoring_api_request_duration_seconds_bucket{le="0.3"}'
+        values: '0+0x40'
+      - series: 'taskmonitoring_api_request_duration_seconds_bucket{le="1"}'
+        values: '0+0x40'
+      - series: 'taskmonitoring_api_request_duration_seconds_bucket{le="5"}'
+        values: '0+60x40'
+      - series: 'taskmonitoring_api_request_duration_seconds_bucket{le="+Inf"}'
+        values: '0+60x40'
+      - series: 'taskmonitoring_api_requests_total{method="GET",status_class="2xx"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: TaskMonitoringApiSlowResponses
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: TaskMonitoringApiSlowResponses
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: TaskMonitoring API p95 latency is above one second
+              description: The 95th percentile API response time has stayed above one second for fifteen minutes. The 2026-10-14 baseline was under 300 ms for most endpoints.
+
+  - name: fast responses do not fire
+    interval: 1m
+    input_series:
+      - series: 'taskmonitoring_api_request_duration_seconds_bucket{le="0.3"}'
+        values: '0+60x40'
+      - series: 'taskmonitoring_api_request_duration_seconds_bucket{le="+Inf"}'
+        values: '0+60x40'
+      - series: 'taskmonitoring_api_requests_total{method="GET",status_class="2xx"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: TaskMonitoringApiSlowResponses
+        exp_alerts: []

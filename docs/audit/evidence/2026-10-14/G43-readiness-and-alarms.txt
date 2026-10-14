@@ -1,0 +1,44 @@
+G-43 readiness with pending migrations + Phase 8 alarm rules, 2026-10-14T15:05:17Z
+
+== HttpReadinessTests on the old DatabaseReadinessHealthCheck (control) ==
+Build succeeded.
+failed Backend.Tests.HttpReadinessTests.Ready_reports_unhealthy_while_a_migration_is_pending (5s 704ms)
+  Assert.Equal() Failure: Values differ
+  Expected: ServiceUnavailable
+  Actual:   OK
+/src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64) failed with 1 error(s) (6s 696ms)
+  failed: 1
+  succeeded: 0
+
+== HttpReadinessTests with the fix ==
+Build succeeded.
+  failed: 0
+  succeeded: 1
+
+== promtool check rules (prom/prometheus:v3.15.0) ==
+Checking deploy/production/observability/prometheus-alerts.yml
+  SUCCESS: 7 rules found
+
+== promtool test rules scripts/audit/prometheus-alerts.test.yml ==
+  SUCCESS
+
+== negative control: stale threshold changed to 30 h, test must fail ==
+
+
+  FAILED:
+    name: retention stale fires after thirteen hours without success, not before,
+    alertname: TaskMonitoringRetentionStale, time: 14h, 
+        exp:[
+(exit 1)
+
+== full backend suite + refresh race x5 ==
+Build succeeded.
+  total: 213
+  failed: 0
+  succeeded: 213
+  skipped: 0
+  failed: 0   succeeded: 1  (race run 1)
+  failed: 0   succeeded: 1  (race run 2)
+  failed: 0   succeeded: 1  (race run 3)
+  failed: 0   succeeded: 1  (race run 4)
+  failed: 0   succeeded: 1  (race run 5)
