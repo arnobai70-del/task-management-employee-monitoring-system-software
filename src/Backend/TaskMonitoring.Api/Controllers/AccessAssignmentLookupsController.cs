@@ -11,14 +11,18 @@ public sealed record AccessEmployeeOptionResponse(Guid Id, string EmployeeCode, 
 [ApiController]
 [Authorize(Policy = PermissionCatalog.AccessAssignmentsRead)]
 [Route("api/access-assignments/employees")]
-public sealed class AccessAssignmentLookupsController(AppDbContext dbContext) : ControllerBase
+public sealed class AccessAssignmentLookupsController(AppDbContext dbContext, ITeamScope teamScope) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<AccessEmployeeOptionResponse>>> GetEmployees(CancellationToken cancellationToken)
-        => Ok(await dbContext.Employees
+    {
+        // Only employees the caller may assign to (G-27).
+        var scope = await teamScope.GetVisibleEmployeeIdsAsync(cancellationToken);
+        return Ok(await dbContext.Employees
             .AsNoTracking()
-            .Where(x => x.IsActive)
+            .Where(x => x.IsActive && (scope == null || scope.Contains(x.Id)))
             .OrderBy(x => x.NormalizedFullName)
             .Select(x => new AccessEmployeeOptionResponse(x.Id, x.EmployeeCode, x.FullName))
             .ToListAsync(cancellationToken));
+    }
 }

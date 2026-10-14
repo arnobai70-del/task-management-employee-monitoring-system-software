@@ -196,7 +196,10 @@ public sealed class WebsiteWorkService(
         RequestActor actor,
         CancellationToken cancellationToken)
     {
-        var task = await WorkQuery(tracked: true).SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var task = await WorkQuery(tracked: true).SingleOrDefaultAsync(
+            x => x.Id == id && (scope == null || x.AssigneeEmployeeId == null || scope.Contains(x.AssigneeEmployeeId.Value)),
+            cancellationToken);
         if (task is null)
         {
             return OperationResult<WebsiteWorkResponse>.NotFound("website_work_not_found", "Website work assignment was not found.");
@@ -426,7 +429,10 @@ public sealed class WebsiteWorkService(
             return (null, null, null, null, null, null, new ApiOperationError("website_work_due_after_project_due", "Due date cannot be after the project due date."));
         }
 
-        var employee = await dbContext.Employees.SingleOrDefaultAsync(x => x.Id == request.EmployeeId, cancellationToken);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var employee = scope is not null && !scope.Contains(request.EmployeeId)
+            ? null
+            : await dbContext.Employees.SingleOrDefaultAsync(x => x.Id == request.EmployeeId, cancellationToken);
         if (employee is null)
         {
             return (null, null, null, null, null, null, new ApiOperationError("employee_not_found", "Employee was not found."));

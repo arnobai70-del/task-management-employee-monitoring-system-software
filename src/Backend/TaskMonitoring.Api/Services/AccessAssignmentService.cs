@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -23,8 +24,15 @@ public interface IAccessAssignmentService
     Task<OperationResult<WebsiteAssignmentResponse>> UpdateWebsiteAssignmentAsync(Guid id, UpsertWebsiteAssignmentRequest request, RequestActor actor, CancellationToken cancellationToken);
 }
 
-public sealed partial class AccessAssignmentService(AppDbContext dbContext, TimeProvider timeProvider) : IAccessAssignmentService
+public sealed partial class AccessAssignmentService(
+    AppDbContext dbContext,
+    TimeProvider timeProvider,
+    ITeamScope? teamScope = null) : IAccessAssignmentService
 {
+    // Assignments of employees outside the caller's team behave as if they do not exist.
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     [GeneratedRegex("^[0-9A-F]{2}(:[0-9A-F]{2}){5}$", RegexOptions.CultureInvariant)]
     private static partial Regex MacRegex();
 
@@ -46,6 +54,11 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
     {
         (page, pageSize) = NormalizePaging(page, pageSize);
         var query = dbContext.Set<RdpAssignment>().AsNoTracking().Include(x => x.Employee).AsQueryable();
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null)
+        {
+            query = query.Where(x => scope.Contains(x.EmployeeId));
+        }
 
         if (employeeId.HasValue)
         {
@@ -146,7 +159,8 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         RequestActor actor,
         CancellationToken cancellationToken)
     {
-        var assignment = await dbContext.Set<RdpAssignment>().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var assignment = await dbContext.Set<RdpAssignment>().SingleOrDefaultAsync(x => x.Id == id && (scope == null || scope.Contains(x.EmployeeId)), cancellationToken);
         if (assignment is null)
         {
             return OperationResult<RdpAssignmentResponse>.NotFound("rdp_assignment_not_found", "RDP assignment was not found.");
@@ -195,6 +209,11 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
     {
         (page, pageSize) = NormalizePaging(page, pageSize);
         var query = dbContext.Set<IpAssignment>().AsNoTracking().Include(x => x.Employee).AsQueryable();
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null)
+        {
+            query = query.Where(x => scope.Contains(x.EmployeeId));
+        }
 
         if (employeeId.HasValue)
         {
@@ -291,7 +310,8 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         RequestActor actor,
         CancellationToken cancellationToken)
     {
-        var assignment = await dbContext.Set<IpAssignment>().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var assignment = await dbContext.Set<IpAssignment>().SingleOrDefaultAsync(x => x.Id == id && (scope == null || scope.Contains(x.EmployeeId)), cancellationToken);
         if (assignment is null)
         {
             return OperationResult<IpAssignmentResponse>.NotFound("ip_assignment_not_found", "IP assignment was not found.");
@@ -342,6 +362,11 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
             .AsNoTracking()
             .Include(x => x.Employee)
             .Where(x => x.AccessLevel != WebsiteAccessLevel.Survey);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null)
+        {
+            query = query.Where(x => scope.Contains(x.EmployeeId));
+        }
 
         if (employeeId.HasValue)
         {
@@ -441,8 +466,9 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         RequestActor actor,
         CancellationToken cancellationToken)
     {
+        var scope = await VisibleEmployeesAsync(cancellationToken);
         var assignment = await dbContext.Set<WebsiteAssignment>()
-            .SingleOrDefaultAsync(x => x.Id == id && x.AccessLevel != WebsiteAccessLevel.Survey, cancellationToken);
+            .SingleOrDefaultAsync(x => x.Id == id && x.AccessLevel != WebsiteAccessLevel.Survey && (scope == null || scope.Contains(x.EmployeeId)), cancellationToken);
         if (assignment is null)
         {
             return OperationResult<WebsiteAssignmentResponse>.NotFound("website_assignment_not_found", "Website assignment was not found.");
@@ -488,7 +514,10 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
             return (null, new ApiOperationError("employee_required", "Employee is required."));
         }
 
-        var employee = await dbContext.Employees.AsNoTracking().SingleOrDefaultAsync(x => x.Id == employeeId, cancellationToken);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var employee = scope is null || scope.Contains(employeeId)
+            ? await dbContext.Employees.AsNoTracking().SingleOrDefaultAsync(x => x.Id == employeeId, cancellationToken)
+            : null;
         if (employee is null)
         {
             return (null, new ApiOperationError("employee_not_found", "Employee was not found."));

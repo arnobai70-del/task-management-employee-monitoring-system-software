@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 
 ### Added
 - Team scoping for managers (phase 1): without the new `employees.scope.all` permission, employee lists, attendance, presence, monitoring activity, website work and the productivity report show only the user and the people who report to them, directly or indirectly. Existing roles keep seeing everyone after the upgrade (G-27).
+- Team scoping phase 2: the same limit now covers the dashboard and the daily attendance, workload and follow-up SLA reports, the attention report and its actions, project tasks, access and survey-link assignments, survey assignments and reviews, Website Work edits and reviews, and live presence and Website Work events. Unassigned work stays visible (G-27).
 - Desktop alerts: an admin can turn on **Desktop alerts** in the Admin Web top bar (in the menu on phones) to get new security alerts and operations incidents as desktop notifications on their PC while the console is in the background (G-47).
 - Phase 8 large-range results: every ranged or paged endpoint stays bounded with 5000 fictional employees and a year of attendance.
 - `scripts/audit/degradation.mjs`, `scripts/audit/long-range.mjs` and `scripts/audit/perf-extend-history.sql` for Phase 8 degradation and large-range checks on fictional data.
@@ -35,6 +36,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance managers (`attendance.manage`) can correct a session's start and end with a required reason. The change is audited with before and after values, and the Admin Web Attendance page has a Correct action (G-28).
 
 ### Fixed
+- A team-limited lead could rename an employee outside their team (the change was saved although the page said "not found") and reset that employee's password. Both now answer "not found" without changing anything (G-48).
 - Refresh tokens are single-use under concurrency: a second simultaneous refresh with the same token gets `409 refresh_conflict` and no tokens (G-21, #69).
 - Realtime (SignalR) connections close when the access token expires; clients reconnect with fresh claims (G-22, #69).
 - Audit and report CSV exports neutralize spreadsheet formulas in text cells (G-23, #69).

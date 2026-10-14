@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -14,8 +15,11 @@ public interface IReportingDashboardService
     Task<OperationResult<IReadOnlyCollection<SurveyProgressResponse>>> GetSurveyProgressAsync(Guid? projectId, CancellationToken cancellationToken);
 }
 
-public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvider timeProvider) : IReportingDashboardService
+public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvider timeProvider, ITeamScope? teamScope = null) : IReportingDashboardService
 {
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     private const int MaximumReportDays = 366;
 
     public async Task<OperationResult<DashboardOverviewResponse>> GetDashboardAsync(
@@ -33,11 +37,16 @@ public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvid
         var startUtc = ToUtc(range.From, TimeOnly.MinValue);
         var endUtc = ToUtc(range.To, TimeOnly.MaxValue);
 
-        var activeEmployees = await dbContext.Employees.AsNoTracking().CountAsync(x => x.IsActive, cancellationToken);
+        // Employee-level counts follow the caller's team scope (G-27); project, department and form counts
+        // describe the organisation's structure and stay organisation-wide.
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var employeesInScope = dbContext.Employees.AsNoTracking().Where(x => scope == null || scope.Contains(x.Id));
+        var activeEmployees = await employeesInScope.CountAsync(x => x.IsActive, cancellationToken);
         var activeDepartments = await dbContext.Departments.AsNoTracking().CountAsync(x => x.IsActive, cancellationToken);
 
         var attendanceQuery = dbContext.WorkSessions.AsNoTracking()
-            .Where(x => x.WorkDate >= range.From && x.WorkDate <= range.To);
+            .Where(x => x.WorkDate >= range.From && x.WorkDate <= range.To)
+            .Where(x => scope == null || scope.Contains(x.EmployeeId));
         var attendanceSessions = await attendanceQuery.CountAsync(cancellationToken);
         var attendanceEmployees = await attendanceQuery.Select(x => x.EmployeeId).Distinct().CountAsync(cancellationToken);
         var completedSessions = await attendanceQuery.CountAsync(x => x.EndedAtUtc != null, cancellationToken);
@@ -56,7 +65,8 @@ public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvid
             x.DueDate != null && x.DueDate < today && x.Status != ProjectStatus.Completed && x.Status != ProjectStatus.Archived,
             cancellationToken);
 
-        var tasks = dbContext.ProjectTasks.AsNoTracking();
+        var tasks = dbContext.ProjectTasks.AsNoTracking()
+            .Where(x => scope == null || x.AssigneeEmployeeId == null || scope.Contains(x.AssigneeEmployeeId.Value));
         var openTasks = await tasks.CountAsync(x => x.Status != ProjectTaskStatus.Done && x.Status != ProjectTaskStatus.Cancelled, cancellationToken);
         var toDoTasks = await tasks.CountAsync(x => x.Status == ProjectTaskStatus.ToDo, cancellationToken);
         var inProgressTasks = await tasks.CountAsync(x => x.Status == ProjectTaskStatus.InProgress, cancellationToken);
@@ -73,7 +83,9 @@ public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvid
             x.CompletedAtUtc != null && x.CompletedAtUtc >= startUtc && x.CompletedAtUtc <= endUtc,
             cancellationToken);
 
-        var assignments = dbContext.SurveyAssignments.AsNoTracking();
+        var assignments = dbContext.SurveyAssignments.AsNoTracking().Where(x => scope == null || scope.Contains(x.EmployeeId));
+        var submissions = dbContext.SurveySubmissions.AsNoTracking()
+            .Where(x => scope == null || scope.Contains(x.SurveyAssignment.EmployeeId));
         var publishedForms = await dbContext.SurveyForms.AsNoTracking().CountAsync(x => x.Status == SurveyFormStatus.Published, cancellationToken);
         var activeAssignments = await assignments.CountAsync(x =>
             x.Status != SurveyAssignmentStatus.Approved && x.Status != SurveyAssignmentStatus.Cancelled,
@@ -84,10 +96,10 @@ public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvid
         var overdueAssignments = await assignments.CountAsync(x =>
             x.DueDate != null && x.DueDate < today && x.Status != SurveyAssignmentStatus.Approved && x.Status != SurveyAssignmentStatus.Cancelled,
             cancellationToken);
-        var submittedInPeriod = await dbContext.SurveySubmissions.AsNoTracking().CountAsync(x =>
+        var submittedInPeriod = await submissions.CountAsync(x =>
             x.SubmittedAtUtc != null && x.SubmittedAtUtc >= startUtc && x.SubmittedAtUtc <= endUtc,
             cancellationToken);
-        var reviewedInPeriod = await dbContext.SurveySubmissions.AsNoTracking().CountAsync(x =>
+        var reviewedInPeriod = await submissions.CountAsync(x =>
             x.ReviewedAtUtc != null && x.ReviewedAtUtc >= startUtc && x.ReviewedAtUtc <= endUtc,
             cancellationToken);
 
@@ -149,8 +161,10 @@ public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvid
             return OperationResult<IReadOnlyCollection<AttendanceDailyMetricResponse>>.NotFound("department_not_found", "Department was not found.");
         }
 
+        var scope = await VisibleEmployeesAsync(cancellationToken);
         var query = dbContext.WorkSessions.AsNoTracking()
-            .Where(x => x.WorkDate >= range.From && x.WorkDate <= range.To);
+            .Where(x => x.WorkDate >= range.From && x.WorkDate <= range.To)
+            .Where(x => scope == null || scope.Contains(x.EmployeeId));
         if (departmentId.HasValue)
         {
             query = query.Where(x => x.Employee.DepartmentId == departmentId.Value);
@@ -266,7 +280,8 @@ public sealed class ReportingDashboardService(AppDbContext dbContext, TimeProvid
         }
 
         limit = Math.Clamp(limit, 1, 100);
-        var employeeQuery = dbContext.Employees.AsNoTracking().Where(x => x.IsActive);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var employeeQuery = dbContext.Employees.AsNoTracking().Where(x => x.IsActive && (scope == null || scope.Contains(x.Id)));
         if (departmentId.HasValue)
         {
             employeeQuery = employeeQuery.Where(x => x.DepartmentId == departmentId.Value);

@@ -27,7 +27,7 @@ public interface IRealtimeEventPublisher
 public sealed class SignalRRealtimeEventPublisher(IHubContext<RealtimeHub> hubContext) : IRealtimeEventPublisher
 {
     public Task PublishPresenceAsync(EmployeePresenceResponse presence, CancellationToken cancellationToken)
-        => hubContext.Clients.Group(RealtimeGroups.PresenceReaders).SendAsync("presenceChanged", presence, cancellationToken);
+        => hubContext.Clients.Groups(RealtimeGroups.PresenceAudience(presence.EmployeeId)).SendAsync("presenceChanged", presence, cancellationToken);
 
     public Task PublishNotificationAsync(Guid employeeId, EmployeeNotificationResponse notification, CancellationToken cancellationToken)
         => hubContext.Clients.Group(RealtimeGroups.Employee(employeeId)).SendAsync("notificationCreated", notification, cancellationToken);

@@ -20,7 +20,8 @@ public sealed class EmployeesController(
     IEmployeeCoreService employeeCoreService,
     AppDbContext dbContext,
     IPasswordHasher<User> passwordHasher,
-    TimeProvider timeProvider) : ControllerBase
+    TimeProvider timeProvider,
+    ITeamScope? teamScope = null) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = PermissionCatalog.EmployeesRead)]
@@ -60,9 +61,11 @@ public sealed class EmployeesController(
     [Authorize(Policy = PermissionCatalog.RolesManage)]
     public async Task<IActionResult> ResetPassword(Guid id, ResetEmployeePasswordRequest request, CancellationToken cancellationToken)
     {
+        // Outside the caller's team the employee does not exist (G-27).
+        var scope = teamScope is null ? null : await teamScope.GetVisibleEmployeeIdsAsync(cancellationToken);
         var employee = await dbContext.Employees
             .Include(x => x.User)
-            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+            .SingleOrDefaultAsync(x => x.Id == id && (scope == null || scope.Contains(x.Id)), cancellationToken);
 
         if (employee is null)
         {

@@ -13,7 +13,7 @@ public sealed record ManagementProjectOption(Guid Id, string Code, string Name, 
 
 [ApiController]
 [Route("api/admin-lookups")]
-public sealed class AdminLookupController(AppDbContext dbContext) : ControllerBase
+public sealed class AdminLookupController(AppDbContext dbContext, ITeamScope teamScope) : ControllerBase
 {
     [HttpGet("employees/departments")]
     [Authorize(Policy = PermissionCatalog.EmployeesRead)]
@@ -78,11 +78,13 @@ public sealed class AdminLookupController(AppDbContext dbContext) : ControllerBa
     [HttpGet("surveys/employees")]
     [Authorize(Policy = PermissionCatalog.SurveyAssignmentsRead)]
     public async Task<ActionResult<IReadOnlyCollection<ManagementEmployeeOption>>> SurveyEmployees(CancellationToken cancellationToken)
-        => Ok(await ActiveEmployeeOptions(cancellationToken));
+        => Ok(await ActiveEmployeeOptions(cancellationToken, await teamScope.GetVisibleEmployeeIdsAsync(cancellationToken)));
 
-    private Task<List<ManagementEmployeeOption>> ActiveEmployeeOptions(CancellationToken cancellationToken)
+    // Supervisor, shift and project pickers stay organisation-wide: a lead's own manager can sit outside
+    // their team, and shift and project membership are not team-scoped. Survey assignment targets are (G-27).
+    private Task<List<ManagementEmployeeOption>> ActiveEmployeeOptions(CancellationToken cancellationToken, Guid[]? scope = null)
         => dbContext.Employees.AsNoTracking()
-            .Where(x => x.IsActive)
+            .Where(x => x.IsActive && (scope == null || scope.Contains(x.Id)))
             .OrderBy(x => x.NormalizedFullName)
             .Select(x => new ManagementEmployeeOption(x.Id, x.EmployeeCode, x.FullName))
             .ToListAsync(cancellationToken);

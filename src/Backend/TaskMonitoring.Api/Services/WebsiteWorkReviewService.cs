@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -18,8 +19,12 @@ public sealed class WebsiteWorkReviewService(
     TimeProvider timeProvider,
     IWebsiteWorkRealtimePublisher managerPublisher,
     IRealtimeEventPublisher employeePublisher,
-    ILogger<WebsiteWorkReviewService> logger) : IWebsiteWorkReviewService
+    ILogger<WebsiteWorkReviewService> logger,
+    ITeamScope? teamScope = null) : IWebsiteWorkReviewService
 {
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     public const string SubmittedAction = "website-work.submitted";
     public const string ApprovedAction = "website-work.approved";
     public const string ReopenedAction = "website-work.reopened";
@@ -114,7 +119,11 @@ public sealed class WebsiteWorkReviewService(
             return OperationResult<WebsiteWorkResponse>.Invalid("actor_required", "A valid authenticated manager is required.");
         }
 
-        var task = await WorkQuery(tracked: true).SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        // Reviewers outside the assignee's reporting line get not-found.
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var task = await WorkQuery(tracked: true).SingleOrDefaultAsync(
+            x => x.Id == id && (scope == null || x.AssigneeEmployeeId == null || scope.Contains(x.AssigneeEmployeeId.Value)),
+            cancellationToken);
         if (task is null)
         {
             return OperationResult<WebsiteWorkResponse>.NotFound("website_work_not_found", "Website work assignment was not found.");
@@ -209,7 +218,11 @@ public sealed class WebsiteWorkReviewService(
             return OperationResult<WebsiteWorkResponse>.Invalid("review_comment_required", "A correction comment of at least 2 characters is required when reopening website work.");
         }
 
-        var task = await WorkQuery(tracked: true).SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        // Reviewers outside the assignee's reporting line get not-found.
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var task = await WorkQuery(tracked: true).SingleOrDefaultAsync(
+            x => x.Id == id && (scope == null || x.AssigneeEmployeeId == null || scope.Contains(x.AssigneeEmployeeId.Value)),
+            cancellationToken);
         if (task is null)
         {
             return OperationResult<WebsiteWorkResponse>.NotFound("website_work_not_found", "Website work assignment was not found.");

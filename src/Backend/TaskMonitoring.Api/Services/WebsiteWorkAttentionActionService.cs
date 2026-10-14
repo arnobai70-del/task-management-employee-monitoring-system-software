@@ -43,7 +43,8 @@ public interface IWebsiteWorkAttentionActionService
 
 public sealed class WebsiteWorkAttentionActionService(
     AppDbContext dbContext,
-    TimeProvider timeProvider) : IWebsiteWorkAttentionActionService
+    TimeProvider timeProvider,
+    ITeamScope? teamScope = null) : IWebsiteWorkAttentionActionService
 {
     public const string AcknowledgedAction = "website-work.attention.acknowledged";
     public const string SnoozedAction = "website-work.attention.snoozed";
@@ -409,13 +410,16 @@ public sealed class WebsiteWorkAttentionActionService(
                 actorResult.Error.Message));
         }
 
+        // Attention items of employees outside the caller's team behave as if they do not exist.
+        var scope = teamScope is null ? null : await teamScope.GetVisibleEmployeeIdsAsync(cancellationToken);
         var task = await dbContext.ProjectTasks
             .Include(x => x.Project)
             .Include(x => x.AssigneeEmployee)
             .Include(x => x.Activities)
             .SingleOrDefaultAsync(x =>
                 x.Id == taskId &&
-                x.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction),
+                x.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction) &&
+                (scope == null || x.AssigneeEmployeeId == null || scope.Contains(x.AssigneeEmployeeId.Value)),
                 cancellationToken);
         if (task is null)
         {

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -25,8 +26,16 @@ public interface ISurveyCoreService
     Task<OperationResult<SurveySubmissionResponse>> ReviewAsync(Guid submissionId, ReviewSurveySubmissionRequest request, RequestActor actor, CancellationToken cancellationToken);
 }
 
-public sealed class SurveyCoreService(AppDbContext dbContext, TimeProvider timeProvider) : ISurveyCoreService
+public sealed class SurveyCoreService(
+    AppDbContext dbContext,
+    TimeProvider timeProvider,
+    ITeamScope? teamScope = null) : ISurveyCoreService
 {
+    // Assignments and submissions of employees outside the caller's team behave as if they do not exist.
+    // Survey forms themselves stay organisation-wide.
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     public async Task<PagedResponse<SurveyFormResponse>> GetFormsAsync(string? search, Guid? projectId, SurveyFormStatus? status, int page, int pageSize, CancellationToken cancellationToken)
     {
         page = Math.Clamp(page, 1, 1_000_000);
@@ -209,6 +218,8 @@ public sealed class SurveyCoreService(AppDbContext dbContext, TimeProvider timeP
         page = Math.Clamp(page, 1, 1_000_000);
         pageSize = Math.Clamp(pageSize, 1, 100);
         var query = dbContext.SurveyAssignments.AsNoTracking();
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null) query = query.Where(x => scope.Contains(x.EmployeeId));
         if (surveyFormId.HasValue) query = query.Where(x => x.SurveyFormId == surveyFormId.Value);
         if (employeeId.HasValue) query = query.Where(x => x.EmployeeId == employeeId.Value);
         if (status.HasValue) query = query.Where(x => x.Status == status.Value);
@@ -230,7 +241,10 @@ public sealed class SurveyCoreService(AppDbContext dbContext, TimeProvider timeP
         if (form is null) return OperationResult<SurveyAssignmentResponse>.NotFound("survey_not_found", "Survey form was not found.");
         if (form.Status != SurveyFormStatus.Published)
             return OperationResult<SurveyAssignmentResponse>.Conflict("survey_not_published", "Assignments can only be created for published surveys.");
-        var employee = await dbContext.Employees.SingleOrDefaultAsync(x => x.Id == request.EmployeeId, cancellationToken);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var employee = scope is null || scope.Contains(request.EmployeeId)
+            ? await dbContext.Employees.SingleOrDefaultAsync(x => x.Id == request.EmployeeId, cancellationToken)
+            : null;
         if (employee is null) return OperationResult<SurveyAssignmentResponse>.NotFound("employee_not_found", "Employee was not found.");
         if (!employee.IsActive) return OperationResult<SurveyAssignmentResponse>.Conflict("employee_inactive", "Survey assignments require an active employee.");
 
@@ -273,9 +287,10 @@ public sealed class SurveyCoreService(AppDbContext dbContext, TimeProvider timeP
 
     public async Task<OperationResult<SurveyAssignmentResponse>> CancelAssignmentAsync(Guid id, RequestActor actor, CancellationToken cancellationToken)
     {
+        var scope = await VisibleEmployeesAsync(cancellationToken);
         var assignment = await dbContext.SurveyAssignments
             .Include(x => x.SurveyForm).Include(x => x.Employee).Include(x => x.Submissions)
-            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+            .SingleOrDefaultAsync(x => x.Id == id && (scope == null || scope.Contains(x.EmployeeId)), cancellationToken);
         if (assignment is null) return OperationResult<SurveyAssignmentResponse>.NotFound("survey_assignment_not_found", "Survey assignment was not found.");
         if (assignment.Status is SurveyAssignmentStatus.Submitted or SurveyAssignmentStatus.Approved)
             return OperationResult<SurveyAssignmentResponse>.Conflict("survey_assignment_locked", "Submitted or approved assignments cannot be cancelled.");
@@ -309,6 +324,8 @@ public sealed class SurveyCoreService(AppDbContext dbContext, TimeProvider timeP
         page = Math.Clamp(page, 1, 1_000_000);
         pageSize = Math.Clamp(pageSize, 1, 100);
         var query = SubmissionQuery().Where(x => x.Status == SurveySubmissionStatus.Submitted);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null) query = query.Where(x => scope.Contains(x.SurveyAssignment.EmployeeId));
         if (surveyFormId.HasValue) query = query.Where(x => x.SurveyAssignment.SurveyFormId == surveyFormId.Value);
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query.OrderBy(x => x.SubmittedAtUtc).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
@@ -323,7 +340,9 @@ public sealed class SurveyCoreService(AppDbContext dbContext, TimeProvider timeP
         if (request.Decision == SurveyReviewDecision.Reject && string.IsNullOrWhiteSpace(comment))
             return OperationResult<SurveySubmissionResponse>.Invalid("survey_rejection_comment_required", "A rejection comment is required.");
 
-        var submission = await SubmissionQuery(tracking: true).SingleOrDefaultAsync(x => x.Id == submissionId, cancellationToken);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var submission = await SubmissionQuery(tracking: true)
+            .SingleOrDefaultAsync(x => x.Id == submissionId && (scope == null || scope.Contains(x.SurveyAssignment.EmployeeId)), cancellationToken);
         if (submission is null) return OperationResult<SurveySubmissionResponse>.NotFound("survey_submission_not_found", "Survey submission was not found.");
         if (submission.Status != SurveySubmissionStatus.Submitted)
             return OperationResult<SurveySubmissionResponse>.Conflict("survey_submission_not_reviewable", "Only submitted responses can be reviewed.");

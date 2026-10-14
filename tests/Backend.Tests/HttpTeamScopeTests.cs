@@ -1,10 +1,13 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -12,6 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Hubs;
 using TaskMonitoring.Api.Security;
 using TaskMonitoring.Api.Services;
 
@@ -35,7 +39,20 @@ public sealed class HttpTeamScopeTests(HttpTeamScopeTests.ApiFixture api) : ICla
         "/api/monitoring/activity?page=1&pageSize=100",
         "/api/website-work?page=1&pageSize=100",
         "/api/website-work/progress",
-        $"/api/reports/website-work/productivity?from={WeekAgo}&to={Today}"
+        $"/api/reports/website-work/productivity?from={WeekAgo}&to={Today}",
+        // Phase 2
+        "/api/tasks?page=1&pageSize=100",
+        "/api/reports/website-work/attention?includeSuppressed=true",
+        "/api/reports/workload?limit=100",
+        "/api/access-assignments/rdp?page=1&pageSize=100",
+        "/api/access-assignments/ip?page=1&pageSize=100",
+        "/api/access-assignments/websites?page=1&pageSize=100",
+        "/api/access-assignments/employees",
+        "/api/survey-links?page=1&pageSize=100",
+        "/api/survey-links/employees",
+        "/api/survey-assignments?page=1&pageSize=100",
+        "/api/survey-submissions/pending?page=1&pageSize=100",
+        "/api/admin-lookups/surveys/employees"
     ];
 
     [Fact]
@@ -61,11 +78,67 @@ public sealed class HttpTeamScopeTests(HttpTeamScopeTests.ApiFixture api) : ICla
                      ($"/api/employees/{api.OutsiderId}", HttpStatusCode.NotFound),
                      ($"/api/employees/{api.IndirectReportId}", HttpStatusCode.OK),
                      ($"/api/reports/website-work/productivity/{api.OutsiderId}/timeline", HttpStatusCode.NotFound),
-                     ($"/api/reports/website-work/productivity/{api.IndirectReportId}/timeline", HttpStatusCode.OK)
+                     ($"/api/reports/website-work/productivity/{api.IndirectReportId}/timeline", HttpStatusCode.OK),
+                     ($"/api/tasks/{api.OutsiderTaskId}", HttpStatusCode.NotFound),
+                     ($"/api/tasks/{api.IndirectReportTaskId}", HttpStatusCode.OK),
+                     ($"/api/tasks/{api.OutsiderTaskId}/comments", HttpStatusCode.NotFound),
+                     ($"/api/tasks/{api.OutsiderTaskId}/activities", HttpStatusCode.NotFound)
                  })
         {
             var status = (await lead.GetAsync(path, ct)).StatusCode;
             if (status != expected) problems.Add($"{path} returned {(int)status}, expected {(int)expected}");
+        }
+
+        // Actions on another team's items answer not-found, exactly as for a missing id, and change nothing.
+        foreach (var (path, payload) in new (string, object)[]
+                 {
+                     ($"/api/website-work/{api.OutsiderTaskId}/approve", new { comment = "scope test" }),
+                     ($"/api/website-work/{api.OutsiderTaskId}/attention/acknowledge", new { note = "scope test" }),
+                     ($"/api/survey-submissions/{api.OutsiderSubmissionId}/review", new { decision = "Approve", comment = "scope test" }),
+                     ("/api/survey-assignments", new { surveyFormId = api.SurveyFormId, employeeId = api.OutsiderId })
+                 })
+        {
+            var status = (await lead.PostAsJsonAsync(path, payload, ct)).StatusCode;
+            if (status != HttpStatusCode.NotFound) problems.Add($"POST {path} returned {(int)status}, expected 404");
+        }
+
+        foreach (var (method, path, payload) in new (HttpMethod, string, object)[]
+                 {
+                     (HttpMethod.Put, $"/api/employees/{api.OutsiderId}", new
+                     {
+                         employeeCode = "SCOPE-OUT", fullName = "Renamed By Lead", email = "out@scope.test", jobTitle = "Worker", isActive = true
+                     }),
+                     (HttpMethod.Post, $"/api/employees/{api.OutsiderId}/reset-password", new { newPassword = "Scope-Reset-Password-2026!" })
+                 })
+        {
+            using var request = new HttpRequestMessage(method, path) { Content = JsonContent.Create(payload) };
+            var status = (await lead.SendAsync(request, ct)).StatusCode;
+            if (status != HttpStatusCode.NotFound) problems.Add($"{method} {path} returned {(int)status}, expected 404");
+        }
+
+        // Phase 1 returned 404 for the update only after saving it; the record must be untouched.
+        await using (var scope = api.Factory.Services.CreateAsyncScope())
+        {
+            var outsiderName = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Employees
+                .Where(x => x.Id == api.OutsiderId).Select(x => x.FullName).SingleAsync(ct);
+            if (outsiderName != "Scope SCOPE-OUT") problems.Add($"the outsider was renamed to '{outsiderName}'");
+        }
+
+        // Aggregates count only the team: lead, direct and indirect report; one attendance session (the indirect report).
+        using (var dashboard = JsonDocument.Parse(await lead.GetStringAsync($"/api/reports/dashboard?from={WeekAgo}&to={Today}", ct)))
+        {
+            var activeEmployees = dashboard.RootElement.GetProperty("workforce").GetProperty("activeEmployees").GetInt32();
+            var sessions = dashboard.RootElement.GetProperty("attendance").GetProperty("sessions").GetInt32();
+            var inProgress = dashboard.RootElement.GetProperty("tasks").GetProperty("inProgress").GetInt32();
+            if (activeEmployees != 3) problems.Add($"dashboard counts {activeEmployees} active employees, expected 3");
+            if (sessions != 1) problems.Add($"dashboard counts {sessions} attendance sessions, expected 1");
+            if (inProgress != 1) problems.Add($"dashboard counts {inProgress} in-progress tasks, expected 1");
+        }
+
+        using (var daily = JsonDocument.Parse(await lead.GetStringAsync($"/api/reports/attendance/daily?from={WeekAgo}&to={Today}", ct)))
+        {
+            var sessions = daily.RootElement.EnumerateArray().Sum(day => day.GetProperty("sessions").GetInt32());
+            if (sessions != 1) problems.Add($"daily attendance counts {sessions} sessions, expected 1");
         }
 
         Assert.True(problems.Count == 0, string.Join("; ", problems));
@@ -91,6 +164,31 @@ public sealed class HttpTeamScopeTests(HttpTeamScopeTests.ApiFixture api) : ICla
         }
 
         Assert.Equal(HttpStatusCode.OK, (await lead.GetAsync($"/api/employees/{api.OutsiderId}", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await lead.GetAsync($"/api/tasks/{api.OutsiderTaskId}", ct)).StatusCode);
+
+        using var dashboard = JsonDocument.Parse(await lead.GetStringAsync($"/api/reports/dashboard?from={WeekAgo}&to={Today}", ct));
+        Assert.Equal(2, dashboard.RootElement.GetProperty("attendance").GetProperty("sessions").GetInt32());
+        Assert.Equal(2, dashboard.RootElement.GetProperty("tasks").GetProperty("inProgress").GetInt32());
+    }
+
+    [Fact]
+    public async Task Realtime_connection_of_a_scoped_lead_joins_only_team_groups()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scoped = await api.ConnectHubAsync(ApiFixture.ScopedLeadEmail, ct);
+        var all = await api.ConnectHubAsync(ApiFixture.AllLeadEmail, ct);
+
+        // Presence and Website Work events are sent to RealtimeGroups.*Audience(employeeId): the organisation-wide
+        // group plus that employee's team group. The scoped lead must hear about the indirect report, not the outsider.
+        Assert.DoesNotContain(RealtimeGroups.PresenceReaders, scoped);
+        Assert.DoesNotContain(RealtimeGroups.TaskManagers, scoped);
+        Assert.Contains(RealtimeGroups.PresenceAudience(api.IndirectReportId), scoped.Contains);
+        Assert.Contains(RealtimeGroups.TaskManagerAudience(api.IndirectReportId), scoped.Contains);
+        Assert.DoesNotContain(RealtimeGroups.PresenceAudience(api.OutsiderId), scoped.Contains);
+        Assert.DoesNotContain(RealtimeGroups.TaskManagerAudience(api.OutsiderId), scoped.Contains);
+
+        Assert.Contains(RealtimeGroups.PresenceAudience(api.OutsiderId), all.Contains);
+        Assert.Contains(RealtimeGroups.TaskManagerAudience(api.OutsiderId), all.Contains);
     }
 
     [Fact]
@@ -133,6 +231,34 @@ public sealed class HttpTeamScopeTests(HttpTeamScopeTests.ApiFixture api) : ICla
         }
     }
 
+    private sealed class RecordingGroupManager : IGroupManager
+    {
+        public HashSet<string> Joined { get; } = [];
+
+        public Task AddToGroupAsync(string connectionId, string groupName, CancellationToken cancellationToken = default)
+        {
+            Joined.Add(groupName);
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveFromGroupAsync(string connectionId, string groupName, CancellationToken cancellationToken = default)
+        {
+            Joined.Remove(groupName);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class TestCallerContext(ClaimsPrincipal user, CancellationToken aborted) : HubCallerContext
+    {
+        public override string ConnectionId { get; } = Guid.NewGuid().ToString("N");
+        public override string? UserIdentifier => null;
+        public override ClaimsPrincipal? User => user;
+        public override IDictionary<object, object?> Items { get; } = new Dictionary<object, object?>();
+        public override IFeatureCollection Features { get; } = new FeatureCollection();
+        public override CancellationToken ConnectionAborted => aborted;
+        public override void Abort() { }
+    }
+
     public sealed class ApiFixture : IAsyncLifetime
     {
         public const string Password = "Scope-Test-Password-2026!";
@@ -145,6 +271,10 @@ public sealed class HttpTeamScopeTests(HttpTeamScopeTests.ApiFixture api) : ICla
         public WebApplicationFactory<Program> Factory { get; private set; } = null!;
         public Guid OutsiderId { get; private set; }
         public Guid IndirectReportId { get; private set; }
+        public Guid OutsiderTaskId { get; private set; }
+        public Guid IndirectReportTaskId { get; private set; }
+        public Guid OutsiderSubmissionId { get; private set; }
+        public Guid SurveyFormId { get; private set; }
 
         public async ValueTask InitializeAsync()
         {
@@ -189,6 +319,25 @@ public sealed class HttpTeamScopeTests(HttpTeamScopeTests.ApiFixture api) : ICla
             return client;
         }
 
+        /// <summary>Runs RealtimeHub.OnConnectedAsync for the user's real token claims and returns the groups joined.</summary>
+        public async Task<HashSet<string>> ConnectHubAsync(string email, CancellationToken cancellationToken)
+        {
+            using var client = await ClientForAsync(email, cancellationToken);
+            var token = client.DefaultRequestHeaders.Authorization!.Parameter!;
+            var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler { MapInboundClaims = false }.ReadJwtToken(token);
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(jwt.Claims, "Bearer"));
+
+            await using var scope = Factory.Services.CreateAsyncScope();
+            var groups = new RecordingGroupManager();
+            var hub = new RealtimeHub(scope.ServiceProvider.GetRequiredService<AppDbContext>())
+            {
+                Context = new TestCallerContext(principal, cancellationToken),
+                Groups = groups
+            };
+            await hub.OnConnectedAsync();
+            return groups.Joined;
+        }
+
         private void SetEnvironment(string key, string value)
         {
             _previousEnvironment.TryAdd(key, Environment.GetEnvironmentVariable(key));
@@ -201,7 +350,10 @@ public sealed class HttpTeamScopeTests(HttpTeamScopeTests.ApiFixture api) : ICla
             var readCodes = new[]
             {
                 PermissionCatalog.EmployeesRead, PermissionCatalog.AttendanceRead, PermissionCatalog.PresenceRead,
-                PermissionCatalog.MonitoringRead, PermissionCatalog.TasksRead, PermissionCatalog.ReportsRead
+                PermissionCatalog.MonitoringRead, PermissionCatalog.TasksRead, PermissionCatalog.ReportsRead,
+                PermissionCatalog.TasksManage, PermissionCatalog.AccessAssignmentsRead, PermissionCatalog.SurveysRead,
+                PermissionCatalog.SurveyAssignmentsRead, PermissionCatalog.SurveyAssignmentsManage, PermissionCatalog.SurveyReview,
+                PermissionCatalog.SurveysManage, PermissionCatalog.EmployeesManage, PermissionCatalog.RolesManage
             };
             var readPermissions = await db.Permissions.Where(x => readCodes.Contains(x.Code)).ToListAsync();
             var scopeAll = await db.Permissions.SingleAsync(x => x.Code == PermissionCatalog.EmployeesScopeAll);
@@ -263,6 +415,14 @@ public sealed class HttpTeamScopeTests(HttpTeamScopeTests.ApiFixture api) : ICla
                 Status = ProjectStatus.Active
             };
             db.Projects.Add(project);
+            var form = new SurveyForm
+            {
+                ProjectId = project.Id, Project = project, Code = "SCOPE-FORM", NormalizedCode = "SCOPE-FORM",
+                Name = "Scope Form", NormalizedName = "SCOPE FORM", Status = SurveyFormStatus.Published
+            };
+            db.SurveyForms.Add(form);
+            var tasks = new Dictionary<Guid, ProjectTask>();
+            var submissions = new Dictionary<Guid, SurveySubmission>();
 
             foreach (var employee in new[] { report2, outsider })
             {
@@ -285,8 +445,11 @@ public sealed class HttpTeamScopeTests(HttpTeamScopeTests.ApiFixture api) : ICla
                     ProjectId = project.Id, Project = project, Title = $"{employee.EmployeeCode} website target",
                     NormalizedTitle = $"{employee.EmployeeCode} WEBSITE TARGET", Status = ProjectTaskStatus.InProgress,
                     Priority = ProjectTaskPriority.Normal, AssigneeEmployeeId = employee.Id, AssigneeEmployee = employee,
-                    CreatedAtUtc = now.AddMinutes(-30), UpdatedAtUtc = now.AddMinutes(-20)
+                    CreatedAtUtc = now.AddMinutes(-30), UpdatedAtUtc = now.AddMinutes(-20),
+                    // Overdue, so it is also an attention alert.
+                    DueDate = DateOnly.FromDateTime(now).AddDays(-1)
                 };
+                tasks[employee.Id] = task;
                 task.Activities.Add(new TaskActivity
                 {
                     ProjectTaskId = task.Id, ProjectTask = task, ActorUserId = employee.UserId, Action = WebsiteWorkService.ConfiguredAction,
@@ -298,17 +461,62 @@ public sealed class HttpTeamScopeTests(HttpTeamScopeTests.ApiFixture api) : ICla
                     DetailsJson = "{\"host\":\"example.com\"}", CreatedAtUtc = now.AddMinutes(-20)
                 });
                 db.ProjectTasks.Add(task);
+                // A plain task too: the generic Tasks list leaves Website Work out.
+                db.ProjectTasks.Add(new ProjectTask
+                {
+                    ProjectId = project.Id, Project = project, Title = $"{employee.EmployeeCode} plain task",
+                    NormalizedTitle = $"{employee.EmployeeCode} PLAIN TASK", Status = ProjectTaskStatus.ToDo,
+                    Priority = ProjectTaskPriority.Normal, AssigneeEmployeeId = employee.Id, AssigneeEmployee = employee
+                });
                 db.MonitoringActivitySegments.Add(new MonitoringActivitySegment
                 {
                     EmployeeId = employee.Id, Employee = employee, Kind = MonitoringActivityKind.Application,
                     ProcessName = "excel.exe", ApplicationName = "Fictional Spreadsheet",
                     StartedAtUtc = now.AddHours(-2), LastObservedAtUtc = now.AddHours(-1)
                 });
+
+                // Fictional access records: documentation-range addresses and example.com only.
+                var octet = employee == outsider ? 20 : 10;
+                db.Set<RdpAssignment>().Add(new RdpAssignment
+                {
+                    EmployeeId = employee.Id, Employee = employee, Name = $"{employee.EmployeeCode} desktop", Host = $"rdp{octet}.example.com"
+                });
+                db.Set<IpAssignment>().Add(new IpAssignment
+                {
+                    EmployeeId = employee.Id, Employee = employee, IpAddress = $"192.0.2.{octet}", DeviceName = $"{employee.EmployeeCode}-PC"
+                });
+                db.Set<WebsiteAssignment>().Add(new WebsiteAssignment
+                {
+                    EmployeeId = employee.Id, Employee = employee, Name = $"{employee.EmployeeCode} portal",
+                    Url = $"https://work{octet}.example.com/", AccessLevel = WebsiteAccessLevel.Work
+                });
+                db.Set<WebsiteAssignment>().Add(new WebsiteAssignment
+                {
+                    EmployeeId = employee.Id, Employee = employee, Name = $"{employee.EmployeeCode} survey link",
+                    Url = $"https://survey{octet}.example.com/", AccessLevel = WebsiteAccessLevel.Survey
+                });
+                var surveyAssignment = new SurveyAssignment
+                {
+                    SurveyFormId = form.Id, SurveyForm = form, EmployeeId = employee.Id, Employee = employee,
+                    Status = SurveyAssignmentStatus.Submitted
+                };
+                var submission = new SurveySubmission
+                {
+                    SurveyAssignmentId = surveyAssignment.Id, SurveyAssignment = surveyAssignment,
+                    Status = SurveySubmissionStatus.Submitted, SubmittedAtUtc = now.AddMinutes(-10)
+                };
+                surveyAssignment.Submissions.Add(submission);
+                db.SurveyAssignments.Add(surveyAssignment);
+                submissions[employee.Id] = submission;
             }
 
             await db.SaveChangesAsync();
             OutsiderId = outsider.Id;
             IndirectReportId = report2.Id;
+            OutsiderTaskId = tasks[outsider.Id].Id;
+            IndirectReportTaskId = tasks[report2.Id].Id;
+            OutsiderSubmissionId = submissions[outsider.Id].Id;
+            SurveyFormId = form.Id;
         }
     }
 }
