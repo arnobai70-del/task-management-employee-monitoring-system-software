@@ -1,0 +1,73 @@
+P4 Access assignment validation (RDP / IP / website) and survey flow review (G-38, G-39)
+Date: 2026-10-14 (UTC). Base: origin/main after #83. Branch: audit/phase4-survey-rdp-ip.
+Master plan Phase 4 items: "Audit third-party website/RDP/IP assignment validation and sensitive
+data boundaries" and "Test survey flows and historical reporting; never copy third-party
+credentials/form data". All test data is fictional (example.com / example.internal, 10.x, 2001:db8::).
+Nothing was deployed.
+
+1. VERIFIED BUG G-38: IP and RDP host inputs were silently rewritten or accepted when malformed
+-------------------------------------------------------------------------------------------
+Code: src/Backend/TaskMonitoring.Api/Services/AccessAssignmentService.cs (before the fix)
+  ValidateIpAsync used IPAddress.TryParse(...) and stored parsed.ToString();
+  ValidateRdpAsync only trimmed and lower-cased Host (NormalizeHost), no format check.
+
+What IPAddress.TryParse does with operator input (.NET 10 SDK, dotnet fsi):
+  192.168.10         -> accepted, stored as 192.168.0.10
+  10.1               -> accepted, stored as 10.0.0.1
+  3232238130         -> accepted, stored as 192.168.10.50
+  0x0A000001         -> accepted, stored as 10.0.0.1
+  192.168.010.025    -> accepted, stored as 192.168.8.21   (leading zeros read as octal)
+  fe80::1%eth0       -> accepted, stored as fe80::1%2      (host-local zone index)
+Impact: an admin typing a partial or zero-padded address records a different device's
+address; "3232238130" can collide with an existing assignment (192.168.10.50) under a name the
+admin does not recognise. RDP Host accepted "https://...", "host:3389", "host/path",
+"user@host" and spaces, so the duplicate-endpoint check (same host+port) could be bypassed with a
+different spelling of the same endpoint.
+
+Control run (new tests against the unfixed service): 12 of 12 malformed inputs accepted.
+  failed Rdp_assignment_rejects_host_that_is_not_a_plain_hostname_or_ip x6
+         (192.168.10, "rdp host.example.internal", https://rdp.example.internal,
+          rdp.example.internal/path, rdp.example.internal:3389, user@rdp.example.internal)
+  failed Ip_assignment_rejects_shorthand_or_ambiguous_addresses x6
+         (fe80::1%eth0, 192.168.10, 3232238130, 192.168.010.025, 0x0A000001, 10.1)
+  total: 24  failed: 12  succeeded: 12
+
+Fix: IPv4 must be four decimal octets 0-255 without leading zeros; IPv6 must parse as IPv6
+and carry no zone index. RDP host must be such an IP address or a DNS hostname (letters,
+digits, hyphens, dots; max 253). Values stored before this change stay editable while
+unchanged, so Deactivate (which re-sends the stored host) and Release keep working.
+Error codes: invalid_ip_address (existing), invalid_rdp_host (new, 400 like other validation).
+
+After: AccessAssignmentServiceTests total: 25  failed: 0  (adds legacy-row test)
+Full backend suite (Release, TreatWarningsAsErrors): total: 205  failed: 0  succeeded: 205;
+RefreshTokenConcurrencyTests 5/5 repeated runs green.
+
+2. RISK G-39: sensitive values that can reach readers and the audit log
+-----------------------------------------------------------------------
+- Website URLs: credentials in the URL are dropped (GetComponents(HttpRequestUrl):
+  https://user:secret@crm.example.com/app?token=abc -> https://crm.example.com/app?token=abc),
+  but query-string tokens are kept, shown to every holder of access.assignments.read and
+  written in full to audit metadata (website_assignment.created/updated "Url").
+  Survey links reject embedded credentials outright and audit the hostname only
+  (ExternalSurveyService.cs ValidateAsync / RecordOpenAsync) - the stricter pattern.
+- RDP CredentialReference / UsernameReference are free text returned to every reader; the UI
+  says "Vault item/reference only. Never enter a password here." (AccessAssignments.tsx:286) but
+  the server cannot enforce it. Audit metadata already excludes both (existing test
+  Create_rdp_assignment_records_audit_without_secret_material).
+Not changed in this PR: stripping query strings could break legitimate deep links, so this needs
+an owner rule (e.g. reject URLs whose query contains token/key/sig parameters, or log host only).
+
+3. Survey flows and historical reporting - reviewed, no defect found
+--------------------------------------------------------------------
+SurveyCoreService.cs: questions editable only in Draft (UpdateFormAsync:108, ReplaceQuestionsAsync:135);
+assignment requires Published (231); transitions Draft->Published->Closed->Archived, Draft->Archived
+only (183-189); closing/archiving blocked while submissions wait for review (193-197); responses only
+by the assignment owner and only while Published (356-360); a rejected submission becomes a new
+revision so earlier answers and review comments are kept (379-382).
+Covered by existing tests SurveyCoreServiceTests (8) and ExternalSurveyServiceTests (3), all green
+in the 205-test run above. External survey links store only the link and dates; no third-party form
+data or credentials are copied. UNKNOWN: survey report exports on real historical data (no
+production data access).
+
+Rollback: revert the PR. No schema or migration change. Deployment impact: requests with malformed
+IPs/hosts that were silently accepted now get 400 with a clear message.

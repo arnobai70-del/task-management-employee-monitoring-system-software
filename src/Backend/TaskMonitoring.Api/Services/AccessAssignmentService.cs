@@ -28,6 +28,14 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
     [GeneratedRegex("^[0-9A-F]{2}(:[0-9A-F]{2}){5}$", RegexOptions.CultureInvariant)]
     private static partial Regex MacRegex();
 
+    // Four decimal octets without leading zeros. IPAddress.TryParse alone also accepts shorthand
+    // ("192.168.10" becomes 192.168.0.10), whole numbers and hex, which would record the wrong address.
+    [GeneratedRegex(@"^(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}$", RegexOptions.CultureInvariant)]
+    private static partial Regex Ipv4Regex();
+
+    [GeneratedRegex(@"^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$", RegexOptions.CultureInvariant)]
+    private static partial Regex HostnameRegex();
+
     public async Task<PagedResponse<RdpAssignmentResponse>> GetRdpAssignmentsAsync(
         Guid? employeeId,
         bool? isActive,
@@ -92,7 +100,7 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         RequestActor actor,
         CancellationToken cancellationToken)
     {
-        var validation = await ValidateRdpAsync(null, request, cancellationToken);
+        var validation = await ValidateRdpAsync(null, null, request, cancellationToken);
         if (validation.Error is not null)
         {
             return OperationResult<RdpAssignmentResponse>.Invalid(validation.Error.Code, validation.Error.Message);
@@ -103,7 +111,7 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         {
             EmployeeId = request.EmployeeId,
             Name = request.Name.Trim(),
-            Host = NormalizeHost(request.Host),
+            Host = validation.Host!,
             Port = request.Port,
             UsernameReference = NormalizeOptional(request.UsernameReference),
             CredentialReference = NormalizeOptional(request.CredentialReference),
@@ -144,7 +152,7 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
             return OperationResult<RdpAssignmentResponse>.NotFound("rdp_assignment_not_found", "RDP assignment was not found.");
         }
 
-        var validation = await ValidateRdpAsync(id, request, cancellationToken);
+        var validation = await ValidateRdpAsync(id, assignment.Host, request, cancellationToken);
         if (validation.Error is not null)
         {
             return OperationResult<RdpAssignmentResponse>.Invalid(validation.Error.Code, validation.Error.Message);
@@ -152,7 +160,7 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
 
         assignment.EmployeeId = request.EmployeeId;
         assignment.Name = request.Name.Trim();
-        assignment.Host = NormalizeHost(request.Host);
+        assignment.Host = validation.Host!;
         assignment.Port = request.Port;
         assignment.UsernameReference = NormalizeOptional(request.UsernameReference);
         assignment.CredentialReference = NormalizeOptional(request.CredentialReference);
@@ -239,7 +247,7 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         RequestActor actor,
         CancellationToken cancellationToken)
     {
-        var validation = await ValidateIpAsync(null, request, cancellationToken);
+        var validation = await ValidateIpAsync(null, null, request, cancellationToken);
         if (validation.Error is not null)
         {
             return OperationResult<IpAssignmentResponse>.Invalid(validation.Error.Code, validation.Error.Message);
@@ -289,7 +297,7 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
             return OperationResult<IpAssignmentResponse>.NotFound("ip_assignment_not_found", "IP assignment was not found.");
         }
 
-        var validation = await ValidateIpAsync(id, request, cancellationToken);
+        var validation = await ValidateIpAsync(id, assignment.IpAddress, request, cancellationToken);
         if (validation.Error is not null)
         {
             return OperationResult<IpAssignmentResponse>.Invalid(validation.Error.Code, validation.Error.Message);
@@ -492,20 +500,30 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         return (employee, null);
     }
 
-    private async Task<(Employee? Employee, ApiOperationError? Error)> ValidateRdpAsync(Guid? currentId, UpsertRdpAssignmentRequest request, CancellationToken cancellationToken)
+    private async Task<(Employee? Employee, string? Host, ApiOperationError? Error)> ValidateRdpAsync(
+        Guid? currentId,
+        string? storedHost,
+        UpsertRdpAssignmentRequest request,
+        CancellationToken cancellationToken)
     {
         var employeeResult = await ValidateEmployeeAsync(request.EmployeeId, request.IsActive, cancellationToken);
         if (employeeResult.Error is not null)
         {
-            return employeeResult;
+            return (null, null, employeeResult.Error);
         }
 
         if (request.ValidFrom.HasValue && request.ExpiresOn.HasValue && request.ExpiresOn < request.ValidFrom)
         {
-            return (null, new ApiOperationError("invalid_date_range", "RDP expiry date cannot be before its valid-from date."));
+            return (null, null, new ApiOperationError("invalid_date_range", "RDP expiry date cannot be before its valid-from date."));
         }
 
-        var host = NormalizeHost(request.Host);
+        // A host saved before this check existed stays editable (e.g. deactivation) while it is unchanged.
+        var host = NormalizeHost(request.Host) ?? (request.Host.Trim().ToLowerInvariant() == storedHost ? storedHost : null);
+        if (host is null)
+        {
+            return (null, null, new ApiOperationError("invalid_rdp_host", "RDP host must be a hostname or a full IPv4 or IPv6 address, without scheme, port or path."));
+        }
+
         var effectiveFrom = request.ValidFrom ?? DateOnly.FromDateTime(UtcNow());
         var effectiveTo = request.ExpiresOn ?? DateOnly.MaxValue;
         if (request.IsActive && await dbContext.Set<RdpAssignment>().AsNoTracking().AnyAsync(
@@ -518,14 +536,15 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
                      (!x.ValidFrom.HasValue || x.ValidFrom.Value <= effectiveTo),
                 cancellationToken))
         {
-            return (null, new ApiOperationError("rdp_assignment_exists", "This employee already has an active RDP assignment for the same host and port during the requested validity period."));
+            return (null, null, new ApiOperationError("rdp_assignment_exists", "This employee already has an active RDP assignment for the same host and port during the requested validity period."));
         }
 
-        return employeeResult;
+        return (employeeResult.Employee, host, null);
     }
 
     private async Task<(Employee? Employee, string? IpAddress, string? MacAddress, ApiOperationError? Error)> ValidateIpAsync(
         Guid? currentId,
+        string? storedIpAddress,
         UpsertIpAssignmentRequest request,
         CancellationToken cancellationToken)
     {
@@ -535,12 +554,13 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
             return (null, null, null, employeeResult.Error);
         }
 
-        if (!IPAddress.TryParse(request.IpAddress.Trim(), out var parsed))
+        // An address saved before this check existed stays editable (e.g. release) while it is unchanged.
+        var ipAddress = NormalizeIpAddress(request.IpAddress) ?? (request.IpAddress.Trim() == storedIpAddress ? storedIpAddress : null);
+        if (ipAddress is null)
         {
-            return (null, null, null, new ApiOperationError("invalid_ip_address", "IP address is not valid."));
+            return (null, null, null, new ApiOperationError("invalid_ip_address", "IP address must be a full IPv4 address (four numbers) or an IPv6 address."));
         }
 
-        var ipAddress = parsed.ToString();
         var macAddress = NormalizeMac(request.MacAddress);
         if (macAddress is not null && !MacRegex().IsMatch(macAddress))
         {
@@ -673,7 +693,33 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
 
     private DateTime UtcNow() => timeProvider.GetUtcNow().UtcDateTime;
     private static (int Page, int PageSize) NormalizePaging(int page, int pageSize) => (Math.Clamp(page, 1, 1_000_000), Math.Clamp(pageSize, 1, 100));
-    private static string NormalizeHost(string value) => value.Trim().ToLowerInvariant();
+    private static string? NormalizeHost(string value)
+    {
+        var host = value.Trim().ToLowerInvariant();
+        if (host.Contains(':', StringComparison.Ordinal) || host.All(c => char.IsAsciiDigit(c) || c == '.'))
+        {
+            return NormalizeIpAddress(host);
+        }
+
+        return HostnameRegex().IsMatch(host) ? host : null;
+    }
+
+    private static string? NormalizeIpAddress(string value)
+    {
+        var candidate = value.Trim();
+        if (Ipv4Regex().IsMatch(candidate))
+        {
+            return IPAddress.Parse(candidate).ToString();
+        }
+
+        // IPv6 only when it parses as IPv6 and carries no zone index (%eth0), which is host-local.
+        return candidate.Contains(':', StringComparison.Ordinal) &&
+               !candidate.Contains('%', StringComparison.Ordinal) &&
+               IPAddress.TryParse(candidate, out var parsed) &&
+               parsed.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6
+            ? parsed.ToString()
+            : null;
+    }
     private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static string? NormalizeMac(string? value)
     {
