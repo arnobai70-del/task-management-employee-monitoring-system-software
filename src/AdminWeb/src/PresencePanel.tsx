@@ -122,9 +122,18 @@ function statusClass(value: string): string {
 
 function workStatusLabel(value: string): string {
   if (value === 'ToDo') return 'Ready';
-  if (value === 'InProgress') return 'Working';
+  if (value === 'InProgress') return 'In progress';
   if (value === 'Blocked') return 'Pending Review';
   if (value === 'Done') return 'Approved';
+  return value;
+}
+
+// Presence states describe what is measured (agent heartbeat and attendance session), never effort
+// or productivity (G-08). The API values stay unchanged for other clients.
+function presenceStateLabel(value: string): string {
+  if (value === 'Working') return 'On shift';
+  if (value === 'OnBreak') return 'On break';
+  if (value === 'Idle') return 'Connected, not on shift';
   return value;
 }
 
@@ -172,7 +181,7 @@ export default function PresencePanel() {
   const [followUpNote, setFollowUpNote] = useState('');
 
   const onlineCount = useMemo(() => items.filter(item => item.isOnline).length, [items]);
-  const workingCount = useMemo(() => items.filter(item => item.workState === 'Working').length, [items]);
+  const onShiftCount = useMemo(() => items.filter(item => item.workState === 'Working').length, [items]);
   const breakCount = useMemo(() => items.filter(item => item.workState === 'OnBreak').length, [items]);
   const followUpItem = useMemo(
     () => attention?.items.find(item => item.taskId === followUpTaskId) ?? null,
@@ -420,7 +429,7 @@ export default function PresencePanel() {
       {presenceAllowed && <article className="panel table-panel">
         <div className="panel-heading">
           <div><h2>Live workforce</h2><p>{live ? 'Realtime connected' : 'Snapshot / reconnecting'}</p></div>
-          <span>{onlineCount} online · {workingCount} working · {breakCount} on break</span>
+          <span>{onlineCount} connected · {onShiftCount} on shift · {breakCount} on break</span>
         </div>
         {loading && !items.length ? <div className="loading-block">Loading presence…</div> : error && !items.length ? <div className="error-banner">{error}</div> : (
           <div className="table-wrap">
@@ -431,8 +440,8 @@ export default function PresencePanel() {
                   <tr key={item.employeeId}>
                     <td><strong>{item.fullName}</strong><small>{item.employeeCode}</small></td>
                     <td>{item.departmentName || '—'}</td>
-                    <td><span className={`status-badge status-${item.isOnline ? 'active' : 'inactive'}`}>{item.isOnline ? 'Online' : 'Offline'}</span></td>
-                    <td><span className={`status-badge status-${statusClass(item.workState)}`}>{item.workState}</span></td>
+                    <td><span className={`status-badge status-${item.isOnline ? 'active' : 'inactive'}`}>{item.isOnline ? 'Connected' : 'Offline'}</span></td>
+                    <td><span className={`status-badge status-${statusClass(item.workState)}`}>{presenceStateLabel(item.workState)}</span></td>
                     <td>{formatLastSeen(item.lastSeenAtUtc)}</td>
                     <td>{item.clientKind ? `${item.clientKind}${item.clientVersion ? ` ${item.clientVersion}` : ''}` : '—'}</td>
                   </tr>

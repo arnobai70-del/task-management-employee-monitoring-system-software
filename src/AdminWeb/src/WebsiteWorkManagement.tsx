@@ -84,7 +84,7 @@ const emptyDraft: WorkDraft = {
 };
 
 function statusLabel(status: WorkStatus): string {
-  return status === 'ToDo' ? 'Ready' : status === 'InProgress' ? 'Working' : status === 'Done' ? 'Completed' : status;
+  return status === 'ToDo' ? 'Ready' : status === 'InProgress' ? 'In progress' : status === 'Done' ? 'Completed' : status;
 }
 
 function statusClass(value: string): string {
@@ -314,7 +314,7 @@ export default function WebsiteWorkManagementPage() {
 
       <div className="metric-grid compact-metrics">
         <article className="metric-card"><span>Ready</span><strong>{readyCount}</strong><small>Waiting to be opened</small></article>
-        <article className="metric-card"><span>Working now</span><strong>{workingCount}</strong><small>Live target activity</small></article>
+        <article className="metric-card"><span>In progress now</span><strong>{workingCount}</strong><small>Targets started and not yet submitted</small></article>
         <article className="metric-card"><span>Completed today</span><strong>{completedToday}</strong><small>Browser-local day</small></article>
       </div>
 
@@ -330,12 +330,12 @@ export default function WebsiteWorkManagementPage() {
           </div>
           {progressLoading && !progress ? <div className="loading-block">Loading live progress…</div> : (
             <div className="table-wrap"><table>
-              <thead><tr><th>Worker</th><th>Current target</th><th>Project</th><th>Working for</th><th>Started</th><th>Due</th></tr></thead>
+              <thead><tr><th>Worker</th><th>Current target</th><th>Project</th><th>In progress for</th><th>Started</th><th>Due</th></tr></thead>
               <tbody>
                 {(progress?.activeWork || []).map(item => (
                   <tr key={item.taskId}>
                     <td><strong>{item.employeeName}</strong><small>{item.employeeCode}</small></td>
-                    <td><strong>{item.taskTitle}</strong><small><span className="status-badge status-working">Working</span></small></td>
+                    <td><strong>{item.taskTitle}</strong><small><span className="status-badge status-working">In progress</span></small></td>
                     <td>{item.projectName}</td>
                     <td><strong className="live-duration">{formatWorkingDuration(item.startedAtUtc, clockNow)}</strong></td>
                     <td>{formatDateTime(item.startedAtUtc)}</td>
@@ -351,7 +351,7 @@ export default function WebsiteWorkManagementPage() {
         <article className="panel table-panel">
           <div className="panel-heading"><div><h2>Today by worker</h2><p>Current browser timezone · {completedToday} completed total</p></div></div>
           <div className="table-wrap"><table>
-            <thead><tr><th>Worker</th><th>Working now</th><th>Completed today</th><th>Last completed</th></tr></thead>
+            <thead><tr><th>Worker</th><th>In progress now</th><th>Completed today</th><th>Last completed</th></tr></thead>
             <tbody>
               {(progress?.employees || []).map(item => (
                 <tr key={item.employeeId}>

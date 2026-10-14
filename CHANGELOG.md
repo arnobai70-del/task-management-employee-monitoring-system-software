@@ -11,6 +11,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance edge-case tests for 20:30→09:00/09:30/10:00 night shifts, breaks, early leave and DST transitions (G-06).
 
 ### Changed
+- Admin Web presence shows "On shift", "On break", "Connected, not on shift" and "Offline" instead of "Working"/"Idle", and started website work shows "In progress". The labels now say what is measured, not effort (G-08).
 - Removed the unused `WebsiteWorkService.CompleteAsync`, which could mark work done without review; completion always goes through submit and approve (G-31).
 - Admin Web loads each page on demand and starts the realtime client only after sign-in. The first download drops from 145.6 kB to 93.8 kB gzip (G-35).
 - Each Admin Web tab now uses one realtime (SignalR) connection instead of up to four, and keeps it across page changes (G-34).

@@ -1,0 +1,40 @@
+G-08: presence and task-status labels state what is measured
+Date: 2026-10-14
+Branch: fix/presence-status-labels, base main after #81
+
+Finding (RISK P1, Phase 1): the Admin Web called an employee "Working" when the server only knows
+that the desktop agent's heartbeat is fresh and an attendance session is open
+(RealtimeWorkspaceService.cs:241: Offline / OnBreak / Working / Idle). "Idle" likewise implied an
+activity judgement the system does not make. Website-work task status InProgress was also shown as
+"Working". DESIGN_SYSTEM.md §5 requires labels that state what is measured and never imply productivity.
+
+Change (display only; API values unchanged for other clients):
+  Presence (PresencePanel.tsx):  Working -> "On shift", OnBreak -> "On break",
+                                 Idle -> "Connected, not on shift", Online -> "Connected"
+                                 summary "N online · N working" -> "N connected · N on shift"
+  Task status InProgress -> "In progress" (PresencePanel, WebsiteWorkManagement, ProductivityReports,
+                                 WebsiteWorkFollowUps); live board "Working now / Working for" ->
+                                 "In progress now / In progress for" with "Targets started and not yet submitted".
+  Not changed: ProductivityReports "Working time", which the page already defines as start/reopen to
+  submission.
+
+Check: Vite dev server, Playwright + Chromium, every /api call mocked; presence list has four fictional
+employees (one per server state); fictional token with reports.read + presence.read.
+
+--- before (main)
+summary: 3 online · 1 working · 1 on break
+row: Fictional One E-1 Operations Online Working Oct 14, 2026, 1:31 AM Desktop 1.0.0
+row: Fictional Two E-2 Operations Online OnBreak Oct 14, 2026, 1:31 AM Desktop 1.0.0
+row: Fictional Three E-3 Operations Online Idle Oct 14, 2026, 1:31 AM Desktop 1.0.0
+row: Fictional Four E-4 Operations Offline Offline Oct 14, 2026, 1:31 AM Desktop 1.0.0
+
+--- after (this branch)
+summary: 3 connected · 1 on shift · 1 on break
+row: Fictional One E-1 Operations Connected On shift Oct 14, 2026, 1:31 AM Desktop 1.0.0
+row: Fictional Two E-2 Operations Connected On break Oct 14, 2026, 1:31 AM Desktop 1.0.0
+row: Fictional Three E-3 Operations Connected Connected, not on shift Oct 14, 2026, 1:31 AM Desktop 1.0.0
+row: Fictional Four E-4 Operations Offline Offline Oct 14, 2026, 1:31 AM Desktop 1.0.0
+
+Screenshots: G08-presence-labels-{before,after}.png (fictional names only)
+Build: npm run build (tsc + vite) PASS.
+Rollback: revert the commit; text only.
