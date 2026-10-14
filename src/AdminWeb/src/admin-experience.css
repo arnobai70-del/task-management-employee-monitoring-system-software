@@ -149,6 +149,30 @@ body {
   box-shadow: 0 0 0 5px rgba(34,197,94,.10);
 }
 
+.topbar-title[data-connection="reconnecting"]::before {
+  background: #f59e0b;
+  box-shadow: 0 0 0 5px rgba(245,158,11,.14);
+}
+
+.topbar-title[data-connection="offline"]::before {
+  background: #ef4444;
+  box-shadow: 0 0 0 5px rgba(239,68,68,.12);
+}
+
+.sidebar-brand[data-connection="reconnecting"]::after {
+  content: "SYNC";
+  color: #fcd34d;
+  background: rgba(245, 158, 11, .10);
+  border-color: rgba(251, 191, 36, .22);
+}
+
+.sidebar-brand[data-connection="offline"]::after {
+  content: "OFFLINE";
+  color: #fca5a5;
+  background: rgba(239, 68, 68, .10);
+  border-color: rgba(248, 113, 113, .22);
+}
+
 .topbar-title strong {
   color: #162033;
   letter-spacing: -.015em;

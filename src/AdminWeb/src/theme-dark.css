@@ -215,6 +215,9 @@
   background: rgba(18, 30, 47, 0.78);
   border-bottom: 1px solid rgba(85, 103, 128, 0.18);
 }
+:root[data-theme="dark"] .topbar-title[data-connection="offline"]::before {
+  background: #a94040;
+}
 :root[data-theme="dark"] .topbar-title strong {
   color: #d8e0ee;
 }

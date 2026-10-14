@@ -5,6 +5,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 ## [Unreleased]
 
 ### Added
+- `scripts/audit/degradation.mjs`, `scripts/audit/long-range.mjs` and `scripts/audit/perf-extend-history.sql` for Phase 8 degradation and large-range checks on fictional data.
 - Prometheus alerts for slow API responses and for monitoring data retention that is stale or failing, with rule unit tests in `scripts/audit/prometheus-alerts.test.yml`, and an alarm map in the deployment runbook (G-43).
 - `docs/audit/` audit workspace from the owner's master plan: project audit, gap register, feature matrix, threat model, screenshot-capture RFC (draft, awaiting policy approval), test matrix, deployment runbook, release report, committed evidence logs (2026-10-13 baseline `c38dca3`).
 - `docs/ui/DESIGN_SYSTEM.md` Phase 5 design draft and route inventory.
@@ -16,6 +17,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance edge-case tests for 20:30→09:00/09:30/10:00 night shifts, breaks, early leave and DST transitions (G-06).
 
 ### Changed
+- The Admin Web header and sidebar badge now show whether the console is live, reconnecting or offline. Before, they always said live, even with the network gone (G-45).
 - Backend HTTP tests that configure the API through environment variables now run one at a time, which removes an intermittent CI failure (G-44).
 - Microsoft ASP.NET Core, EF Core and Extensions packages updated from 10.0.12 to 10.0.13. This clears advisory GHSA-334f-vvp4-7g6p in SignalR.Common, which was failing the Windows client build (G-42).
 - `/health/ready` reports unhealthy while any database migration is pending, so a deploy fails instead of serving an out-of-date schema (G-43).
