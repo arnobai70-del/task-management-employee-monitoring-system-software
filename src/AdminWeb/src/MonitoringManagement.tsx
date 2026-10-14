@@ -200,7 +200,7 @@ export default function MonitoringManagementPage() {
 
   return <>
     <div className="page-header"><div><p className="eyebrow">Transparency & privacy</p><h1>Monitoring</h1><p className="muted">Approved work-application and business-hostname telemetry only. No keystrokes, passwords, screenshots, page content, browser history, microphone/camera data or unrelated files.</p></div><button className="ghost-button" onClick={() => setVersion(value => value + 1)}>Refresh</button></div>
-    {notice && <div className="success-banner">{notice}</div>}{error && <div className="error-banner">{error}</div>}
+    {notice && <div className="success-banner" role="status">{notice}</div>}{error && <div className="error-banner" role="alert">{error}</div>}
 
     <article className="panel management-form-panel">
       <div className="panel-heading"><div><h2>Monitoring policy</h2><p>{policy?.updatedAtUtc ? `Last updated ${dateTime(policy.updatedAtUtc)}` : 'Default policy is active until saved.'}</p></div><Status active={policy?.isEnabled ?? true} /></div>

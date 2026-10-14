@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch, ApiRequestError } from './api';
 import { startPolling } from './polling';
@@ -166,11 +166,32 @@ function AppShell({ children }: { children: ReactNode }) {
   const visibleItems = navItems.filter(item => can(item.permission));
   const connection = useConnectionStatus();
 
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => setMenuOpen(false), [location.pathname]);
+
+  // Opening the phone menu moves focus into it; Escape closes it and puts focus back on the menu button.
+  useEffect(() => {
+    if (!menuOpen) return;
+    document.querySelector<HTMLAnchorElement>('#primary-sidebar .nav-link')?.focus();
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMenuOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [menuOpen]);
+
+  function skipToContent(event: MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    document.getElementById('main-content')?.focus();
+  }
 
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
+      <a className="skip-link" href="#main-content" onClick={skipToContent}>Skip to main content</a>
+      <aside id="primary-sidebar" className={`sidebar ${menuOpen ? 'open' : ''}`}>
         <div className="sidebar-brand" data-connection={connection}>
           <div className="brand-mark">TM</div>
           <div><strong>Task Monitor</strong><small>Admin Console</small></div>
@@ -187,7 +208,7 @@ function AppShell({ children }: { children: ReactNode }) {
       {menuOpen && <button className="sidebar-backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)} />}
       <div className="workspace">
         <header className="topbar">
-          <button className="menu-button" type="button" onClick={() => setMenuOpen(value => !value)} aria-label="Toggle navigation">☰</button>
+          <button ref={menuButtonRef} className="menu-button" type="button" onClick={() => setMenuOpen(value => !value)} aria-label="Toggle navigation" aria-expanded={menuOpen} aria-controls="primary-sidebar">☰</button>
           <div className="topbar-title" data-connection={connection}><strong>Operations Console</strong><span role="status">{connectionLabels[connection]}</span></div>
           <div className="account-area">
             <div className="account-copy"><strong>{claims.email || 'Signed in'}</strong><span>{claims.roles.join(', ') || 'Authorized user'}</span></div>
@@ -197,7 +218,7 @@ function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <StatusRail />
-        <main className="content"><Suspense fallback={<p className="muted" role="status">Loading…</p>}>{children}</Suspense></main>
+        <main id="main-content" className="content" tabIndex={-1}><Suspense fallback={<p className="muted" role="status">Loading…</p>}>{children}</Suspense></main>
       </div>
       <WebsiteWorkRealtimeNotice />
       <SecurityAlertRealtimeNotice />
@@ -266,7 +287,7 @@ function PageHeader({ title, description, action }: { title: string; description
 
 function LoadingBlock() { return <div className="panel loading-block">Loading current server data…</div>; }
 function ErrorBlock({ message, retry }: { message: string; retry?: () => void }) {
-  return <div className="panel error-panel"><strong>Could not load this view.</strong><span>{message}</span>{retry && <button className="ghost-button" onClick={retry}>Retry</button>}</div>;
+  return <div className="panel error-panel" role="alert"><strong>Could not load this view.</strong><span>{message}</span>{retry && <button className="ghost-button" onClick={retry}>Retry</button>}</div>;
 }
 function EmptyRow({ colSpan, text = 'No records found.' }: { colSpan: number; text?: string }) { return <tr><td colSpan={colSpan} className="empty-cell">{text}</td></tr>; }
 

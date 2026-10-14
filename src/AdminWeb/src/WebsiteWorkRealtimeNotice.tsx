@@ -398,7 +398,7 @@ export default function WebsiteWorkRealtimeNotice() {
             <button type="button" className="ghost-button" onClick={() => void loadPending()}>Refresh</button>
           </div>
 
-          {reviewError && <div className="error-banner" style={{ marginBottom: 10 }}>{reviewError}</div>}
+          {reviewError && <div className="error-banner" role="alert" style={{ marginBottom: 10 }}>{reviewError}</div>}
 
           <div style={{ display: 'grid', gap: 10 }}>
             {pending.map(item => (
