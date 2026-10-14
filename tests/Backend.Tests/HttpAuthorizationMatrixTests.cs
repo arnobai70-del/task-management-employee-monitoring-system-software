@@ -19,6 +19,7 @@ namespace Backend.Tests;
 /// End-to-end authorization boundaries through the real HTTP pipeline (JWT, policies, controllers, PostgreSQL):
 /// Employee A must not read or change Employee B's records, and permission-gated endpoints must fail closed.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class HttpAuthorizationMatrixTests(HttpAuthorizationMatrixTests.ApiFixture api) : IClassFixture<HttpAuthorizationMatrixTests.ApiFixture>
 {
     [Fact]

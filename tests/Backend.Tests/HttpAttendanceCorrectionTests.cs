@@ -20,6 +20,7 @@ namespace Backend.Tests;
 /// G-28 through the real HTTP pipeline and PostgreSQL: only attendance.manage can correct a session,
 /// and concurrent auto-close attempts close a forgotten session exactly once.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class HttpAttendanceCorrectionTests(HttpAttendanceCorrectionTests.ApiFixture api) : IClassFixture<HttpAttendanceCorrectionTests.ApiFixture>
 {
     [Fact]

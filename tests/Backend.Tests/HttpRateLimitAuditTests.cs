@@ -14,6 +14,7 @@ namespace Backend.Tests;
 /// G-24 through the real HTTP pipeline and PostgreSQL: rejected sign-in requests (HTTP 429) must not
 /// each become an audit insert, and an over-long User-Agent must not stop the rejection being audited.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class HttpRateLimitAuditTests
 {
     [Fact]

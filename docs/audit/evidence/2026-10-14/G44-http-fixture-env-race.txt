@@ -1,0 +1,93 @@
+G-44 backend tests fail intermittently on main, 2026-10-14T15:22:02Z
+main 799a1cd (#90 merge) 'Backend build and tests' failed at step Test, passed on rerun; the same job failed on #86 (e11d567). CI logs are not reachable from here, reproduced locally.
+Cause: HttpAttendanceCorrectionTests, HttpAuthorizationMatrixTests, HttpRateLimitAuditTests, HttpReadinessTests and HttpWebsiteWorkLifecycleTests set process-wide environment variables (ConnectionStrings__DefaultConnection, ...) and then build a WebApplicationFactory host. xUnit runs test classes in parallel, so one fixture can build its host with another fixture's connection string and both migrate the same database.
+
+== Before: the five classes together, 12 runs ==
+Build succeeded.
+run 1:  failed: 11 succeeded: 8 
+failed Backend.Tests.HttpAuthorizationMatrixTests.Unauthenticated_requests_to_protected_endpoints_are_rejected (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAuthorizationMatrixTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "departments" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+run 2:  failed: 9 succeeded: 10 
+failed Backend.Tests.HttpAuthorizationMatrixTests.Unauthenticated_requests_to_protected_endpoints_are_rejected (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAuthorizationMatrixTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "departments" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+run 3:  failed: 11 succeeded: 8 
+failed Backend.Tests.HttpAuthorizationMatrixTests.Unauthenticated_requests_to_protected_endpoints_are_rejected (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAuthorizationMatrixTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "projects" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+run 4:  failed: 10 succeeded: 9 
+failed Backend.Tests.HttpAttendanceCorrectionTests.Only_attendance_managers_can_correct_a_session (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAttendanceCorrectionTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "departments" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+run 5:  failed: 11 succeeded: 8 
+failed Backend.Tests.HttpAttendanceCorrectionTests.Only_attendance_managers_can_correct_a_session (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAttendanceCorrectionTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "departments" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+run 6:  failed: 11 succeeded: 8 
+failed Backend.Tests.HttpAuthorizationMatrixTests.Unauthenticated_requests_to_protected_endpoints_are_rejected (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAuthorizationMatrixTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "shifts" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+run 7:  failed: 11 succeeded: 8 
+failed Backend.Tests.HttpAuthorizationMatrixTests.Unauthenticated_requests_to_protected_endpoints_are_rejected (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAuthorizationMatrixTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "projects" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+run 8:  failed: 7 succeeded: 12 
+failed Backend.Tests.HttpAuthorizationMatrixTests.Unauthenticated_requests_to_protected_endpoints_are_rejected (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAuthorizationMatrixTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "departments" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+run 9:  failed: 12 succeeded: 7 
+failed Backend.Tests.HttpAuthorizationMatrixTests.Unauthenticated_requests_to_protected_endpoints_are_rejected (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAuthorizationMatrixTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "shifts" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+run 10:  failed: 11 succeeded: 8 
+failed Backend.Tests.HttpAttendanceCorrectionTests.Only_attendance_managers_can_correct_a_session (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAttendanceCorrectionTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "shifts" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+run 11:  failed: 4 succeeded: 15 
+failed Backend.Tests.HttpAttendanceCorrectionTests.Only_attendance_managers_can_correct_a_session (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAttendanceCorrectionTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "departments" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+run 12:  failed: 10 succeeded: 9 
+failed Backend.Tests.HttpAttendanceCorrectionTests.Only_attendance_managers_can_correct_a_session (0ms)
+  Xunit.MicrosoftTestingPlatform.XunitException: Class fixture type 'Backend.Tests.HttpAttendanceCorrectionTests+ApiFixture' threw in InitializeAsync
+  ---- Npgsql.PostgresException : 42P07: relation "departments" already exists
+    at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+
+== After: [Collection(ProcessEnvironmentCollection.Name)] with DisableParallelization, 12 runs ==
+Build succeeded.
+run 1:  failed: 0 succeeded: 19 
+run 2:  failed: 0 succeeded: 19 
+run 3:  failed: 0 succeeded: 19 
+run 4:  failed: 0 succeeded: 19 
+run 5:  failed: 0 succeeded: 19 
+run 6:  failed: 0 succeeded: 19 
+run 7:  failed: 0 succeeded: 19 
+run 8:  failed: 0 succeeded: 19 
+run 9:  failed: 0 succeeded: 19 
+run 10:  failed: 0 succeeded: 19 
+run 11:  failed: 0 succeeded: 19 
+run 12:  failed: 0 succeeded: 19 
+
+== Full backend suite + refresh race x5 ==
+Build succeeded.
+  total: 213
+  failed: 0
+  succeeded: 213
+  skipped: 0
+  failed: 0   succeeded: 1  (race run 1)
+  failed: 0   succeeded: 1  (race run 2)
+  failed: 0   succeeded: 1  (race run 3)
+  failed: 0   succeeded: 1  (race run 4)
+  failed: 0   succeeded: 1  (race run 5)

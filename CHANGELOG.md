@@ -18,6 +18,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 
 ### Changed
 - The Admin Web header and sidebar badge now show whether the console is live, reconnecting or offline. Before, they always said live, even with the network gone (G-45).
+- Backend HTTP tests that configure the API through environment variables now run one at a time, which removes an intermittent CI failure (G-44).
 - Microsoft ASP.NET Core, EF Core and Extensions packages updated from 10.0.12 to 10.0.13. This clears advisory GHSA-334f-vvp4-7g6p in SignalR.Common, which was failing the Windows client build (G-42).
 - `/health/ready` reports unhealthy while any database migration is pending, so a deploy fails instead of serving an out-of-date schema (G-43).
 - The production Content-Security-Policy allows browser connections only to the site's own origin (`connect-src 'self'`). The realtime hub keeps working because it is served from the same origin (G-25).
