@@ -1,0 +1,50 @@
+G-56 — Every monitoring write endpoint answered 500
+Date: 2026-10-14 (UTC). Control: main ba7708d. Fix: branch fix/g56-monitoring-validation.
+Found while measuring desktop traffic for G-09. Data: fictional only (local PostgreSQL 16).
+
+Cause
+src/Backend/TaskMonitoring.Api/Contracts/MonitoringContracts.cs (since 87e5fb5, 2026-09-30) declared the
+validation attributes of five request records as [property: Range/Required/StringLength] on positional
+record parameters. ASP.NET Core MVC refuses that at model validation and throws before the action runs:
+  System.InvalidOperationException: Record type 'TaskMonitoring.Api.Contracts.UpdateMonitoringPolicyRequest' has validation metadata defined on property 'DisclosureText' that will be ignored. 'DisclosureText' is a parameter in the record primary constructor and validation metadata must be associated with the constructor parameter.
+No other contract file uses [property: ...]. No HTTP test covered the monitoring endpoints, so it went unnoticed.
+
+== Reproduction on main (local API, Development, curl) ==
+PUT  /api/monitoring/policy                       -> 500
+POST /api/monitoring/applications                 -> 500
+POST /api/monitoring/domains                      -> 500
+POST /api/me/monitoring/application-activity      -> 500   (employee token)
+POST /api/me/monitoring/business-domain-activity  -> 500   (employee token)
+GET  /api/monitoring/policy, GET /api/me/monitoring/policy -> 200 (reads were fine)
+Effect: admins could not change the policy or add approved apps/domains (Admin Web Monitoring page save
+fails), and the Employee Desktop could never record activity; it only shows "Approved activity sync delayed".
+
+== New test tests/Backend.Tests/HttpMonitoringTests.cs on main (control) ==
+Build succeeded.
+failed Backend.Tests.HttpMonitoringTests.The_desktop_can_record_approved_activity_and_bad_input_is_a_400 (648ms)
+  POST /api/me/monitoring/application-activity returned 500: {"title":"An unexpected error occurred.","status":500,"detail":"The request could not be completed. Please try again or contact support.","instance":"/api/me/monitoring/application-activity","traceId":"…"}
+failed Backend.Tests.HttpMonitoringTests.Administrators_can_update_the_policy_and_approved_rules_and_bad_input_is_a_400 (120ms)
+  PUT /api/monitoring/policy returned 500, expected 200: {"title":"An unexpected error occurred.","status":500,"detail":"The request could not be completed. Please try again or contact support.","instance":"/api/monitoring/policy","traceId":"…"}
+  total: 2
+  failed: 2
+  succeeded: 0
+
+== After the fix (attributes moved to the constructor parameters) ==
+  total: 2
+  failed: 0
+  succeeded: 2
+Full backend suite and race test x5:
+Build succeeded.
+  total: 226
+  failed: 0
+  succeeded: 226
+  skipped: 0
+  failed: 0   succeeded: 1  (race run 1)
+  failed: 0   succeeded: 1  (race run 2)
+  failed: 0   succeeded: 1  (race run 3)
+  failed: 0   succeeded: 1  (race run 4)
+  failed: 0   succeeded: 1  (race run 5)
+
+The test also checks that bad input is now a 400 (interval 10 s, 10-character disclosure, empty process
+name, 254-character domain, 301-character window title, empty domain), that an employee gets 403 on the
+policy, and that exactly two activity segments are stored for the employee.
