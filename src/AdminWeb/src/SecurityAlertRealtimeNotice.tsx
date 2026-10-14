@@ -1,8 +1,8 @@
-import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { apiFetch, apiUrl, getValidAccessToken } from './api';
+import { apiFetch } from './api';
 import { useAuth } from './auth';
+import { subscribeRealtime } from './realtime';
 import { StatusRailItem } from './StatusRail';
 
 interface SecurityAlertSummary {
@@ -61,27 +61,20 @@ export default function SecurityAlertRealtimeNotice() {
 
   useEffect(() => {
     if (!allowed) return;
-    const connection = new HubConnectionBuilder()
-      .withUrl(apiUrl('/hubs/realtime'), { accessTokenFactory: getValidAccessToken })
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-      .configureLogging(LogLevel.Warning)
-      .build();
-
-    connection.on('securityAlertChanged', (alert: SecurityAlertChanged) => {
-      window.dispatchEvent(new CustomEvent<SecurityAlertChanged>(securityAlertChangedEvent, { detail: alert }));
-      void loadSummary();
-      if (alert.action === 'Detected' || alert.action === 'Reopened' || alert.action === 'Escalated' || alert.severity === 'Critical') {
-        show(alert);
+    // Summary polling still surfaces durable alerts if realtime is unavailable.
+    const unsubscribe = subscribeRealtime({
+      securityAlertChanged: (alert: SecurityAlertChanged) => {
+        window.dispatchEvent(new CustomEvent<SecurityAlertChanged>(securityAlertChangedEvent, { detail: alert }));
+        void loadSummary();
+        if (alert.action === 'Detected' || alert.action === 'Reopened' || alert.action === 'Escalated' || alert.severity === 'Critical') {
+          show(alert);
+        }
       }
-    });
-
-    void connection.start().catch(() => {
-      // Summary polling still surfaces durable alerts if realtime is unavailable.
     });
 
     return () => {
       if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current);
-      void connection.stop();
+      unsubscribe();
     };
   }, [allowed, loadSummary, show]);
 

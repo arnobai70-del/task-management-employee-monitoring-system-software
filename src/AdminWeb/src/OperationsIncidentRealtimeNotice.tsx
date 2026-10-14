@@ -1,8 +1,8 @@
-import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { apiFetch, apiUrl, getValidAccessToken } from './api';
+import { apiFetch } from './api';
 import { useAuth } from './auth';
+import { subscribeRealtime } from './realtime';
 import { StatusRailItem } from './StatusRail';
 
 interface IncidentSummary {
@@ -61,27 +61,20 @@ export default function OperationsIncidentRealtimeNotice() {
 
   useEffect(() => {
     if (!allowed) return;
-    const connection = new HubConnectionBuilder()
-      .withUrl(apiUrl('/hubs/realtime'), { accessTokenFactory: getValidAccessToken })
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-      .configureLogging(LogLevel.Warning)
-      .build();
-
-    connection.on('operationsIncidentChanged', (incident: IncidentChanged) => {
-      window.dispatchEvent(new CustomEvent<IncidentChanged>(operationsIncidentChangedEvent, { detail: incident }));
-      void loadSummary();
-      if (incident.action !== 'Updated' || incident.severity === 'Critical') {
-        show(incident);
+    // Summary polling and the durable incident event store remain available if realtime is unavailable.
+    const unsubscribe = subscribeRealtime({
+      operationsIncidentChanged: (incident: IncidentChanged) => {
+        window.dispatchEvent(new CustomEvent<IncidentChanged>(operationsIncidentChangedEvent, { detail: incident }));
+        void loadSummary();
+        if (incident.action !== 'Updated' || incident.severity === 'Critical') {
+          show(incident);
+        }
       }
-    });
-
-    void connection.start().catch(() => {
-      // Summary polling and the durable incident event store remain available if realtime is unavailable.
     });
 
     return () => {
       if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current);
-      void connection.stop();
+      unsubscribe();
     };
   }, [allowed, loadSummary, show]);
 
