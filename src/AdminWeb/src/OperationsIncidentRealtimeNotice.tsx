@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
 import { subscribeRealtime } from './realtime';
 import { StatusRailItem } from './StatusRail';
 import { startPolling } from './polling';
+import { notifyDesktop } from './desktopAlerts';
 
 interface IncidentSummary {
   open: number;
@@ -34,6 +35,7 @@ export default function OperationsIncidentRealtimeNotice() {
   const [summary, setSummary] = useState<IncidentSummary | null>(null);
   const [latest, setLatest] = useState<IncidentChanged | null>(null);
   const dismissTimer = useRef<number | null>(null);
+  const navigate = useNavigate();
 
   const loadSummary = useCallback(async () => {
     if (!allowed) {
@@ -69,6 +71,7 @@ export default function OperationsIncidentRealtimeNotice() {
         void loadSummary();
         if (incident.action !== 'Updated' || incident.severity === 'Critical') {
           show(incident);
+          notifyDesktop({ tag: `operations-incident-${incident.id}`, title: `${incident.severity} incident · ${incident.action}`, body: `${incident.title}\n${incident.message}`, onClick: () => navigate('/operations') });
         }
       }
     });
@@ -77,7 +80,7 @@ export default function OperationsIncidentRealtimeNotice() {
       if (dismissTimer.current !== null) window.clearTimeout(dismissTimer.current);
       unsubscribe();
     };
-  }, [allowed, loadSummary, show]);
+  }, [allowed, loadSummary, show, navigate]);
 
   const activeCount = (summary?.open ?? 0) + (summary?.acknowledged ?? 0);
 

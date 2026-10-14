@@ -767,3 +767,20 @@ body.compact-density .table-panel .panel-heading { padding: 15px 17px 0; }
 @media (max-width: 560px) {
   .theme-select { max-width: 112px; }
 }
+
+.desktop-alerts-toggle[data-state='on'] {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.desktop-alerts-toggle:disabled {
+  opacity: .65;
+  cursor: not-allowed;
+}
+
+.desktop-alerts-menu { display: none; }
+
+@media (max-width: 560px) {
+  .desktop-alerts-topbar { display: none; }
+  .desktop-alerts-menu { display: block; width: 100%; margin-bottom: 10px; }
+}
