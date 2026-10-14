@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -14,8 +15,12 @@ public interface IWebsiteWorkProgressService
 
 public sealed class WebsiteWorkProgressService(
     AppDbContext dbContext,
-    TimeProvider timeProvider) : IWebsiteWorkProgressService
+    TimeProvider timeProvider,
+    ITeamScope? teamScope = null) : IWebsiteWorkProgressService
 {
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     public async Task<WebsiteWorkProgressResponse> GetAsync(
         int utcOffsetMinutes,
         CancellationToken cancellationToken)
@@ -28,6 +33,7 @@ public sealed class WebsiteWorkProgressService(
         var startUtc = DateTime.SpecifyKind(localNow.Date - offset, DateTimeKind.Utc);
         var endUtc = startUtc.AddDays(1);
 
+        var scope = await VisibleEmployeesAsync(cancellationToken);
         var activeTasks = await dbContext.ProjectTasks
             .AsNoTracking()
             .Include(x => x.Project)
@@ -36,7 +42,8 @@ public sealed class WebsiteWorkProgressService(
             .Where(x =>
                 x.Status == ProjectTaskStatus.InProgress &&
                 x.AssigneeEmployeeId != null &&
-                x.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction))
+                x.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction) &&
+                (scope == null || scope.Contains(x.AssigneeEmployeeId.Value)))
             .OrderBy(x => x.AssigneeEmployee!.NormalizedFullName)
             .ThenBy(x => x.NormalizedTitle)
             .ToListAsync(cancellationToken);
@@ -48,7 +55,8 @@ public sealed class WebsiteWorkProgressService(
             .Where(x =>
                 x.Action == WebsiteWorkService.CompletedAction &&
                 x.CreatedAtUtc >= startUtc &&
-                x.CreatedAtUtc < endUtc)
+                x.CreatedAtUtc < endUtc &&
+                (scope == null || x.ProjectTask.AssigneeEmployeeId == null || scope.Contains(x.ProjectTask.AssigneeEmployeeId.Value)))
             .OrderByDescending(x => x.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 

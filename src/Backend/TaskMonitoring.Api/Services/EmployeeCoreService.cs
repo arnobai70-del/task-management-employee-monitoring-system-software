@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -41,8 +42,12 @@ public interface IEmployeeCoreService
 public sealed class EmployeeCoreService(
     AppDbContext dbContext,
     IPasswordHasher<User> passwordHasher,
-    TimeProvider timeProvider) : IEmployeeCoreService
+    TimeProvider timeProvider,
+    ITeamScope? teamScope = null) : IEmployeeCoreService
 {
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     public async Task<IReadOnlyCollection<DepartmentResponse>> GetDepartmentsAsync(bool? isActive, CancellationToken cancellationToken)
     {
         var query = dbContext.Departments.AsNoTracking();
@@ -159,6 +164,11 @@ public sealed class EmployeeCoreService(
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var query = EmployeeQuery().AsNoTracking();
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null)
+        {
+            query = query.Where(x => scope.Contains(x.Id));
+        }
 
         if (departmentId.HasValue)
         {
@@ -193,6 +203,12 @@ public sealed class EmployeeCoreService(
     public async Task<OperationResult<EmployeeResponse>> GetEmployeeAsync(Guid id, CancellationToken cancellationToken)
     {
         var employee = await EmployeeQuery().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (employee is not null && scope is not null && !scope.Contains(employee.Id))
+        {
+            employee = null;
+        }
+
         return employee is null
             ? OperationResult<EmployeeResponse>.NotFound("employee_not_found", "Employee was not found.")
             : OperationResult<EmployeeResponse>.Success(ToEmployeeResponse(employee));

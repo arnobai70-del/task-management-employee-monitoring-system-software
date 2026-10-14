@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -17,8 +18,12 @@ public interface IWebsiteWorkProductivityReportService
 
 public sealed class WebsiteWorkProductivityReportService(
     AppDbContext dbContext,
-    TimeProvider timeProvider) : IWebsiteWorkProductivityReportService
+    TimeProvider timeProvider,
+    ITeamScope? teamScope = null) : IWebsiteWorkProductivityReportService
 {
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     private const int MaximumReportDays = 366;
 
     public async Task<OperationResult<WebsiteWorkProductivityReportResponse>> GetAsync(
@@ -73,6 +78,7 @@ public sealed class WebsiteWorkProductivityReportService(
         var startUtc = ToUtcStart(reportFrom, offset);
         var endUtc = ToUtcStart(reportTo.AddDays(1), offset);
 
+        var scope = await VisibleEmployeesAsync(cancellationToken);
         var tasks = await dbContext.ProjectTasks
             .AsNoTracking()
             .Include(x => x.AssigneeEmployee)
@@ -80,6 +86,7 @@ public sealed class WebsiteWorkProductivityReportService(
             .Include(x => x.Activities)
             .Where(x =>
                 x.AssigneeEmployeeId != null &&
+                (scope == null || scope.Contains(x.AssigneeEmployeeId.Value)) &&
                 x.CreatedAtUtc < endUtc &&
                 x.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction) &&
                 (

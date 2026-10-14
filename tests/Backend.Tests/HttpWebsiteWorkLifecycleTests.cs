@@ -278,7 +278,8 @@ public sealed class HttpWebsiteWorkLifecycleTests(HttpWebsiteWorkLifecycleTests.
             var employeeRole = await db.Roles.SingleAsync(x => x.Name == "Employee");
             var managerRole = new Role { Name = "LifecycleTaskManager" };
             foreach (var permission in await db.Permissions
-                         .Where(x => x.Code == PermissionCatalog.TasksRead || x.Code == PermissionCatalog.TasksManage)
+                         .Where(x => x.Code == PermissionCatalog.TasksRead || x.Code == PermissionCatalog.TasksManage ||
+                             x.Code == PermissionCatalog.EmployeesScopeAll) // organisation-wide, as pre-existing roles are after the G-27 migration
                          .ToListAsync())
             {
                 managerRole.RolePermissions.Add(new RolePermission { RoleId = managerRole.Id, PermissionId = permission.Id });

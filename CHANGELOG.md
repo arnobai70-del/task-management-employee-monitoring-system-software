@@ -5,6 +5,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 ## [Unreleased]
 
 ### Added
+- Team scoping for managers (phase 1): without the new `employees.scope.all` permission, employee lists, attendance, presence, monitoring activity, website work and the productivity report show only the user and the people who report to them, directly or indirectly. Existing roles keep seeing everyone after the upgrade (G-27).
 - Desktop alerts: an admin can turn on **Desktop alerts** in the Admin Web top bar (in the menu on phones) to get new security alerts and operations incidents as desktop notifications on their PC while the console is in the background (G-47).
 - Phase 8 large-range results: every ranged or paged endpoint stays bounded with 5000 fictional employees and a year of attendance.
 - `scripts/audit/degradation.mjs`, `scripts/audit/long-range.mjs` and `scripts/audit/perf-extend-history.sql` for Phase 8 degradation and large-range checks on fictional data.

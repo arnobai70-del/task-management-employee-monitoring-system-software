@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -45,8 +46,12 @@ public interface IWebsiteWorkService
 
 public sealed class WebsiteWorkService(
     AppDbContext dbContext,
-    TimeProvider timeProvider) : IWebsiteWorkService
+    TimeProvider timeProvider,
+    ITeamScope? teamScope = null) : IWebsiteWorkService
 {
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     public const string ConfiguredAction = "website-work.configured";
     public const string UpdatedAction = "website-work.updated";
     public const string StartedAction = "website-work.started";
@@ -64,6 +69,12 @@ public sealed class WebsiteWorkService(
         page = Math.Clamp(page, 1, 1_000_000);
         pageSize = Math.Clamp(pageSize, 1, 100);
         var query = WorkQuery().AsNoTracking();
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null)
+        {
+            // Unassigned work belongs to no employee, so it stays visible to every manager.
+            query = query.Where(x => x.AssigneeEmployeeId == null || scope.Contains(x.AssigneeEmployeeId.Value));
+        }
 
         if (status.HasValue)
         {
@@ -108,6 +119,11 @@ public sealed class WebsiteWorkService(
         var query = dbContext.TaskActivities
             .AsNoTracking()
             .Where(x => x.Action == CompletedAction);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null)
+        {
+            query = query.Where(x => x.ProjectTask.AssigneeEmployeeId == null || scope.Contains(x.ProjectTask.AssigneeEmployeeId.Value));
+        }
 
         var totalCount = await query.CountAsync(cancellationToken);
         var activities = await query

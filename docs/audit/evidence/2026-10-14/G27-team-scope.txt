@@ -1,0 +1,56 @@
+G-27 team scoping phase 1, 2026-10-14
+Owner left the rule to Claude ('jaita sobidha hoy'). Default chosen: a user sees their own reporting line (self + direct and indirect reports via Employee.SupervisorEmployeeId) unless a role grants employees.scope.all; the data migration grants it to every existing role that could read employee data, so upgrading changes nothing.
+Local PostgreSQL 16, .NET 10 SDK container, fictional data only.
+
+== Control: HttpTeamScopeTests with the TeamScope filters removed from the services ==
+Build succeeded.
+failed Backend.Tests.HttpTeamScopeTests.Scoped_lead_sees_only_own_reporting_line (1s 349ms)
+  from /src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64)
+  /api/employees?page=1&pageSize=100 shows the outsider; /api/attendance?from=2026-10-08&to=2026-10-14&page=1&pageSize=100 shows the outsider; /api/presence?page=1&pageSize=100 shows the outsider; /api/monitoring/activity?page=1&pageSize=100 shows the outsider; /api/website-work?page=1&pageSize=100 shows the outsider; /api/website-work/progress shows the outsider; /api/reports/website-work/productivity?from=2026-10-08&to=2026-10-14 shows the outsider; /api/employees/4e5a6c7b-d6d1-4450-84f1-23f53db46fbe returned 200, expected 404; /api/reports/website-work/productivity/4e5a6c7b-d6d1-4450-84f1-23f53db46fbe/timeline returned 200, expected 404
+    at Backend.Tests.HttpTeamScopeTests.Scoped_lead_sees_only_own_reporting_line() in /src/tests/Backend.Tests/HttpTeamScopeTests.cs:71
+    --- End of stack trace from previous location ---
+  total: 3
+  failed: 1
+  succeeded: 2
+
+== With the fix: new and affected HTTP classes + migration test ==
+Build succeeded.
+== HttpTeamScopeTests
+  total: 3
+  succeeded: 3
+== HttpAuthorizationMatrixTests
+  total: 7
+  succeeded: 7
+== HttpAttendanceCorrectionTests
+  total: 2
+  succeeded: 2
+== HttpWebsiteWorkLifecycleTests
+  total: 7
+  succeeded: 7
+== DatabaseMigrationTests
+  total: 1
+  succeeded: 1
+
+== Full backend suite + refresh-race test x5, run 1 ==
+Build succeeded.
+failed Backend.Tests.HttpRateLimitAuditTests.Rejection_with_an_over_long_user_agent_is_still_audited (1s 480ms)
+/src/tests/Backend.Tests/bin/Release/net10.0/Backend.Tests.dll (net10.0|x64) failed with 1 error(s) (24s 948ms)
+  total: 217
+  failed: 1
+  succeeded: 216
+  failed: 0   succeeded: 1  (race run 1)
+  failed: 0   succeeded: 1  (race run 2)
+  failed: 0   succeeded: 1  (race run 3)
+  failed: 0   succeeded: 1  (race run 4)
+  failed: 0   succeeded: 1  (race run 5)
+(HttpRateLimitAuditTests.Rejection_with_an_over_long_user_agent_is_still_audited failed once in run 1; this change does not touch rate limiting. It then passed 5 of 5 isolated runs and the full rerun below. Recorded as intermittent and watched in CI.)
+
+== Rate-limit class x5 isolated, then full suite run 2 ==
+  failed: 0   succeeded: 2  (rate run 1)
+  failed: 0   succeeded: 2  (rate run 2)
+  failed: 0   succeeded: 2  (rate run 3)
+  failed: 0   succeeded: 2  (rate run 4)
+  failed: 0   succeeded: 2  (rate run 5)
+  total: 217
+  failed: 0
+  succeeded: 217
