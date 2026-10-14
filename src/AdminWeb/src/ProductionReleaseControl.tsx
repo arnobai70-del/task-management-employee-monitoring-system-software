@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { apiFetch } from './api';
 import { useAuth } from './auth';
 import './management.css';
+import { startPolling } from './polling';
 
 type ReleaseStatus = 'Candidate' | 'Approved' | 'PromotionAuthorized' | 'Deployed' | 'RollbackRequested' | 'RolledBack' | 'Superseded' | 'Withdrawn';
 
@@ -131,8 +132,8 @@ export default function ProductionReleaseControl() {
       await load(initial);
     };
     void run(true);
-    const timer = window.setInterval(() => void run(false), 30_000);
-    return () => { cancelled = true; window.clearInterval(timer); };
+    const stopPolling = startPolling(() => void run(false), 30_000);
+    return () => { cancelled = true; stopPolling(); };
   }, []);
 
   async function register(event: FormEvent<HTMLFormElement>) {

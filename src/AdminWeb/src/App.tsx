@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { apiFetch } from './api';
+import { apiFetch, ApiRequestError } from './api';
+import { startPolling } from './polling';
 import { useAuth } from './auth';
 import { watchRealtimeState, type RealtimeState } from './realtime';
 import SecurityAlertRealtimeNotice from './SecurityAlertRealtimeNotice';
@@ -211,19 +212,29 @@ function useApiResource<T>(path: string) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState(0);
+  const [retryable, setRetryable] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError('');
+    setRetryable(false);
     void apiFetch<T>(path)
       .then(value => { if (!cancelled) setData(value); })
       .catch(caught => {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : 'Unable to load data.');
+        if (cancelled) return;
+        setError(caught instanceof Error ? caught.message : 'Unable to load data.');
+        // Rate limits, server errors and lost connections are temporary: try again on the shared backoff.
+        setRetryable(!(caught instanceof ApiRequestError) || caught.status === 429 || caught.status >= 500);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [path, version]);
+
+  useEffect(() => {
+    if (!retryable) return;
+    return startPolling(() => setVersion(value => value + 1), 15_000);
+  }, [retryable]);
 
   return { data, error, loading, reload: () => setVersion(value => value + 1) };
 }

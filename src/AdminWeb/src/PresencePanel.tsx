@@ -4,6 +4,7 @@ import { apiFetch } from './api';
 import { useAuth } from './auth';
 import { subscribeRealtime } from './realtime';
 import MonitoringManagementPage from './MonitoringManagement';
+import { startPolling } from './polling';
 
 interface PresenceItem {
   employeeId: string;
@@ -210,10 +211,10 @@ export default function PresencePanel() {
     };
 
     void loadAttention(true);
-    const timer = window.setInterval(() => void loadAttention(false), 15_000);
+    const stopPolling = startPolling(() => void loadAttention(false), 15_000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [attentionVersion, showManaged]);
 
@@ -253,10 +254,10 @@ export default function PresencePanel() {
     };
 
     void loadSnapshot(true);
-    const timer = window.setInterval(() => void loadSnapshot(false), 30_000);
+    const stopPolling = startPolling(() => void loadSnapshot(false), 30_000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [presenceAllowed]);
 

@@ -4,6 +4,7 @@ import AgentUpdateManagementPage from './AgentUpdateManagement';
 import OperationsIncidentsPage from './OperationsIncidents';
 import ProductionReleaseControl from './ProductionReleaseControl';
 import './management.css';
+import { startPolling } from './polling';
 
 interface ServerHealth {
   apiHealthy: boolean;
@@ -142,10 +143,10 @@ export default function OperationsDashboardPage() {
     };
 
     void load(true);
-    const timer = window.setInterval(() => void load(false), 15_000);
+    const stopPolling = startPolling(() => void load(false), 15_000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [path, version]);
 

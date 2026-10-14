@@ -7,6 +7,7 @@ import {
   websiteWorkFollowUpSummaryEvent,
   type WebsiteWorkFollowUpSummary
 } from './WebsiteWorkRealtimeNotice';
+import { startPolling } from './polling';
 
 type FollowUpState = 'Pending' | 'Overdue' | 'Resolved';
 
@@ -129,10 +130,10 @@ export default function WebsiteWorkFollowUpsPage() {
     };
 
     void load(true);
-    const timer = window.setInterval(() => void load(false), 20_000);
+    const stopPolling = startPolling(() => void load(false), 20_000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [includeResolved, version, resolveTaskId]);
 

@@ -3,6 +3,7 @@ import { apiFetch } from './api';
 import { useAuth } from './auth';
 import type { PagedResponse } from './types';
 import { securityAlertChangedEvent } from './SecurityAlertRealtimeNotice';
+import { startPolling } from './polling';
 
 interface SecurityAlert {
   id: string;
@@ -116,10 +117,10 @@ export default function SecurityAlertsPage() {
   useEffect(() => {
     const handler = () => void load();
     window.addEventListener(securityAlertChangedEvent, handler);
-    const timer = window.setInterval(() => void load(), 30_000);
+    const stopPolling = startPolling(() => void load(), 30_000);
     return () => {
       window.removeEventListener(securityAlertChangedEvent, handler);
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [load]);
 

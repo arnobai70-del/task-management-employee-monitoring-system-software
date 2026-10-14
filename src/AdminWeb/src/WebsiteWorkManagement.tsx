@@ -4,6 +4,7 @@ import { useAuth } from './auth';
 import type { PagedResponse } from './types';
 import { websiteWorkCompletedEvent, type WebsiteWorkCompletion } from './WebsiteWorkRealtimeNotice';
 import './management.css';
+import { startPolling } from './polling';
 
 interface ProjectOption { id: string; code: string; name: string; status: string; }
 interface EmployeeOption { id: string; employeeCode: string; fullName: string; }
@@ -188,10 +189,10 @@ export default function WebsiteWorkManagementPage() {
     };
 
     void loadProgress(true);
-    const timer = window.setInterval(() => void loadProgress(false), 5_000);
+    const stopPolling = startPolling(() => void loadProgress(false), 5_000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [progressVersion]);
 

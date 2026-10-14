@@ -4,6 +4,7 @@ import { apiFetch } from './api';
 import { useAuth } from './auth';
 import { subscribeRealtime } from './realtime';
 import { StatusRailItem } from './StatusRail';
+import { startPolling } from './polling';
 
 interface IncidentSummary {
   open: number;
@@ -55,8 +56,8 @@ export default function OperationsIncidentRealtimeNotice() {
   useEffect(() => {
     if (!allowed) return;
     void loadSummary();
-    const timer = window.setInterval(() => void loadSummary(), 30_000);
-    return () => window.clearInterval(timer);
+    const stopPolling = startPolling(() => void loadSummary(), 30_000);
+    return () => stopPolling();
   }, [allowed, loadSummary]);
 
   useEffect(() => {

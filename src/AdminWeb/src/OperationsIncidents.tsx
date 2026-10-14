@@ -3,6 +3,7 @@ import { apiFetch } from './api';
 import { useAuth } from './auth';
 import { operationsIncidentChangedEvent } from './OperationsIncidentRealtimeNotice';
 import './management.css';
+import { startPolling } from './polling';
 
 type IncidentSeverity = 'Info' | 'Warning' | 'Critical';
 type IncidentStatus = 'Open' | 'Acknowledged' | 'Resolved';
@@ -133,11 +134,11 @@ export default function OperationsIncidentsPage() {
 
   useEffect(() => {
     void load(true);
-    const timer = window.setInterval(() => void load(false), 15_000);
+    const stopPolling = startPolling(() => void load(false), 15_000);
     const realtime = () => void load(false);
     window.addEventListener(operationsIncidentChangedEvent, realtime);
     return () => {
-      window.clearInterval(timer);
+      stopPolling();
       window.removeEventListener(operationsIncidentChangedEvent, realtime);
     };
   }, [load]);

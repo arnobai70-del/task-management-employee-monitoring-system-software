@@ -1,3 +1,5 @@
+import { recordServerResponse, recordServerUnreachable } from './polling';
+
 const SESSION_KEY = 'task-monitoring.admin.session.v2';
 const LEGACY_SESSION_KEY = 'task-monitoring.admin.session.v1';
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -233,14 +235,24 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     }
   }
 
-  const execute = (accessToken: string) => fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(init.headers || {}),
-      Authorization: `Bearer ${accessToken}`
+  const execute = async (accessToken: string) => {
+    let result: Response;
+    try {
+      result = await fetch(`${API_BASE}${path}`, {
+        ...init,
+        headers: {
+          ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(init.headers || {}),
+          Authorization: `Bearer ${accessToken}`
+        }
+      });
+    } catch (error) {
+      recordServerUnreachable();
+      throw error;
     }
-  });
+    recordServerResponse(result.status, result.headers.get('retry-after'));
+    return result;
+  };
 
   let response = await execute(session.accessToken);
   if (response.status === 401) {
