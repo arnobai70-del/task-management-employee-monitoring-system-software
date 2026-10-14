@@ -1,0 +1,75 @@
+Phase 8 large employee count and long reporting ranges (scripts/audit/long-range.mjs), 2026-10-14T15:31:29Z
+Scratch DB tm_perf_year: scripts/audit/perf-seed.sql (employees=1000, days=60) + scripts/audit/perf-extend-history.sql (days=60, history=365, extra=4000)
+employees=5000
+work_sessions=1305000 from 2025-10-14 to 2026-10-13
+work_breaks=1305000
+audit_logs=301580
+db size=745 MB
+API: local Release build of main + #94, PostgreSQL 16, 5 sequential runs per endpoint, one client.
+
+== First run (expectations before reading the code) ==
+runs=5 base=http://127.0.0.1:5080
+┌─────────┬─────────────────────────────────────────────┬──────────┬────────┬───────┬───────────┬───────────┬────────┬────────────────────────────────┐
+│ (index) │ name                                        │ expected │ status │ ok    │ kb        │ median_ms │ max_ms │ extra                          │
+├─────────┼─────────────────────────────────────────────┼──────────┼────────┼───────┼───────────┼───────────┼────────┼────────────────────────────────┤
+│ 0       │ 'dashboard'                                 │ 200      │ 200    │ 'yes' │ '0.7'     │ '174'     │ '377'  │ ''                             │
+│ 1       │ 'attendance daily 366d'                     │ 200      │ 200    │ 'yes' │ '62.2'    │ '1098'    │ '3120' │ 'rows=366'                     │
+│ 2       │ 'attendance daily 367d (over limit)'        │ 400      │ 400    │ 'yes' │ '0.1'     │ '5'       │ '6'    │ ''                             │
+│ 3       │ 'productivity 366d'                         │ 200      │ 200    │ 'yes' │ '61.0'    │ '7'       │ '107'  │ ''                             │
+│ 4       │ 'productivity 367d (over limit)'            │ 400      │ 400    │ 'yes' │ '0.1'     │ '2'       │ '2'    │ ''                             │
+│ 5       │ 'timeline 366d'                             │ 200      │ 200    │ 'yes' │ '0.3'     │ '7'       │ '100'  │ 'items=0 total=?'              │
+│ 6       │ 'follow-up SLA 366d'                        │ 200      │ 200    │ 'yes' │ '10.9'    │ '6'       │ '62'   │ ''                             │
+│ 7       │ 'follow-up SLA 367d (over limit)'           │ 400      │ 400    │ 'yes' │ '0.1'     │ '2'       │ '2'    │ ''                             │
+│ 8       │ 'attendance list 366d p1'                   │ 200      │ 200    │ 'yes' │ '66.2'    │ '60'      │ '142'  │ 'items=100 total=1305000'      │
+│ 9       │ 'attendance list 366d last page'            │ 200      │ 200    │ 'yes' │ '66.1'    │ '442'     │ '471'  │ 'items=100 total=1305000'      │
+│ 10      │ 'attendance list 367d (over limit)'         │ 400      │ 200    │ 'NO'  │ '66.2'    │ '49'      │ '65'   │ 'items=100 total=1305000'      │
+│ 11      │ 'attendance list pageSize 100000 (clamped)' │ 200      │ 200    │ 'yes' │ '66.2'    │ '20'      │ '29'   │ 'items=100 total=110000'       │
+│ 12      │ 'employees p1'                              │ 200      │ 200    │ 'yes' │ '52.7'    │ '14'      │ '27'   │ 'items=100 total=5000'         │
+│ 13      │ 'employees search'                          │ 200      │ 200    │ 'yes' │ '0.6'     │ '15'      │ '51'   │ 'items=1 total=1'              │
+│ 14      │ 'presence'                                  │ 200      │ 200    │ 'yes' │ '31.0'    │ '12'      │ '55'   │ 'items=100 total=5000'         │
+│ 15      │ 'audit logs 366d p1'                        │ 200      │ 200    │ 'yes' │ '109.5'   │ '23'      │ '67'   │ 'items=100 total=301579'       │
+│ 16      │ 'audit logs page 1000000'                   │ 200      │ 200    │ 'yes' │ '0.1'     │ '309'     │ '331'  │ 'items=0 total=301579'         │
+│ 17      │ 'audit export 366d'                         │ 200      │ 200    │ 'yes' │ '10143.0' │ '317'     │ '330'  │ 'records=50000 truncated=true' │
+│ 18      │ 'audit export 400d (over limit)'            │ 400      │ 400    │ 'yes' │ '0.1'     │ '2'       │ '5'    │ ''                             │
+│ 19      │ 'monitoring activity 31d'                   │ 200      │ 200    │ 'yes' │ '43.4'    │ '59'      │ '108'  │ 'items=100 total=168000'       │
+│ 20      │ 'monitoring activity 60d (over limit)'      │ 400      │ 200    │ 'NO'  │ '43.4'    │ '54'      │ '55'   │ 'items=100 total=168000'       │
+│ 21      │ 'security dashboard max window'             │ 200      │ 200    │ 'yes' │ '52.1'    │ '433'     │ '460'  │ ''                             │
+│ 22      │ 'operations overview'                       │ 200      │ 200    │ 'yes' │ '134.8'   │ '64'      │ '93'   │ ''                             │
+└─────────┴─────────────────────────────────────────────┴──────────┴────────┴───────┴───────────┴───────────┴────────┴────────────────────────────────┘
+UNEXPECTED STATUS: attendance list 367d (over limit), monitoring activity 60d (over limit)
+
+The two 'NO' rows are not defects: the attendance list clamps a longer range to 366 days (AttendanceCoreService.cs:243-246) and monitoring activity raises a start older than retention to the retention cutoff (MonitoringTelemetryService.cs:301-305), so both stay bounded. The script now expects that behaviour and adds a 40-day future window that must be refused.
+
+== Second run (corrected expectations) ==
+runs=5 base=http://127.0.0.1:5080
+┌─────────┬──────────────────────────────────────────────────┬──────────┬────────┬───────┬───────────┬───────────┬────────┬────────────────────────────────┐
+│ (index) │ name                                             │ expected │ status │ ok    │ kb        │ median_ms │ max_ms │ extra                          │
+├─────────┼──────────────────────────────────────────────────┼──────────┼────────┼───────┼───────────┼───────────┼────────┼────────────────────────────────┤
+│ 0       │ 'dashboard'                                      │ 200      │ 200    │ 'yes' │ '0.7'     │ '158'     │ '171'  │ ''                             │
+│ 1       │ 'attendance daily 366d'                          │ 200      │ 200    │ 'yes' │ '62.2'    │ '1104'    │ '1207' │ 'rows=366'                     │
+│ 2       │ 'attendance daily 367d (over limit)'             │ 400      │ 400    │ 'yes' │ '0.1'     │ '1'       │ '2'    │ ''                             │
+│ 3       │ 'productivity 366d'                              │ 200      │ 200    │ 'yes' │ '61.0'    │ '5'       │ '7'    │ ''                             │
+│ 4       │ 'productivity 367d (over limit)'                 │ 400      │ 400    │ 'yes' │ '0.1'     │ '1'       │ '1'    │ ''                             │
+│ 5       │ 'timeline 366d'                                  │ 200      │ 200    │ 'yes' │ '0.3'     │ '4'       │ '5'    │ 'items=0 total=?'              │
+│ 6       │ 'follow-up SLA 366d'                             │ 200      │ 200    │ 'yes' │ '10.9'    │ '3'       │ '3'    │ ''                             │
+│ 7       │ 'follow-up SLA 367d (over limit)'                │ 400      │ 400    │ 'yes' │ '0.1'     │ '2'       │ '3'    │ ''                             │
+│ 8       │ 'attendance list 366d p1'                        │ 200      │ 200    │ 'yes' │ '66.2'    │ '39'      │ '50'   │ 'items=100 total=1305000'      │
+│ 9       │ 'attendance list 366d last page'                 │ 200      │ 200    │ 'yes' │ '66.1'    │ '388'     │ '451'  │ 'items=100 total=1305000'      │
+│ 10      │ 'attendance list 367d (clamped to 366)'          │ 200      │ 200    │ 'yes' │ '66.2'    │ '42'      │ '81'   │ 'items=100 total=1305000'      │
+│ 11      │ 'attendance list pageSize 100000 (clamped)'      │ 200      │ 200    │ 'yes' │ '66.2'    │ '17'      │ '19'   │ 'items=100 total=110000'       │
+│ 12      │ 'employees p1'                                   │ 200      │ 200    │ 'yes' │ '52.7'    │ '8'       │ '9'    │ 'items=100 total=5000'         │
+│ 13      │ 'employees search'                               │ 200      │ 200    │ 'yes' │ '0.6'     │ '11'      │ '13'   │ 'items=1 total=1'              │
+│ 14      │ 'presence'                                       │ 200      │ 200    │ 'yes' │ '31.0'    │ '10'      │ '12'   │ 'items=100 total=5000'         │
+│ 15      │ 'audit logs 366d p1'                             │ 200      │ 200    │ 'yes' │ '108.7'   │ '17'      │ '20'   │ 'items=100 total=301580'       │
+│ 16      │ 'audit logs page 1000000'                        │ 200      │ 200    │ 'yes' │ '0.1'     │ '291'     │ '312'  │ 'items=0 total=301580'         │
+│ 17      │ 'audit export 366d'                              │ 200      │ 200    │ 'yes' │ '10143.0' │ '249'     │ '274'  │ 'records=50000 truncated=true' │
+│ 18      │ 'audit export 400d (over limit)'                 │ 400      │ 400    │ 'yes' │ '0.1'     │ '2'       │ '9'    │ ''                             │
+│ 19      │ 'monitoring activity 31d'                        │ 200      │ 200    │ 'yes' │ '43.4'    │ '54'      │ '61'   │ 'items=100 total=168000'       │
+│ 20      │ 'monitoring activity 60d (clamped to retention)' │ 200      │ 200    │ 'yes' │ '43.4'    │ '47'      │ '51'   │ 'items=100 total=168000'       │
+│ 21      │ 'monitoring activity future 40d (over limit)'    │ 400      │ 400    │ 'yes' │ '0.1'     │ '2'       │ '3'    │ ''                             │
+│ 22      │ 'security dashboard max window'                  │ 200      │ 200    │ 'yes' │ '52.1'    │ '334'     │ '366'  │ ''                             │
+│ 23      │ 'operations overview'                            │ 200      │ 200    │ 'yes' │ '134.8'   │ '65'      │ '83'   │ ''                             │
+└─────────┴──────────────────────────────────────────────────┴──────────┴────────┴───────┴───────────┴───────────┴────────┴────────────────────────────────┘
+All statuses as expected.
+
+API container memory after the run (includes the dotnet run SDK host): 879MiB / 15.72GiB
