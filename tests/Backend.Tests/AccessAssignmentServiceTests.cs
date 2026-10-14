@@ -323,6 +323,49 @@ public sealed class AccessAssignmentServiceTests
         Assert.Equal("website_assignment_exists", duplicate.ErrorCode);
     }
 
+    [Fact]
+    public async Task Website_assignment_audit_records_host_without_path_or_query()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var db = CreateDbContext();
+        var employee = CreateEmployee("EMP-WEB3", "Website Employee Three", "web3@example.com");
+        db.AddRange(employee.User, employee);
+        await db.SaveChangesAsync(cancellationToken);
+        var service = new AccessAssignmentService(db, TimeProvider.System);
+        var actor = new RequestActor(Guid.NewGuid(), null, "tests");
+        var request = new UpsertWebsiteAssignmentRequest
+        {
+            EmployeeId = employee.Id,
+            Name = "Vendor portal",
+            Url = "https://Portal.Example.com/reports/daily?access_token=fictional-token-123&view=full",
+            IsActive = true
+        };
+
+        var created = await service.CreateWebsiteAssignmentAsync(request, actor, cancellationToken);
+        Assert.Equal(OperationStatus.Success, created.Status);
+        var updated = await service.UpdateWebsiteAssignmentAsync(created.Value!.Id, new UpsertWebsiteAssignmentRequest
+        {
+            EmployeeId = employee.Id,
+            Name = "Vendor portal",
+            Url = "https://portal.example.com/reports/weekly?session=fictional-session-456",
+            IsActive = true
+        }, actor, cancellationToken);
+        Assert.Equal(OperationStatus.Success, updated.Status);
+
+        var audits = await db.AuditLogs.OrderBy(x => x.CreatedAtUtc).ToListAsync(cancellationToken);
+        Assert.Equal(["website_assignment.created", "website_assignment.updated"], audits.Select(x => x.Action).OrderBy(x => x));
+        foreach (var audit in audits)
+        {
+            var metadata = audit.MetadataJson ?? string.Empty;
+            Assert.Contains("\"Host\":\"portal.example.com\"", metadata, StringComparison.Ordinal);
+            Assert.DoesNotContain("fictional-", metadata, StringComparison.Ordinal);
+            Assert.DoesNotContain("/reports", metadata, StringComparison.Ordinal);
+        }
+
+        // The assignment itself keeps the full URL, because the employee needs it to open the site.
+        Assert.Equal("https://portal.example.com/reports/weekly?session=fictional-session-456", updated.Value!.Url);
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

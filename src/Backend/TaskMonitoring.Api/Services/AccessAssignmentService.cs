@@ -423,7 +423,8 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         {
             assignment.EmployeeId,
             assignment.Name,
-            assignment.Url,
+            // Host only: the full URL can carry query-string tokens and audit records are widely readable (G-39).
+            Host = new Uri(assignment.Url).Host,
             assignment.AccessLevel,
             assignment.StartsOn,
             assignment.ExpiresOn,
@@ -468,7 +469,8 @@ public sealed partial class AccessAssignmentService(AppDbContext dbContext, Time
         {
             assignment.EmployeeId,
             assignment.Name,
-            assignment.Url,
+            // Host only: the full URL can carry query-string tokens and audit records are widely readable (G-39).
+            Host = new Uri(assignment.Url).Host,
             assignment.AccessLevel,
             assignment.StartsOn,
             assignment.ExpiresOn,
