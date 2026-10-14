@@ -1,0 +1,123 @@
+P5 Admin Web dark theme and colour contrast (G-37)
+Date: 2026-10-14 (UTC). Base: origin/main d5b0ff4 (after #82). Branch: feat/admin-web-dark-theme.
+Data: local API (docker, scratch database) seeded with fictional records only; bootstrap
+admin audit-admin@example.invalid. Credentials were passed by environment variable and are not
+in this file or in the script. Nothing was deployed.
+
+Tool: scripts/audit/theme-contrast.mjs (Playwright Chromium 1366x900, axe-core 4.10.2 rule
+color-contrast, WCAG AA 4.5:1). Visits /login and all 18 admin routes for each colour scheme.
+
+What was wrong
+1. No dark theme existed (master plan Phase 5, DESIGN_SYSTEM.md "tokens/dark theme").
+2. Pre-existing contrast failures on main, light scheme (35 nodes on 18 of 19 pages):
+   - Quick jump "Ctrl K" kbd: #8391a7 on #2b3445 = 3.91:1, every signed-in page
+     (src/AdminWeb/src/admin-experience.css:504 before the fix).
+   - Status badges inside panel headings took the muted heading colour instead of their own:
+     .status-active 3.28:1 on /dashboard, .status-pass 3.22:1 on /audit-logs. Cause:
+     ".panel-heading span" (specificity 0,1,1) beats ".status-active" (0,1,0)
+     (styles.css:70 and admin-experience.css:308).
+
+Fix
+- src/AdminWeb/scripts/generate-dark-theme.mjs derives src/theme-dark.css from the three light
+  stylesheets (every rule scoped to :root[data-theme="dark"]); `npm run build` fails if the
+  generated file is stale (--check). Sidebar, brand and command palette are already dark and
+  are left alone.
+- src/AdminWeb/src/theme.tsx: System / Light / Dark selector in the top bar, stored in this
+  browser only (localStorage "taskmonitoring-admin-theme"); System follows the OS setting.
+- public/theme-init.js sets the theme before first paint (same-origin script, allowed by the
+  production CSP script-src 'self').
+- kbd colour #c3ccda; ".panel-heading span:not(.status-badge)" in both stylesheets.
+
+Before (main, light scheme; data-theme is unset because main has no theme support)
+before light /login data-theme=(none) contrastNodes=0
+before light /dashboard data-theme=undefined contrastNodes=2
+    .status-active :: Element has insufficient color contrast of 3.28 (foreground color: #7b879b, background color: #e8f7ef, font size: 9.0pt (12px), font weight:
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /productivity data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /sla-analytics data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /operations data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /security-alerts data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /employees data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /departments data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /shifts data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /attendance data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /projects data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /tasks data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /website-work data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /follow-ups data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /surveys data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /access/rdp data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /access/ip data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /access/websites data-theme=undefined contrastNodes=1
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light /audit-logs data-theme=undefined contrastNodes=2
+    .status-pass :: Element has insufficient color contrast of 3.22 (foreground color: #7b879b, background color: #eef2f6, font size: 9.0pt (12px), font weight:
+    kbd :: Element has insufficient color contrast of 3.91 (foreground color: #8391a7, background color: #2b3445, font size: 6.8pt (9px), font weight: 
+before light pageErrors=0
+
+After (this branch, light and dark schemes)
+final light /login data-theme=light contrastNodes=0
+final light /dashboard data-theme=light contrastNodes=0
+final light /productivity data-theme=light contrastNodes=0
+final light /sla-analytics data-theme=light contrastNodes=0
+final light /operations data-theme=light contrastNodes=0
+final light /security-alerts data-theme=light contrastNodes=0
+final light /employees data-theme=light contrastNodes=0
+final light /departments data-theme=light contrastNodes=0
+final light /shifts data-theme=light contrastNodes=0
+final light /attendance data-theme=light contrastNodes=0
+final light /projects data-theme=light contrastNodes=0
+final light /tasks data-theme=light contrastNodes=0
+final light /website-work data-theme=light contrastNodes=0
+final light /follow-ups data-theme=light contrastNodes=0
+final light /surveys data-theme=light contrastNodes=0
+final light /access/rdp data-theme=light contrastNodes=0
+final light /access/ip data-theme=light contrastNodes=0
+final light /access/websites data-theme=light contrastNodes=0
+final light /audit-logs data-theme=light contrastNodes=0
+final light pageErrors=0
+final dark /login data-theme=dark contrastNodes=0
+final dark /dashboard data-theme=dark contrastNodes=0
+final dark /productivity data-theme=dark contrastNodes=0
+final dark /sla-analytics data-theme=dark contrastNodes=0
+final dark /operations data-theme=dark contrastNodes=0
+final dark /security-alerts data-theme=dark contrastNodes=0
+final dark /employees data-theme=dark contrastNodes=0
+final dark /departments data-theme=dark contrastNodes=0
+final dark /shifts data-theme=dark contrastNodes=0
+final dark /attendance data-theme=dark contrastNodes=0
+final dark /projects data-theme=dark contrastNodes=0
+final dark /tasks data-theme=dark contrastNodes=0
+final dark /website-work data-theme=dark contrastNodes=0
+final dark /follow-ups data-theme=dark contrastNodes=0
+final dark /surveys data-theme=dark contrastNodes=0
+final dark /access/rdp data-theme=dark contrastNodes=0
+final dark /access/ip data-theme=dark contrastNodes=0
+final dark /access/websites data-theme=dark contrastNodes=0
+final dark /audit-logs data-theme=dark contrastNodes=0
+final dark pageErrors=0
+
+Result: 0 colour-contrast nodes on 38 of 38 page checks, 0 page errors. Build: tsc + vite
+build pass; initial JS 89.66 kB gzip, CSS 7.38 kB gzip.
+Screenshots (fictional data): P5-dark-theme-dark-login.png, P5-dark-theme-dark-dashboard.png,
+P5-dark-theme-dark-tasks.png, P5-dark-theme-light-dashboard.png.
+
+Limits (not claimed): axe checks text contrast only, not charts, focus rings or non-text
+contrast; screenshots were reviewed by eye on 4 pages; no Windows/desktop client theme.
+Rollback: revert the PR; the light theme is unchanged apart from the two contrast fixes.
+Privacy: no data collected; the choice stays in the admin's own browser.
