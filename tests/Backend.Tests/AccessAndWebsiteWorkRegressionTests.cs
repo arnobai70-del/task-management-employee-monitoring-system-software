@@ -20,11 +20,7 @@ public sealed class AccessAndWebsiteWorkRegressionTests
         var project = AddProject(db, first, second);
         await db.SaveChangesAsync(cancellationToken);
 
-        var service = new WebsiteWorkService(
-            db,
-            new FixedTimeProvider(now),
-            new NoopWebsiteWorkPublisher(),
-            NullLogger<WebsiteWorkService>.Instance);
+        var service = new WebsiteWorkService(db, new FixedTimeProvider(now));
         var firstActor = new RequestActor(first.UserId, "127.0.0.1", "tests");
 
         var created = await service.CreateAsync(new UpsertWebsiteWorkRequest
@@ -57,11 +53,17 @@ public sealed class AccessAndWebsiteWorkRegressionTests
         Assert.Equal(first.Id, persisted.AssigneeEmployeeId);
         Assert.Equal(ProjectTaskStatus.InProgress, persisted.Status);
 
-        var secondCompletion = await service.CompleteAsync(
+        var review = new WebsiteWorkReviewService(
+            db,
+            new FixedTimeProvider(now),
+            new NoopWebsiteWorkPublisher(),
+            new NoopRealtimePublisher(),
+            NullLogger<WebsiteWorkReviewService>.Instance);
+        var secondSubmission = await review.SubmitAsync(
             created.Value.Id,
             new RequestActor(second.UserId, "127.0.0.1", "tests"),
             cancellationToken);
-        Assert.Equal(OperationStatus.NotFound, secondCompletion.Status);
+        Assert.Equal(OperationStatus.NotFound, secondSubmission.Status);
     }
 
     [Fact]
@@ -259,6 +261,12 @@ public sealed class AccessAndWebsiteWorkRegressionTests
             });
         }
         return project;
+    }
+
+    private sealed class NoopRealtimePublisher : IRealtimeEventPublisher
+    {
+        public Task PublishPresenceAsync(EmployeePresenceResponse presence, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task PublishNotificationAsync(Guid employeeId, EmployeeNotificationResponse notification, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class NoopWebsiteWorkPublisher : IWebsiteWorkRealtimePublisher

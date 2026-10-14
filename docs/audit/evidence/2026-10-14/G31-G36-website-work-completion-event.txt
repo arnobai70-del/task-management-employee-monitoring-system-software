@@ -1,0 +1,40 @@
+G-31 / G-36: dead WebsiteWorkService.CompleteAsync removed; approval now publishes websiteWorkCompleted
+Date: 2026-10-14
+Branch: fix/remove-dead-website-work-complete, base main after #80
+
+G-31 (RISK P3, from Phase 4): WebsiteWorkService.CompleteAsync set a task to Done without manager
+  review. No route called it: POST /api/me/website-work/{id}/complete maps to
+  WebsiteWorkReviewService.SubmitAsync (WebsiteWorkController.cs:182-184). Only unit tests used it.
+
+G-36 (VERIFIED BUG P3, found while removing it): CompleteAsync was also the only caller of
+  IWebsiteWorkRealtimePublisher.PublishCompletionAsync. The real completion path,
+  WebsiteWorkReviewService.ApproveAsync, wrote the website-work.completed activity but never sent the
+  "websiteWorkCompleted" hub event. So the Admin Web handlers for it never fired in production:
+    - WebsiteWorkRealtimeNotice.tsx "Work completed" toast
+    - WebsiteWorkManagement.tsx:210-220 live "recent completions" list and refresh
+  Other managers' Website Work pages only caught up on reload (progress polls every 5 s, but the
+  completions list does not).
+
+Change:
+  - WebsiteWorkReviewService.ApproveAsync publishes the completion after SaveChanges, wrapped like the
+    existing submission publish (failure is logged; the approval stays saved).
+  - WebsiteWorkService.CompleteAsync and its interface entry removed; the now-unused publisher and
+    logger constructor parameters removed (TreatWarningsAsErrors would flag them).
+  - Tests: WebsiteWorkServiceTests completes through submit + approve; the regression test checks a
+    second employee cannot submit the first employee's work (NotFound); WebsiteWorkReviewServiceTests
+    asserts approval publishes exactly one completion for the right task and employee.
+
+Results (mcr.microsoft.com/dotnet/sdk:10.0, local PostgreSQL 16, fresh task_monitoring_tests DB):
+  dotnet build TaskMonitoring.slnx -c Release: Build succeeded (no warnings)
+  Full suite: total 186, failed 0, succeeded 186, skipped 0
+
+Control (approve publish fix reverted, same tests):
+  failed WebsiteWorkServiceTests.Assigned_employee_starts_work_and_approval_publishes_durable_completion
+    Assert.Single() Failure: The collection was empty
+  failed WebsiteWorkReviewServiceTests.Employee_submission_waits_for_review_and_manager_can_approve
+    Assert.Single() Failure: The collection was empty
+  total 6, failed 2
+
+Behaviour change visible to users: managers with tasks.read/tasks.manage get a "Work completed" toast
+when any website work is approved, and the Website Work page list updates live. No data or permission
+change. Rollback: revert the commit.

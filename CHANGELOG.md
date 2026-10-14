@@ -11,6 +11,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance edge-case tests for 20:30→09:00/09:30/10:00 night shifts, breaks, early leave and DST transitions (G-06).
 
 ### Changed
+- Removed the unused `WebsiteWorkService.CompleteAsync`, which could mark work done without review; completion always goes through submit and approve (G-31).
 - Admin Web loads each page on demand and starts the realtime client only after sign-in. The first download drops from 145.6 kB to 93.8 kB gzip (G-35).
 - Each Admin Web tab now uses one realtime (SignalR) connection instead of up to four, and keeps it across page changes (G-34).
 - Work sessions left open are closed automatically at the scheduled shift end after `Attendance:AutoCloseAfterShiftEndMinutes` (default 240). A late checkout no longer records hours after the shift ended (G-28).
@@ -20,6 +21,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Refresh tokens are single-use under concurrency: a second simultaneous refresh with the same token gets `409 refresh_conflict` and no tokens (G-21, #69).
 - Realtime (SignalR) connections close when the access token expires; clients reconnect with fresh claims (G-22, #69).
 - Audit and report CSV exports neutralize spreadsheet formulas in text cells (G-23, #69).
+- Approving website work now sends the live "Work completed" event, so managers see the toast and the Website Work completions list updates without a reload (G-36).
 - Admin Web live status pills (incidents, security, notifications, follow-ups) no longer overlap each other or the page title; they share one wrapping row under the top bar (G-33).
 - Admin Web dependencies are locked (`package-lock.json`) and installed with `npm ci` in CI, Docker and the Windows launcher (G-20, #70).
 - `docs/admin-web.md` described refresh tokens returned in JSON and stored in `sessionStorage`; the Admin Web actually uses an HttpOnly `SameSite=Strict` refresh cookie.

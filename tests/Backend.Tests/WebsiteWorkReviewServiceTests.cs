@@ -48,6 +48,11 @@ public sealed class WebsiteWorkReviewServiceTests
         var notification = Assert.Single(employeePublisher.Notifications);
         Assert.Equal(employee.Id, notification.EmployeeId);
         Assert.Contains("approved", notification.Notification.Title, StringComparison.OrdinalIgnoreCase);
+
+        // Managers' Website Work pages update live from this event (websiteWorkCompleted).
+        var completion = Assert.Single(managerPublisher.Completions);
+        Assert.Equal(task.Id, completion.TaskId);
+        Assert.Equal(employee.Id, completion.EmployeeId);
     }
 
     [Fact]
@@ -193,8 +198,12 @@ public sealed class WebsiteWorkReviewServiceTests
     private sealed class CaptureWebsitePublisher : IWebsiteWorkRealtimePublisher
     {
         public List<WebsiteWorkSubmissionResponse> Submissions { get; } = [];
+        public List<WebsiteWorkCompletionResponse> Completions { get; } = [];
         public Task PublishCompletionAsync(WebsiteWorkCompletionResponse completion, CancellationToken cancellationToken)
-            => Task.CompletedTask;
+        {
+            Completions.Add(completion);
+            return Task.CompletedTask;
+        }
         public Task PublishSubmissionAsync(WebsiteWorkSubmissionResponse submission, CancellationToken cancellationToken)
         {
             Submissions.Add(submission);
