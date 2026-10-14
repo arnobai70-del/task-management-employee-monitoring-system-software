@@ -5,6 +5,7 @@ using TaskMonitoring.Api.Configuration;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -21,8 +22,12 @@ public interface IFollowUpSlaAnalyticsService
 public sealed class FollowUpSlaAnalyticsService(
     AppDbContext dbContext,
     TimeProvider timeProvider,
-    IOptions<FollowUpReminderOptions> reminderOptions) : IFollowUpSlaAnalyticsService
+    IOptions<FollowUpReminderOptions> reminderOptions,
+    ITeamScope? teamScope = null) : IFollowUpSlaAnalyticsService
 {
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     private const int MaximumReportDays = 366;
     private const int MaximumFollowUpLeadDays = 30;
     private readonly FollowUpReminderOptions _reminderOptions = reminderOptions.Value;
@@ -81,6 +86,8 @@ public sealed class FollowUpSlaAnalyticsService(
         var effectiveEndUtc = endUtc < nowUtc ? endUtc : nowUtc;
         var queryStartUtc = startUtc.AddDays(-(MaximumFollowUpLeadDays + 1));
 
+        // Follow-ups on tasks assigned outside the caller's team are not counted.
+        var scope = await VisibleEmployeesAsync(cancellationToken);
         var tasks = await dbContext.ProjectTasks
             .AsNoTracking()
             .Include(task => task.Activities.Where(activity =>
@@ -90,6 +97,7 @@ public sealed class FollowUpSlaAnalyticsService(
                 activity.Action == WebsiteWorkAttentionActionService.FollowUpAssignedAction &&
                 activity.CreatedAtUtc >= queryStartUtc &&
                 activity.CreatedAtUtc <= effectiveEndUtc))
+            .Where(task => scope == null || (task.AssigneeEmployeeId != null && scope.Contains(task.AssigneeEmployeeId.Value)))
             .ToArrayAsync(cancellationToken);
 
         var lifecycles = tasks

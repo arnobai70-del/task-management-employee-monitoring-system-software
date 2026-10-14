@@ -16,7 +16,8 @@ namespace TaskMonitoring.Api.Controllers;
 [Route("api/tasks")]
 public sealed class TasksController(
     IProjectTaskCoreService projectTaskCoreService,
-    AppDbContext dbContext) : ControllerBase
+    AppDbContext dbContext,
+    ITeamScope? teamScope = null) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResponse<ProjectTaskResponse>>> GetAll(
@@ -38,6 +39,13 @@ public sealed class TasksController(
         var query = dbContext.ProjectTasks
             .AsNoTracking()
             .Where(task => !task.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction));
+
+        // Tasks assigned outside the caller's team are hidden; unassigned tasks stay visible (G-27).
+        var scope = teamScope is null ? null : await teamScope.GetVisibleEmployeeIdsAsync(cancellationToken);
+        if (scope is not null)
+        {
+            query = query.Where(task => task.AssigneeEmployeeId == null || scope.Contains(task.AssigneeEmployeeId.Value));
+        }
 
         if (projectId.HasValue)
         {

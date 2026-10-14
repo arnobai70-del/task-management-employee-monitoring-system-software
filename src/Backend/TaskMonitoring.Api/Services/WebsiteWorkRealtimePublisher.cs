@@ -18,11 +18,11 @@ public interface IWebsiteWorkRealtimePublisher
 public sealed class SignalRWebsiteWorkRealtimePublisher(IHubContext<RealtimeHub> hubContext) : IWebsiteWorkRealtimePublisher
 {
     public Task PublishCompletionAsync(WebsiteWorkCompletionResponse completion, CancellationToken cancellationToken)
-        => hubContext.Clients.Group(RealtimeGroups.TaskManagers)
+        => hubContext.Clients.Groups(RealtimeGroups.TaskManagerAudience(completion.EmployeeId))
             .SendAsync("websiteWorkCompleted", completion, cancellationToken);
 
     public Task PublishSubmissionAsync(WebsiteWorkSubmissionResponse submission, CancellationToken cancellationToken)
-        => hubContext.Clients.Group(RealtimeGroups.TaskManagers)
+        => hubContext.Clients.Groups(RealtimeGroups.TaskManagerAudience(submission.EmployeeId))
             .SendAsync("websiteWorkSubmitted", submission, cancellationToken);
 
     public Task PublishFollowUpAsync(Guid userId, WebsiteWorkFollowUpRealtimeResponse followUp, CancellationToken cancellationToken)

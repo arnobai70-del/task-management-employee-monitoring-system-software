@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -25,7 +26,10 @@ public interface IProjectTaskCoreService
     Task<OperationResult<IReadOnlyCollection<TaskActivityResponse>>> GetActivitiesAsync(Guid taskId, CancellationToken cancellationToken);
 }
 
-public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider timeProvider) : IProjectTaskCoreService
+public sealed class ProjectTaskCoreService(
+    AppDbContext dbContext,
+    TimeProvider timeProvider,
+    ITeamScope? teamScope = null) : IProjectTaskCoreService
 {
     public async Task<PagedResponse<ProjectResponse>> GetProjectsAsync(string? search, ProjectStatus? status, int page, int pageSize, CancellationToken cancellationToken)
     {
@@ -331,7 +335,7 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
     {
         page = Math.Clamp(page, 1, 1_000_000);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var query = TaskQuery().AsNoTracking();
+        var query = (await ScopedTaskQueryAsync(cancellationToken)).AsNoTracking();
 
         if (projectId.HasValue)
         {
@@ -374,7 +378,7 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
 
     public async Task<OperationResult<ProjectTaskResponse>> GetTaskAsync(Guid id, CancellationToken cancellationToken)
     {
-        var task = await TaskQuery().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var task = await (await ScopedTaskQueryAsync(cancellationToken)).AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         return task is null
             ? OperationResult<ProjectTaskResponse>.NotFound("task_not_found", "Task was not found.")
             : OperationResult<ProjectTaskResponse>.Success(ToTaskResponse(task));
@@ -438,7 +442,7 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
 
     public async Task<OperationResult<ProjectTaskResponse>> UpdateTaskAsync(Guid id, UpdateProjectTaskRequest request, RequestActor actor, CancellationToken cancellationToken)
     {
-        var task = await TaskQuery().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var task = await (await ScopedTaskQueryAsync(cancellationToken)).SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (task is null)
         {
             return OperationResult<ProjectTaskResponse>.NotFound("task_not_found", "Task was not found.");
@@ -495,7 +499,7 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
             return OperationResult<ProjectTaskResponse>.Invalid("task_status_invalid", "Task status is invalid.");
         }
 
-        var task = await TaskQuery().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var task = await (await ScopedTaskQueryAsync(cancellationToken)).SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (task is null)
         {
             return OperationResult<ProjectTaskResponse>.NotFound("task_not_found", "Task was not found.");
@@ -529,7 +533,7 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
 
     public async Task<OperationResult<IReadOnlyCollection<TaskCommentResponse>>> GetCommentsAsync(Guid taskId, CancellationToken cancellationToken)
     {
-        if (!await dbContext.ProjectTasks.AnyAsync(x => x.Id == taskId, cancellationToken))
+        if (!await (await ScopedTaskQueryAsync(cancellationToken)).AnyAsync(x => x.Id == taskId, cancellationToken))
         {
             return OperationResult<IReadOnlyCollection<TaskCommentResponse>>.NotFound("task_not_found", "Task was not found.");
         }
@@ -558,7 +562,7 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
             return OperationResult<TaskCommentResponse>.Invalid("comment_required", "Comment text is required.");
         }
 
-        var task = await TaskQuery().SingleOrDefaultAsync(x => x.Id == taskId, cancellationToken);
+        var task = await (await ScopedTaskQueryAsync(cancellationToken)).SingleOrDefaultAsync(x => x.Id == taskId, cancellationToken);
         if (task is null)
         {
             return OperationResult<TaskCommentResponse>.NotFound("task_not_found", "Task was not found.");
@@ -595,7 +599,7 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
 
     public async Task<OperationResult<IReadOnlyCollection<TaskActivityResponse>>> GetActivitiesAsync(Guid taskId, CancellationToken cancellationToken)
     {
-        if (!await dbContext.ProjectTasks.AnyAsync(x => x.Id == taskId, cancellationToken))
+        if (!await (await ScopedTaskQueryAsync(cancellationToken)).AnyAsync(x => x.Id == taskId, cancellationToken))
         {
             return OperationResult<IReadOnlyCollection<TaskActivityResponse>>.NotFound("task_not_found", "Task was not found.");
         }
@@ -618,7 +622,11 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
             return (null, null);
         }
 
-        var employee = await dbContext.Employees.SingleOrDefaultAsync(x => x.Id == employeeId.Value, cancellationToken);
+        // A team-scoped lead can only assign within their own team (G-27).
+        var scope = teamScope is null ? null : await teamScope.GetVisibleEmployeeIdsAsync(cancellationToken);
+        var employee = scope is not null && !scope.Contains(employeeId.Value)
+            ? null
+            : await dbContext.Employees.SingleOrDefaultAsync(x => x.Id == employeeId.Value, cancellationToken);
         if (employee is null)
         {
             return (null, new ApiOperationError("assignee_not_found", "Assignee employee was not found."));
@@ -711,6 +719,17 @@ public sealed class ProjectTaskCoreService(AppDbContext dbContext, TimeProvider 
         .Include(x => x.Project)
         .Include(x => x.AssigneeEmployee)
         .Include(x => x.Comments);
+
+    // Tasks assigned outside the caller's team behave as if they do not exist.
+    // Unassigned tasks stay visible so a lead can pick them up.
+    private async Task<IQueryable<ProjectTask>> ScopedTaskQueryAsync(CancellationToken cancellationToken)
+    {
+        var scope = teamScope is null ? null : await teamScope.GetVisibleEmployeeIdsAsync(cancellationToken);
+        var query = TaskQuery();
+        return scope is null
+            ? query
+            : query.Where(x => x.AssigneeEmployeeId == null || scope.Contains(x.AssigneeEmployeeId.Value));
+    }
 
     private static ProjectResponse ToProjectResponse(Project project, int activeMemberCount, int openTaskCount) => new(
         project.Id,

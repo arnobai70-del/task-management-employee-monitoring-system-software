@@ -1,0 +1,38 @@
+G-27 team scoping phase 2, 2026-10-14
+Branch feat/g27-team-scope-2 from main 961ca31 (phase 1, #102). Same rule as phase 1: without employees.scope.all a user sees their own reporting line only.
+Local PostgreSQL 16, .NET 10 SDK container, fictional data only (example.com hosts, 192.0.2.0/24 documentation addresses).
+
+== Control: new HttpTeamScopeTests run against main 961ca31 (phase 1 only) ==
+(Realtime test adapted for main, which has no per-employee groups: it checks the org-wide group membership.)
+Build succeeded.
+failed Backend.Tests.HttpTeamScopeTests.Scoped_lead_sees_only_own_reporting_line (2s 899ms)
+  /api/tasks?page=1&pageSize=100 shows the outsider; /api/reports/website-work/attention?includeSuppressed=true shows the outsider; /api/reports/workload?limit=100 shows the outsider; /api/access-assignments/rdp?page=1&pageSize=100 shows the outsider; /api/access-assignments/ip?page=1&pageSize=100 shows the outsider; /api/access-assignments/websites?page=1&pageSize=100 shows the outsider; /api/access-assignments/employees shows the outsider; /api/survey-links?page=1&pageSize=100 shows the outsider; /api/survey-links/employees shows the outsider; /api/survey-assignments?page=1&pageSize=100 shows the outsider; /api/survey-submissions/pending?page=1&pageSize=100 shows the outsider; /api/admin-lookups/surveys/employees shows the outsider; /api/tasks/9a6baacb-2387-46df-b550-5618456a5e09 returned 200, expected 404; /api/tasks/9a6baacb-2387-46df-b550-5618456a5e09/comments returned 200, expected 404; /api/tasks/9a6baacb-2387-46df-b550-5618456a5e09/activities returned 200, expected 404; POST /api/website-work/9a6baacb-2387-46df-b550-5618456a5e09/approve returned 409, expected 404; POST /api/website-work/9a6baacb-2387-46df-b550-5618456a5e09/attention/acknowledge returned 200, expected 404; POST /api/survey-submissions/a9ae4d30-12e2-4669-8e7d-8e4b6d2967b1/review returned 200, expected 404; POST /api/survey-assignments returned 409, expected 404; POST /api/employees/1715584c-2376-4693-8123-38150e10d86a/reset-password returned 204, expected 404; the outsider was renamed to 'Renamed By Lead'; dashboard counts 5 active employees, expected 3; dashboard counts 2 attendance sessions, expected 1; dashboard counts 2 in-progress tasks, expected 1; daily attendance counts 2 sessions, expected 1
+failed Backend.Tests.HttpTeamScopeTests.Realtime_connection_of_a_scoped_lead_joins_only_team_groups (187ms)
+  Assert.DoesNotContain() Failure: Item found in set
+  Set:   ["presence-readers", "operations-readers", "task-managers", "user:17966e857ce242388b2edfa51cc8bfdc", "employee:b1cd6b986789419f869a8703a678b74f"]
+  Found: "presence-readers"
+--
+failed Backend.Tests.HttpTeamScopeTests.Lead_with_scope_all_sees_everyone (186ms)
+  /api/attendance?from=2026-10-08&to=2026-10-14&page=1&pageSize=100 should include the outsider for a scope.all lead
+  total: 4
+  failed: 3
+  succeeded: 1
+
+Note: on main the scope.all test also fails because the scoped-lead test, run first, was able to approve the outsider's survey submission, so it is no longer pending. That is the same leak seen from the other side.
+
+== With the fix: HttpTeamScopeTests ==
+  total: 4
+  failed: 0
+  succeeded: 4
+
+== Full backend suite with the fix (plus refresh-token race test 5 times) ==
+Build succeeded.
+  total: 218
+  failed: 0
+  succeeded: 218
+  skipped: 0
+  failed: 0   succeeded: 1  (race run 1)
+  failed: 0   succeeded: 1  (race run 2)
+  failed: 0   succeeded: 1  (race run 3)
+  failed: 0   succeeded: 1  (race run 4)
+  failed: 0   succeeded: 1  (race run 5)

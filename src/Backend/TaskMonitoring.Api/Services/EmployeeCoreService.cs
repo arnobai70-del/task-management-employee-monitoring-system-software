@@ -296,10 +296,11 @@ public sealed class EmployeeCoreService(
 
     public async Task<OperationResult<EmployeeResponse>> UpdateEmployeeAsync(Guid id, UpdateEmployeeRequest request, RequestActor actor, CancellationToken cancellationToken)
     {
+        var scope = await VisibleEmployeesAsync(cancellationToken);
         var employee = await dbContext.Employees
             .Include(x => x.User)
                 .ThenInclude(x => x.UserRoles)
-            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+            .SingleOrDefaultAsync(x => x.Id == id && (scope == null || scope.Contains(x.Id)), cancellationToken);
 
         if (employee is null)
         {

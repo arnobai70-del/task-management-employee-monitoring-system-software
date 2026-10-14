@@ -69,7 +69,11 @@ ON CONFLICT DO NOTHING;
 
 Users pick up the change at their next sign-in or token refresh (access tokens last `Jwt:AccessTokenMinutes`). Each lead's employee profile must have the right Supervisor set on their reports (Employees page).
 
-Not scoped yet (still organisation-wide for anyone with the read permission): dashboard totals and other `/api/reports/*` summaries, follow-up SLA and attention reports, project tasks, access assignments, survey assignments, single website-work items and their actions, and realtime broadcasts (presence and website-work events go to everyone with the read permission). Keep `employees.scope.all` on a role until these are scoped if the role must not see other teams at all.
+What a role without `employees.scope.all` is limited to: employees (list, detail, edit, password reset), attendance and corrections, presence, monitoring activity, Website Work (lists, progress, edits, approve/reopen, attention report and actions), project tasks, the dashboard, daily attendance, workload, productivity and follow-up SLA reports, RDP/IP/website/survey-link assignments and their employee pickers, survey assignments and submissions, and realtime presence and Website Work events. Unassigned tasks and Website Work stay visible so a lead can pick them up.
+
+Still organisation-wide on purpose: departments, projects, survey forms, the per-project and per-form report summaries, the supervisor, shift and project-member pickers (a lead's own manager can sit outside the team), operations incidents and the audit log. A role that also has `roles.manage` can give itself `employees.scope.all`, so keep that permission for administrators.
+
+Realtime connections work out their scope when they connect; after a Supervisor change, a lead sees the new team's live events from their next reconnect or page reload.
 
 ## 5. Rollback
 - Application: redeploy previous image tag/commit via `deploy.sh` with the previous checkout.

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -40,8 +41,15 @@ public interface IExternalSurveyService
         CancellationToken cancellationToken);
 }
 
-public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider timeProvider) : IExternalSurveyService
+public sealed class ExternalSurveyService(
+    AppDbContext dbContext,
+    TimeProvider timeProvider,
+    ITeamScope? teamScope = null) : IExternalSurveyService
 {
+    // Survey links of employees outside the caller's team behave as if they do not exist.
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
+
     public async Task<PagedResponse<ExternalSurveyAssignmentResponse>> GetAssignmentsAsync(
         Guid? employeeId,
         bool? isActive,
@@ -58,6 +66,11 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
             .Where(x => x.AccessLevel == WebsiteAccessLevel.Survey)
             .Include(x => x.Employee)
             .AsQueryable();
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        if (scope is not null)
+        {
+            query = query.Where(x => scope.Contains(x.EmployeeId));
+        }
 
         if (employeeId.HasValue)
         {
@@ -98,13 +111,16 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
     }
 
     public async Task<IReadOnlyCollection<ExternalSurveyEmployeeOptionResponse>> GetEmployeeOptionsAsync(CancellationToken cancellationToken)
-        => await dbContext.Employees
+    {
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        return await dbContext.Employees
             .AsNoTracking()
-            .Where(x => x.IsActive && x.User.IsActive)
+            .Where(x => x.IsActive && x.User.IsActive && (scope == null || scope.Contains(x.Id)))
             .OrderBy(x => x.NormalizedFullName)
             .ThenBy(x => x.NormalizedEmployeeCode)
             .Select(x => new ExternalSurveyEmployeeOptionResponse(x.Id, x.EmployeeCode, x.FullName))
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<OperationResult<ExternalSurveyAssignmentResponse>> CreateAsync(
         UpsertExternalSurveyAssignmentRequest request,
@@ -146,8 +162,9 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
         RequestActor actor,
         CancellationToken cancellationToken)
     {
+        var scope = await VisibleEmployeesAsync(cancellationToken);
         var assignment = await dbContext.Set<WebsiteAssignment>()
-            .SingleOrDefaultAsync(x => x.Id == id && x.AccessLevel == WebsiteAccessLevel.Survey, cancellationToken);
+            .SingleOrDefaultAsync(x => x.Id == id && x.AccessLevel == WebsiteAccessLevel.Survey && (scope == null || scope.Contains(x.EmployeeId)), cancellationToken);
         if (assignment is null)
         {
             return OperationResult<ExternalSurveyAssignmentResponse>.NotFound("survey_link_not_found", "Survey website assignment was not found.");
@@ -289,10 +306,13 @@ public sealed class ExternalSurveyService(AppDbContext dbContext, TimeProvider t
             return (null, null, null, new ApiOperationError("employee_required", "Employee is required."));
         }
 
-        var employee = await dbContext.Employees
-            .AsNoTracking()
-            .Include(x => x.User)
-            .SingleOrDefaultAsync(x => x.Id == request.EmployeeId, cancellationToken);
+        var scope = await VisibleEmployeesAsync(cancellationToken);
+        var employee = scope is not null && !scope.Contains(request.EmployeeId)
+            ? null
+            : await dbContext.Employees
+                .AsNoTracking()
+                .Include(x => x.User)
+                .SingleOrDefaultAsync(x => x.Id == request.EmployeeId, cancellationToken);
         if (employee is null)
         {
             return (null, null, null, new ApiOperationError("employee_not_found", "Employee was not found."));

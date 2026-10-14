@@ -5,6 +5,7 @@ using TaskMonitoring.Api.Configuration;
 using TaskMonitoring.Api.Contracts;
 using TaskMonitoring.Api.Data;
 using TaskMonitoring.Api.Domain;
+using TaskMonitoring.Api.Security;
 
 namespace TaskMonitoring.Api.Services;
 
@@ -25,9 +26,13 @@ public interface IWebsiteWorkAttentionService
 public sealed class WebsiteWorkAttentionService(
     AppDbContext dbContext,
     TimeProvider timeProvider,
-    IOptions<WebsiteWorkAttentionOptions> options) : IWebsiteWorkAttentionService
+    IOptions<WebsiteWorkAttentionOptions> options,
+    ITeamScope? teamScope = null) : IWebsiteWorkAttentionService
 {
     private readonly WebsiteWorkAttentionOptions _options = options.Value;
+
+    private Task<Guid[]?> VisibleEmployeesAsync(CancellationToken cancellationToken) =>
+        teamScope?.GetVisibleEmployeeIdsAsync(cancellationToken) ?? Task.FromResult<Guid[]?>(null);
 
     public Task<OperationResult<WebsiteWorkAttentionResponse>> GetAsync(
         int utcOffsetMinutes,
@@ -58,6 +63,7 @@ public sealed class WebsiteWorkAttentionService(
         var nowUtc = UtcNow();
         var localDate = DateOnly.FromDateTime(nowUtc + TimeSpan.FromMinutes(utcOffsetMinutes));
 
+        var scope = await VisibleEmployeesAsync(cancellationToken);
         var tasks = await dbContext.ProjectTasks
             .AsNoTracking()
             .Include(x => x.Project)
@@ -67,7 +73,8 @@ public sealed class WebsiteWorkAttentionService(
                 x.AssigneeEmployeeId != null &&
                 x.Status != ProjectTaskStatus.Done &&
                 x.Status != ProjectTaskStatus.Cancelled &&
-                x.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction))
+                x.Activities.Any(activity => activity.Action == WebsiteWorkService.ConfiguredAction) &&
+                (scope == null || scope.Contains(x.AssigneeEmployeeId.Value)))
             .ToListAsync(cancellationToken);
 
         var allAlerts = tasks

@@ -13,9 +13,20 @@ public sealed class RealtimeHub(AppDbContext dbContext) : Hub
 {
     public override async Task OnConnectedAsync()
     {
-        if (Context.User?.Claims.Any(x => x.Type == "permission" && x.Value == PermissionCatalog.PresenceRead) == true)
+        // Users limited to their own team (G-27) join one group per visible employee instead of the
+        // organisation-wide group, so presence and Website Work events about other teams never reach them.
+        // The scope is fixed for the life of the connection; a reporting-line change applies on reconnect.
+        var canReadPresence = Context.User?.Claims.Any(x => x.Type == "permission" && x.Value == PermissionCatalog.PresenceRead) == true;
+        var canReadTasks = Context.User?.Claims.Any(x =>
+            x.Type == "permission" &&
+            (x.Value == PermissionCatalog.TasksRead || x.Value == PermissionCatalog.TasksManage)) == true;
+        var scope = canReadPresence || canReadTasks
+            ? await TeamScope.ResolveAsync(dbContext, Context.User, Context.ConnectionAborted)
+            : null;
+
+        if (canReadPresence)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.PresenceReaders);
+            await JoinScopedAsync(RealtimeGroups.PresenceReaders, RealtimeGroups.PresenceReadersOf, scope);
         }
 
         if (Context.User?.Claims.Any(x => x.Type == "permission" && x.Value == PermissionCatalog.ReportsRead) == true)
@@ -28,11 +39,9 @@ public sealed class RealtimeHub(AppDbContext dbContext) : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.SecurityAlertReaders);
         }
 
-        if (Context.User?.Claims.Any(x =>
-                x.Type == "permission" &&
-                (x.Value == PermissionCatalog.TasksRead || x.Value == PermissionCatalog.TasksManage)) == true)
+        if (canReadTasks)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.TaskManagers);
+            await JoinScopedAsync(RealtimeGroups.TaskManagers, RealtimeGroups.TaskManagersOf, scope);
         }
 
         var subject = Context.User?.FindFirstValue(JwtRegisteredClaimNames.Sub);
@@ -54,6 +63,20 @@ public sealed class RealtimeHub(AppDbContext dbContext) : Hub
 
         await base.OnConnectedAsync();
     }
+
+    private async Task JoinScopedAsync(string organisationGroup, Func<Guid, string> employeeGroup, Guid[]? scope)
+    {
+        if (scope is null)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, organisationGroup);
+            return;
+        }
+
+        foreach (var employeeId in scope)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, employeeGroup(employeeId));
+        }
+    }
 }
 
 public static class RealtimeGroups
@@ -65,4 +88,10 @@ public static class RealtimeGroups
 
     public static string Employee(Guid employeeId) => $"employee:{employeeId:N}";
     public static string User(Guid userId) => $"user:{userId:N}";
+    public static string PresenceReadersOf(Guid employeeId) => $"presence-readers:{employeeId:N}";
+    public static string TaskManagersOf(Guid employeeId) => $"task-managers:{employeeId:N}";
+
+    /// <summary>The organisation-wide readers plus the team-scoped readers who can see this employee.</summary>
+    public static IReadOnlyList<string> PresenceAudience(Guid employeeId) => [PresenceReaders, PresenceReadersOf(employeeId)];
+    public static IReadOnlyList<string> TaskManagerAudience(Guid employeeId) => [TaskManagers, TaskManagersOf(employeeId)];
 }

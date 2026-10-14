@@ -32,12 +32,13 @@ public sealed class TeamScope(AppDbContext dbContext, IHttpContextAccessor httpC
             return _cached;
         }
 
-        _cached = await ResolveAsync(httpContextAccessor.HttpContext?.User, cancellationToken);
+        _cached = await ResolveAsync(dbContext, httpContextAccessor.HttpContext?.User, cancellationToken);
         _resolved = true;
         return _cached;
     }
 
-    private async Task<Guid[]?> ResolveAsync(ClaimsPrincipal? user, CancellationToken cancellationToken)
+    /// <summary>Resolves the scope for any principal; the realtime hub uses this when a connection opens.</summary>
+    public static async Task<Guid[]?> ResolveAsync(AppDbContext dbContext, ClaimsPrincipal? user, CancellationToken cancellationToken)
     {
         // Background services run without a request; they work on every employee, as before.
         if (user?.Identity?.IsAuthenticated != true || user.HasClaim("permission", PermissionCatalog.EmployeesScopeAll))
