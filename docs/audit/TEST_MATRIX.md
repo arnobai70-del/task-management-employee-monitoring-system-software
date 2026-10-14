@@ -52,6 +52,7 @@ All timestamps UTC.
 | G26-01 | `DatabaseMigrationTests` run 3 times against one PostgreSQL server | same `TEST_POSTGRES_CONNECTION` | L | Before: run 2 fails 23505; after: 3/3 pass, 0 leftover databases | 2026-10-14 14:35 | [G-26 log](evidence/2026-10-14/G26-migration-test-isolation.txt) |
 | P8-02 (G-40/G-41) | `scripts/audit/api-latency.mjs` 20 endpoints, 60 req, 4 clients; EXPLAIN ANALYZE of slow queries | `scripts/audit/perf-seed.sql` 1000 employees / 60 days (fictional) | L | Baseline + after published; dashboard 168h p95 1755 -> 952 ms; full suite 208/208 | 2026-10-14 15:05 | [P8 latency log](evidence/2026-10-14/P8-api-latency-baseline.txt) |
 | G24-01 | `HttpRateLimitAuditTests` (2) + `RateLimitAuditSamplerTests` (2) | 25 / 12 bad sign-ins from one client, 1000-char User-Agent | L | Control without fix: 15 rows and 0 rows; with fix 1 and 1; full suite 212/212 | 2026-10-14 15:30 | [G-24 log](evidence/2026-10-14/G24-rate-limit-audit-sampling.txt) |
+| G25-01 | `scripts/audit/csp-connect-src.mjs` before / after / `connect-src 'none'` control, Chromium 141 | local API on fictional `tm_perf` data, Admin Web dist from main | L | Before and after: signed in, 1 realtime WebSocket with frames, 0 violations; control caught 1 violation | 2026-10-14 14:50 | [G-25 log](evidence/2026-10-14/G25-csp-connect-src.txt) |
 
 ## Not yet run (planned)
 | Area | Reason | Phase |
