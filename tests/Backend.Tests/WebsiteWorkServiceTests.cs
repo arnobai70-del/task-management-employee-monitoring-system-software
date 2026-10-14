@@ -10,7 +10,7 @@ namespace Backend.Tests;
 public sealed class WebsiteWorkServiceTests
 {
     [Fact]
-    public async Task Assigned_employee_starts_and_completes_website_work_and_manager_event_is_published()
+    public async Task Assigned_employee_starts_work_and_approval_publishes_durable_completion()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var now = new DateTime(2026, 9, 30, 4, 0, 0, DateTimeKind.Utc);
@@ -20,7 +20,8 @@ public sealed class WebsiteWorkServiceTests
         await db.SaveChangesAsync(cancellationToken);
 
         var publisher = new CapturePublisher();
-        var service = new WebsiteWorkService(db, new FixedTimeProvider(now), publisher, NullLogger<WebsiteWorkService>.Instance);
+        var service = new WebsiteWorkService(db, new FixedTimeProvider(now));
+        var review = new WebsiteWorkReviewService(db, new FixedTimeProvider(now), publisher, new NoopRealtimePublisher(), NullLogger<WebsiteWorkReviewService>.Instance);
         var actor = new RequestActor(employee.UserId, "127.0.0.1", "tests");
 
         var created = await service.CreateAsync(new UpsertWebsiteWorkRequest
@@ -46,7 +47,13 @@ public sealed class WebsiteWorkServiceTests
         Assert.Equal(ProjectTaskStatus.InProgress, started.Value!.Status);
         Assert.NotNull(started.Value.StartedAtUtc);
 
-        var completed = await service.CompleteAsync(created.Value.Id, actor, cancellationToken);
+        // Completion goes through review: submit (employee) then approve (manager).
+        Assert.Equal(OperationStatus.Success, (await review.SubmitAsync(created.Value.Id, actor, cancellationToken)).Status);
+        var completed = await review.ApproveAsync(
+            created.Value.Id,
+            new WebsiteWorkReviewRequest { Comment = "Approved" },
+            new RequestActor(Guid.NewGuid(), "127.0.0.1", "manager-tests"),
+            cancellationToken);
         Assert.Equal(OperationStatus.Success, completed.Status);
         Assert.Equal(ProjectTaskStatus.Done, completed.Value!.Status);
         Assert.NotNull(completed.Value.CompletedAtUtc);
@@ -71,7 +78,7 @@ public sealed class WebsiteWorkServiceTests
         var project = AddProject(db, first, second);
         await db.SaveChangesAsync(cancellationToken);
 
-        var service = new WebsiteWorkService(db, TimeProvider.System, new CapturePublisher(), NullLogger<WebsiteWorkService>.Instance);
+        var service = new WebsiteWorkService(db, TimeProvider.System);
         var created = await service.CreateAsync(new UpsertWebsiteWorkRequest
         {
             ProjectId = project.Id,
@@ -94,7 +101,7 @@ public sealed class WebsiteWorkServiceTests
         var project = AddProject(db, employee);
         await db.SaveChangesAsync(cancellationToken);
 
-        var service = new WebsiteWorkService(db, TimeProvider.System, new CapturePublisher(), NullLogger<WebsiteWorkService>.Instance);
+        var service = new WebsiteWorkService(db, TimeProvider.System);
         var result = await service.CreateAsync(new UpsertWebsiteWorkRequest
         {
             ProjectId = project.Id,
@@ -174,6 +181,12 @@ public sealed class WebsiteWorkServiceTests
             Completions.Add(completion);
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class NoopRealtimePublisher : IRealtimeEventPublisher
+    {
+        public Task PublishPresenceAsync(EmployeePresenceResponse presence, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task PublishNotificationAsync(Guid employeeId, EmployeeNotificationResponse notification, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FixedTimeProvider(DateTime utcNow) : TimeProvider

@@ -41,18 +41,11 @@ public interface IWebsiteWorkService
         Guid id,
         RequestActor actor,
         CancellationToken cancellationToken);
-
-    Task<OperationResult<WebsiteWorkResponse>> CompleteAsync(
-        Guid id,
-        RequestActor actor,
-        CancellationToken cancellationToken);
 }
 
 public sealed class WebsiteWorkService(
     AppDbContext dbContext,
-    TimeProvider timeProvider,
-    IWebsiteWorkRealtimePublisher realtimePublisher,
-    ILogger<WebsiteWorkService> logger) : IWebsiteWorkService
+    TimeProvider timeProvider) : IWebsiteWorkService
 {
     public const string ConfiguredAction = "website-work.configured";
     public const string UpdatedAction = "website-work.updated";
@@ -343,83 +336,6 @@ public sealed class WebsiteWorkService(
                 task.Status == ProjectTaskStatus.Blocked
                     ? "This website work is blocked. Ask a manager before continuing."
                     : "Completed or cancelled website work cannot be started.");
-        }
-
-        return OperationResult<WebsiteWorkResponse>.Success(ToResponse(task));
-    }
-
-    public async Task<OperationResult<WebsiteWorkResponse>> CompleteAsync(
-        Guid id,
-        RequestActor actor,
-        CancellationToken cancellationToken)
-    {
-        var employeeResult = await ResolveEmployeeAsync(actor, cancellationToken);
-        if (employeeResult.Error is not null)
-        {
-            return Error<WebsiteWorkResponse>(employeeResult.Error);
-        }
-
-        var employee = employeeResult.Employee!;
-        var task = await WorkQuery(tracked: true)
-            .SingleOrDefaultAsync(x => x.Id == id && x.AssigneeEmployeeId == employee.Id, cancellationToken);
-        if (task is null)
-        {
-            return OperationResult<WebsiteWorkResponse>.NotFound("website_work_not_found", "Website work assignment was not found.");
-        }
-
-        if (task.Status != ProjectTaskStatus.InProgress)
-        {
-            return OperationResult<WebsiteWorkResponse>.Conflict(
-                "website_work_not_working",
-                "Start the website work before marking it complete.");
-        }
-
-        var now = UtcNow();
-        task.Status = ProjectTaskStatus.Done;
-        task.CompletedAtUtc = now;
-        task.UpdatedAtUtc = now;
-
-        var completion = new WebsiteWorkCompletionResponse(
-            task.Id,
-            task.ProjectId,
-            task.Project.Name,
-            employee.Id,
-            employee.EmployeeCode,
-            employee.FullName,
-            task.Title,
-            now,
-            $"{employee.FullName} completed: {task.Title}");
-
-        AddActivity(task, actor.UserId, CompletedAction, new
-        {
-            taskId = completion.TaskId,
-            projectId = completion.ProjectId,
-            projectName = completion.ProjectName,
-            employeeId = completion.EmployeeId,
-            employeeCode = completion.EmployeeCode,
-            employeeName = completion.EmployeeName,
-            taskTitle = completion.TaskTitle,
-            completedAtUtc = completion.CompletedAtUtc,
-            message = completion.Message
-        });
-        AddAudit(actor, "website-work.completed", task.Id, new
-        {
-            task.ProjectId,
-            employee.Id,
-            employee.EmployeeCode,
-            employee.FullName,
-            task.Title
-        });
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        try
-        {
-            await realtimePublisher.PublishCompletionAsync(completion, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Website work completion {TaskId} was saved but manager realtime delivery failed.", task.Id);
         }
 
         return OperationResult<WebsiteWorkResponse>.Success(ToResponse(task));

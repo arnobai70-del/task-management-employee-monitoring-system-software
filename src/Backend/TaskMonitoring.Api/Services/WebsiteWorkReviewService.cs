@@ -179,6 +179,16 @@ public sealed class WebsiteWorkReviewService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await PublishEmployeeNotificationSafeAsync(notification, cancellationToken);
+
+        try
+        {
+            await managerPublisher.PublishCompletionAsync(completion, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Website work approval {TaskId} was saved but manager realtime delivery failed.", task.Id);
+        }
+
         return OperationResult<WebsiteWorkResponse>.Success(ToResponse(task));
     }
 
