@@ -289,7 +289,7 @@ export default function ProductivityReportsPage() {
         </form>
       </article>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner" role="alert">{error}</div>}
       {loading && !report ? <div className="panel loading-block">Loading productivity report…</div> : report && (
         <>
           <div className="metric-grid compact-metrics">
@@ -350,7 +350,7 @@ export default function ProductivityReportsPage() {
                 <button className="ghost-button" type="button" onClick={() => setSelectedEmployeeId(null)}>Close</button>
               </div>
 
-              {timelineError && <div className="error-banner">{timelineError}</div>}
+              {timelineError && <div className="error-banner" role="alert">{timelineError}</div>}
               {timelineLoading && !timeline ? <div className="loading-block">Loading worker timeline…</div> : timeline && (
                 <div style={{ display: 'grid', gap: 12 }}>
                   {timeline.items.map(item => (

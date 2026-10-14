@@ -38,6 +38,8 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance managers (`attendance.manage`) can correct a session's start and end with a required reason. The change is audited with before and after values, and the Admin Web Attendance page has a Correct action (G-28).
 
 ### Fixed
+- Keyboard users of the Admin Web can skip the navigation with a "Skip to main content" link, the phone menu no longer leaves its hidden links in the Tab order (and its button reports open/closed and closes with Escape), and Quick jump keeps focus inside itself and gives it back when closed (G-52, G-53, G-54).
+- Failed loads and actions in the Admin Web are now announced by screen readers; success messages are announced politely (G-55).
 - Database backups no longer fail on real-size databases: the check that read the archive back died of a broken pipe on anything over a few hundred kilobytes, which also stopped deployments at their pre-deployment backup (G-50).
 - Database restore is now all-or-nothing and replaces the whole schema, so rolling back to a backup from before a release that added tables works, and a failed restore leaves the database exactly as it was (G-49).
 - A shift that starts or ends at a local time skipped by a daylight-saving change (for example 02:30 on the spring-forward night) now starts or ends at the first minute that exists (03:00) instead of check-in failing with "no shift assigned" that day (G-29).

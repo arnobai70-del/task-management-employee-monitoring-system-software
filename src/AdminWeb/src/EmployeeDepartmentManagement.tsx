@@ -127,7 +127,7 @@ export function DepartmentManagementPage() {
 
   return <>
     <div className="page-header"><div><p className="eyebrow">Organization</p><h1>Departments</h1><p className="muted">Manage department codes and lifecycle without deleting historical references.</p></div>{mayManage && <button className="primary-button" onClick={openCreate}>New department</button>}</div>
-    {notice && <div className="success-banner">{notice}</div>}{error && <div className="error-banner">{error}</div>}
+    {notice && <div className="success-banner" role="status">{notice}</div>}{error && <div className="error-banner" role="alert">{error}</div>}
     {showForm && mayManage && <article className="panel management-form-panel"><div className="panel-heading"><div><h2>{editing ? 'Edit department' : 'Create department'}</h2></div><button className="ghost-button" onClick={() => setShowForm(false)}>Close</button></div><form className="form-grid" onSubmit={submit}>
       <label><span>Code</span><input required maxLength={50} value={code} onChange={event => setCode(event.target.value)} /></label>
       <label><span>Name</span><input required minLength={2} maxLength={150} value={name} onChange={event => setName(event.target.value)} /></label>
@@ -240,7 +240,7 @@ export function EmployeeManagementPage() {
   return <>
     <div className="page-header"><div><p className="eyebrow">People administration</p><h1>Employees & roles</h1><p className="muted">Provision accounts, reporting lines, departments and role assignments.</p></div><div className="header-actions"><form className="inline-search" onSubmit={event => { event.preventDefault(); setSearch(searchDraft.trim()); }}><input value={searchDraft} onChange={event => setSearchDraft(event.target.value)} placeholder="Search employees" /><button className="ghost-button">Search</button></form>{mayManage && <button className="primary-button" onClick={openCreate}>New employee</button>}</div></div>
     {!mayManage && can('employees.manage') && <div className="error-banner">Employee create/update with role assignment also requires <strong>roles.manage</strong>.</div>}
-    {notice && <div className="success-banner">{notice}</div>}{error && <div className="error-banner">{error}</div>}
+    {notice && <div className="success-banner" role="status">{notice}</div>}{error && <div className="error-banner" role="alert">{error}</div>}
     {showForm && mayManage && <article className="panel management-form-panel"><div className="panel-heading"><div><h2>{editingId ? 'Edit employee' : 'Create employee'}</h2><p>Role changes and password resets are protected separately by the backend and written to the audit log.</p></div><button className="ghost-button" onClick={() => setShowForm(false)}>Close</button></div><form className="form-grid" onSubmit={submit}>
       <label><span>Employee code</span><input required maxLength={50} value={draft.employeeCode} onChange={event => setDraft(value => ({ ...value, employeeCode: event.target.value }))} /></label>
       <label><span>Full name</span><input required minLength={2} maxLength={200} value={draft.fullName} onChange={event => setDraft(value => ({ ...value, fullName: event.target.value }))} /></label>

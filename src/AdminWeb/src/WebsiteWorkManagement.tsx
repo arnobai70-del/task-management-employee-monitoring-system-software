@@ -319,9 +319,9 @@ export default function WebsiteWorkManagementPage() {
         <article className="metric-card"><span>Completed today</span><strong>{completedToday}</strong><small>Browser-local day</small></article>
       </div>
 
-      {notice && <div className="success-banner">{notice}</div>}
-      {error && <div className="error-banner">{error}</div>}
-      {progressError && <div className="error-banner">Live progress delayed: {progressError}</div>}
+      {notice && <div className="success-banner" role="status">{notice}</div>}
+      {error && <div className="error-banner" role="alert">{error}</div>}
+      {progressError && <div className="error-banner" role="status">Live progress delayed: {progressError}</div>}
 
       <section className="dashboard-grid website-work-live-grid">
         <article className="panel table-panel">

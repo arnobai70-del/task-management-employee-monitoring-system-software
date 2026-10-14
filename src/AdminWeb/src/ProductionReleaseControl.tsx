@@ -194,8 +194,8 @@ export default function ProductionReleaseControl() {
         <button className="ghost-button" type="button" onClick={() => void load()}>Refresh</button>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
-      {message && <div className="success-banner">{message}</div>}
+      {error && <div className="error-banner" role="alert">{error}</div>}
+      {message && <div className="success-banner" role="status">{message}</div>}
 
       {loading && !dashboard ? <div className="panel loading-block">Loading release control state…</div> : dashboard && (
         <>

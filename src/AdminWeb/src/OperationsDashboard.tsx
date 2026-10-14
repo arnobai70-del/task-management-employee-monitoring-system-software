@@ -171,7 +171,7 @@ export default function OperationsDashboardPage() {
         </div>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner" role="alert">{error}</div>}
       <div className="panel" style={{ marginBottom: 16 }}>
         <strong>Operational scope</strong>
         <p className="muted" style={{ marginBottom: 0 }}>

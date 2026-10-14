@@ -68,9 +68,28 @@ export default function AdminExperience() {
 
   useEffect(() => {
     if (!open) return;
+    // Remember where focus was so closing the dialog can put it back there.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setQuery('');
     window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => { if (opener?.isConnected) opener.focus(); };
   }, [open]);
+
+  // The dialog is modal, so Tab and Shift+Tab cycle through its own controls instead of the page behind it.
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key !== 'Tab') return;
+    const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('input, button:not([disabled])'));
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   useEffect(() => setOpen(false), [location.pathname]);
 
@@ -98,7 +117,7 @@ export default function AdminExperience() {
 
       {open && (
         <div className="command-layer" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false); }}>
-          <section className="command-palette" role="dialog" aria-modal="true" aria-label="Quick navigation">
+          <section className="command-palette" role="dialog" aria-modal="true" aria-label="Quick navigation" onKeyDown={handleDialogKeyDown}>
             <div className="command-search-row">
               <span className="command-search-icon" aria-hidden="true">⌕</span>
               <input
@@ -117,7 +136,7 @@ export default function AdminExperience() {
                 Density: <strong>{compact ? 'Compact' : 'Comfortable'}</strong>
               </button>
             </div>
-            <div className="command-results" role="listbox">
+            <div className="command-results">
               {filtered.map(item => (
                 <button key={item.path} type="button" className={location.pathname === item.path ? 'command-result current' : 'command-result'} onClick={() => go(item.path)}>
                   <span className="command-result-code">{item.code}</span>

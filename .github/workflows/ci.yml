@@ -182,7 +182,7 @@ jobs:
         run: cat "$RUNNER_TEMP/api.log" || true
 
   admin-web-visual:
-    name: Admin web visual regression (Playwright)
+    name: Admin web visual, keyboard and state checks (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Same image the baselines were rendered in, so fonts and anti-aliasing match.

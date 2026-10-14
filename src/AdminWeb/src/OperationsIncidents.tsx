@@ -213,7 +213,7 @@ export default function OperationsIncidentsPage() {
         <button className="ghost-button" type="button" onClick={() => void load(false)}>Refresh now</button>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner" role="alert">{error}</div>}
       <div className="panel" style={{ marginBottom: 16 }}>
         <strong>Signal scope</strong>
         <p className="muted" style={{ marginBottom: 0 }}>

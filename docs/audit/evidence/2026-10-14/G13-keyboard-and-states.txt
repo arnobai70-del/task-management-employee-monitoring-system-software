@@ -1,0 +1,63 @@
+G-13 — Admin Web keyboard use and empty / error / loading states (G-52, G-53, G-54, G-55)
+Date: 2026-10-14 (UTC). Control: main 4c43680. Fix: branch test/g13-keyboard-states.
+Data: fictional only (tests/e2e/visual/mock-api.ts); no API or database.
+Environment: mcr.microsoft.com/playwright:v1.56.1-noble, Admin Web build + vite preview, Chromium.
+Suite: tests/e2e/visual/keyboard-and-states.spec.ts (8 tests), run by the same config and CI job as
+the screenshot suite (playwright.visual.config.ts, job admin-web-visual).
+
+== Exploration on main (probe, not committed) ==
+Desktop 1440, /employees, Tab x25 from page load:
+  1-18: the 18 sidebar links (Dashboard ... Audit Logs), 19: theme select, 20: Sign out,
+  21: the employee search box  -> no way to skip the navigation (G-53)
+Quick jump (Ctrl+K) then Tab x25: 6 of 25 presses left the aria-modal dialog
+  (focus went to the page body and the sidebar links behind it) (G-54)
+Phone 375, /employees, first Tab: a.nav-link "Dashboard" — the closed menu is moved off screen
+  but its links stay focusable; the menu button has no aria-expanded and Escape does not close it (G-52)
+Employees list with /api/employees answering 500: "Server error" is shown as plain text,
+  no role=alert; dashboard 500: "Could not load this view." panel, no role=alert (G-55).
+  17 dynamic error banners in the Admin Web lacked role=alert (8 already had it).
+Slow load: "Loading…" shown, then data. Empty list: "0 loaded", no crash. Sign-in: Tab order and
+  Enter submit work, error is role=alert. (No defect in these.)
+Note: crashes seen on /audit-logs, /departments and /shifts during the probe were caused by the
+probe's own mock returning the wrong shape, not by the Admin Web; they are not findings.
+
+== Control: the new suite on main 4c43680 ==
+  ✘  1 visual/keyboard-and-states.spec.ts:15:3 › desktop keyboard › the first Tab offers a skip link that moves focus past the navigation
+  ✘  2 visual/keyboard-and-states.spec.ts:30:3 › desktop keyboard › quick jump keeps focus inside the dialog and gives it back on Escape
+  ✘  3 visual/keyboard-and-states.spec.ts:54:3 › phone keyboard › the closed menu is out of the Tab order and the menu button opens and closes it
+  ✓  4 visual/keyboard-and-states.spec.ts:80:3 › sign-in by keyboard › Tab reaches email, password and the button, and Enter submits
+  ✘  5 visual/keyboard-and-states.spec.ts:99:3 › empty, error and loading states › a failed list load is announced and the page keeps working
+  ✘  6 visual/keyboard-and-states.spec.ts:107:3 › empty, error and loading states › a failed dashboard load is announced and Retry recovers
+  ✓  7 visual/keyboard-and-states.spec.ts:122:3 › empty, error and loading states › a slow load shows a loading message, then the data
+  ✓  8 visual/keyboard-and-states.spec.ts:134:3 › empty, error and loading states › an empty list shows zero results without crashing
+    Error: expect(locator).toHaveAttribute(expected) failed
+    Error: expect(locator).toBeVisible() failed
+    Error: expect(locator).toBeVisible() failed
+  5 failed
+  3 passed
+(Failures: skip link missing — first Tab is "DBDashboard"; Tab 20 left the quick jump dialog;
+ menu button aria-expanded missing; failed loads have no role=alert.)
+
+== After the fix ==
+Full mocked suite (20 screenshots + 8 keyboard/state tests), twice:
+  ✓  21 visual/keyboard-and-states.spec.ts:15:3 › desktop keyboard › the first Tab offers a skip link that moves focus past the navigation
+  ✓  22 visual/keyboard-and-states.spec.ts:30:3 › desktop keyboard › quick jump keeps focus inside the dialog and gives it back on Escape
+  ✓  23 visual/keyboard-and-states.spec.ts:54:3 › phone keyboard › the closed menu is out of the Tab order and the menu button opens and closes it
+  ✓  24 visual/keyboard-and-states.spec.ts:80:3 › sign-in by keyboard › Tab reaches email, password and the button, and Enter submits
+  ✓  25 visual/keyboard-and-states.spec.ts:99:3 › empty, error and loading states › a failed list load is announced and the page keeps working
+  ✓  26 visual/keyboard-and-states.spec.ts:107:3 › empty, error and loading states › a failed dashboard load is announced and Retry recovers
+  ✓  27 visual/keyboard-and-states.spec.ts:122:3 › empty, error and loading states › a slow load shows a loading message, then the data
+  ✓  28 visual/keyboard-and-states.spec.ts:134:3 › empty, error and loading states › an empty list shows zero results without crashing
+  28 passed
+Second run: 28 passed. The 20 screenshot baselines did not change (no visual change from the fix).
+
+What changed (src/AdminWeb/src)
+- App.tsx: "Skip to main content" link first in the page; <main id="main-content" tabIndex=-1>;
+  menu button aria-expanded + aria-controls; opening the phone menu moves focus to its first link;
+  Escape closes it and returns focus to the button; load-error panel role="alert".
+- styles.css: skip link visible only on focus; on phones the closed menu gets visibility:hidden
+  (after the slide-out transition), so its links leave the Tab order.
+- AdminExperience.tsx: quick jump keeps Tab / Shift+Tab inside the dialog, returns focus to where it
+  was on close, and drops role="listbox" (its children were buttons, not options).
+- 17 dynamic error banners get role="alert"; the "Live progress delayed" notice and 9 success
+  banners get role="status" (polite).

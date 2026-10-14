@@ -177,7 +177,7 @@ export default function AgentUpdateManagementPage() {
       </div>
 
       {error && <div className="error-banner" role="alert">{error}</div>}
-      {notice && <div className="success-banner">{notice}</div>}
+      {notice && <div className="success-banner" role="status">{notice}</div>}
       {loading && !overview && <div className="panel loading-block">Loading centralized update state…</div>}
 
       {overview && (

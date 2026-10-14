@@ -339,8 +339,8 @@ export default function PresencePanel() {
             <button className="ghost-button" type="button" onClick={() => setAttentionVersion(value => value + 1)}>Refresh</button>
           </div>
         </div>
-        {attentionError && <div className="error-banner">{attentionError}</div>}
-        {actionError && <div className="error-banner">{actionError}</div>}
+        {attentionError && <div className="error-banner" role="alert">{attentionError}</div>}
+        {actionError && <div className="error-banner" role="alert">{actionError}</div>}
         {attentionLoading && !attention ? <div className="loading-block">Checking Website Work signals…</div> : attention && (
           <>
             <div className="progress-list" style={{ margin: '0 0 12px' }}>
@@ -432,7 +432,7 @@ export default function PresencePanel() {
           <div><h2>Live workforce</h2><p>{live ? 'Realtime connected' : 'Snapshot / reconnecting'}</p></div>
           <span>{onlineCount} connected · {onShiftCount} on shift · {breakCount} on break</span>
         </div>
-        {loading && !items.length ? <div className="loading-block">Loading presence…</div> : error && !items.length ? <div className="error-banner">{error}</div> : (
+        {loading && !items.length ? <div className="loading-block">Loading presence…</div> : error && !items.length ? <div className="error-banner" role="alert">{error}</div> : (
           <div className="table-wrap">
             <table>
               <thead><tr><th>Employee</th><th>Department</th><th>Presence</th><th>Work state</th><th>Last seen</th><th>Client</th></tr></thead>
