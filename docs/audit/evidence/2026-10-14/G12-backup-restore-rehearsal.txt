@@ -1,0 +1,60 @@
+G-12 backup/restore rehearsal, G-49 non-atomic restore, G-50 backup read-back SIGPIPE — 2026-10-14
+Branch fix/g49-atomic-restore from main 8d4b67f. Production image postgres:17-alpine (17.11) in a local container; fictional data only
+(scripts/audit/perf-seed.sql employees=1000 days=60 + perf-extend-history.sql history=365 extra=4000 = 5000 employees, 365 days, 729 MB).
+The real scripts/production/backup-postgres.sh and restore-postgres.sh were run unmodified through a test shim that maps
+'docker compose exec -T postgres ...' onto that container ('exec -T api' and stop/start are no-ops; there is no API container here).
+The SIGPIPE behaviour was also confirmed with real 'docker compose exec -T' (Docker Compose v5.6.0) against a postgres:17-alpine service.
+
+== Control: main 8d4b67f scripts ==
+== C control: main backup-postgres.sh on the 729 MB database: exit 141 after 30 s; stdout/stderr: ''; finished archive: 0, left-over .partial: 1
+  (deploy.sh runs this backup first under set -e, so a deploy on any real-size database would stop here with no message)
+  'cat archive | docker compose exec -T postgres pg_restore --list' under pipefail, 192 MB archive: cat exits 141 (SIGPIPE) on 2/2 runs; 81 kB archive: 0.
+  Same check with docker exec -i: 623 539 B, 4 586 992 B and 44 449 992 B archives all fail 3/3 (exit 141).
+
+== A. Roll back a release that added tables, then redeploy
+  ef update to 20260929222350: Done.
+  state at the older release: migrations 7, tables 29, constraints 69
+  backup-postgres.sh: taskmonitoring-20261014T195458Z-predeploy.dump (81186 bytes)
+  deploy migrator: ok; state: migrations 10, tables 33, constraints 74
+  restore-postgres.sh exit 1: pg_restore: error: could not execute query: ERROR:  cannot drop constraint PK_employees on table public.employees because other objects depend on it
+  state after restore: migrations 10, tables 33, constraints 12
+  redeploy migrator: exit=0; state: migrations 10, tables 33, constraints 12
+== B. Restore from a truncated archive (data cut off; header and table of contents still readable)
+  restore-postgres.sh exit 1: pg_restore: error: could not read from input file: end of file
+  before: migrations 10, tables 33, constraints 12; departments 1
+  after:  migrations 10, tables 33, constraints 12; departments 1
+  (on main, scenario B starts from the database scenario A left half-dropped, so it shows nothing new)
+
+== With the fix ==
+== C. Full-size rehearsal with the production scripts: 5000 fictional employees, 365 days
+  database size: 729 MB
+  backup-postgres.sh: 32 s, 191776715 bytes, checksum sidecar: yes
+  simulated damage: 7 snapshot lines differ, plus a table created after the backup
+  restore-postgres.sh: exit 0, 26 s (1 checksum OK)
+  IDENTICAL to before the backup: 35 tables (row counts), 3 content checksums, migration history; stray table gone
+  largest tables after restore:
+    work_sessions 1305000
+    work_breaks 1305000
+    monitoring_activity_segments 336000
+    audit_logs 300000
+    project_tasks 20000
+  ('35' = 33 tables' row counts plus the constraint and index totals; all identical)
+
+== A. Roll back a release that added tables, then redeploy
+  ef update to 20260929222350: Done.
+  state at the older release: migrations 7, tables 29, constraints 69
+  backup-postgres.sh: taskmonitoring-20261014T200144Z-predeploy.dump (81186 bytes)
+  deploy migrator: ok; state: migrations 10, tables 33, constraints 74
+  restore-postgres.sh exit 0: PostgreSQL restore completed from: /tmp/claude-0/restore-harness/env/backups/taskmonitoring-20261014T200144Z-predeploy.dump
+  state after restore: migrations 7, tables 29, constraints 69
+  redeploy migrator: exit=0; state: migrations 10, tables 33, constraints 74
+== B. Restore from a truncated archive (data cut off; header and table of contents still readable)
+  restore-postgres.sh exit 1: pg_restore: error: could not read from input file: end of file
+  before: migrations 10, tables 33, constraints 74; departments 1
+  after:  migrations 10, tables 33, constraints 74; departments 1
+
+== Retention review (G-51, no code change) ==
+  Purged automatically: monitoring_activity_segments only (MonitoringRetentionHostedService every 6 h, policy RetentionDays 1-365).
+  Kept forever, no purge job: audit_logs (SecurityObservability:MinimumAuditRetentionDays=90 is only reported, nothing deletes), refresh_tokens
+  (a row per sign-in/refresh, revoked and expired rows kept), employee_notifications, work_sessions/work_breaks (business records).
+  At the rehearsal scale, audit_logs 300 000 rows; growth of refresh_tokens depends on sign-in frequency (not measured on real traffic).
