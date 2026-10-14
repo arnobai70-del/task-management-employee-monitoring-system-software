@@ -19,6 +19,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance edge-case tests for 20:30→09:00/09:30/10:00 night shifts, breaks, early leave and DST transitions (G-06).
 
 ### Changed
+- Admin Web background refreshes pause while the tab is hidden and catch up when it is shown again, slow down while the server answers 429/5xx or is unreachable (honouring Retry-After), and a page that failed to load for those reasons retries on its own. A hidden tab used to send 28-40 requests a minute (G-46).
 - The Admin Web header and sidebar badge now show whether the console is live, reconnecting or offline. Before, they always said live, even with the network gone (G-45).
 - Backend HTTP tests that configure the API through environment variables now run one at a time, which removes an intermittent CI failure (G-44).
 - Microsoft ASP.NET Core, EF Core and Extensions packages updated from 10.0.12 to 10.0.13. This clears advisory GHSA-334f-vvp4-7g6p in SignalR.Common, which was failing the Windows client build (G-42).

@@ -1,0 +1,59 @@
+G-46 Admin Web polling: hidden-tab pause, 429/5xx backoff, automatic retry of a failed view, 2026-10-14
+Local API on an empty scratch database (fictional bootstrap admin only), Chromium via scripts/audit/degradation.mjs.
+Control = Admin Web built from origin/main before #97 (DIST=<control dist>); new = branch fix/g46-polling (#97).
+
+== Hidden tab (ONLY=hidden): 30 s visible, 60 s hidden (document.hidden + visibilitychange), first 3 s after shown ==
+-- before (control) --
+hidden /dashboard: visible 30 s 14 API requests (/api/website-work×6, /api/website-work/follow-ups/mine×2, /api/reports/website-work/attention×2, /api/admin-notifications/summary×1); hidden 60 s 28 API requests (/api/website-work×12, /api/website-work/follow-ups/mine×4, /api/reports/website-work/attention×4, /api/admin-notifications/summary×2); first 3 s after shown 1 API requests (/api/website-work×1); page errors 0
+hidden /website-work: visible 30 s 17 API requests (/api/website-work×6, /api/website-work/progress×6, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×1); hidden 60 s 34 API requests (/api/website-work×12, /api/website-work/progress×12, /api/website-work/follow-ups/mine×4, /api/admin-notifications/summary×2); first 3 s after shown 2 API requests (/api/website-work×1, /api/website-work/progress×1); page errors 0
+hidden /operations: visible 30 s 20 API requests (/api/website-work×6, /api/operations/incidents/summary×3, /api/website-work/follow-ups/mine×2, /api/operations/incidents×2); hidden 60 s 40 API requests (/api/website-work×12, /api/operations/incidents/summary×6, /api/website-work/follow-ups/mine×4, /api/operations/incidents×4); first 3 s after shown 1 API requests (/api/website-work×1); page errors 0
+-- after --
+hidden /dashboard: visible 30 s 14 API requests (/api/website-work×6, /api/website-work/follow-ups/mine×2, /api/reports/website-work/attention×2, /api/admin-notifications/summary×1); hidden 60 s 0 API requests (none); first 3 s after shown 7 API requests (/api/website-work×1, /api/website-work/follow-ups/mine×1, /api/admin-notifications/summary×1, /api/security-alerts/summary×1); page errors 0
+hidden /website-work: visible 30 s 17 API requests (/api/website-work×6, /api/website-work/progress×6, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×1); hidden 60 s 0 API requests (none); first 3 s after shown 5 API requests (/api/website-work/follow-ups/mine×1, /api/admin-notifications/summary×1, /api/security-alerts/summary×1, /api/operations/incidents/summary×1); page errors 0
+hidden /operations: visible 30 s 20 API requests (/api/website-work×6, /api/operations/incidents/summary×3, /api/website-work/follow-ups/mine×2, /api/operations/incidents×2); hidden 60 s 0 API requests (none); first 3 s after shown 0 API requests (none); page errors 0
+
+== Server answers 429 (Retry-After: 30) or 500 to every API call except sign-in/refresh, 30 s after a reload (ONLY=errors) ==
+-- before (control) --
+429 /dashboard: 14 API requests in 30 s while failing (/api/website-work×7, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: ["Could not load this view.Too many requests.Retry"]; page errors: 0; auto recovery: 0 s; main text after: 169 chars
+429 /employees: 15 API requests in 30 s while failing (/api/website-work×7, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 0 s; main text after: 248 chars
+429 /attendance: 12 API requests in 30 s while failing (/api/website-work×8, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: ["Could not load this view.Too many requests.Retry"]; page errors: 0; auto recovery: 5 s; main text after: 225 chars
+429 /audit-logs: 13 API requests in 30 s while failing (/api/website-work×7, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: ["Could not load security observability.Too many requests.","Could not load audit logs.Too many requests.Retry"]; page errors: 0; auto recovery: 0 s; main text after: 500 chars
+500 /dashboard: 14 API requests in 30 s while failing (/api/website-work×7, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: ["Could not load this view.An unexpected error occurred.Retry"]; page errors: 0; auto recovery: 0 s; main text after: 180 chars
+500 /employees: 15 API requests in 30 s while failing (/api/website-work×7, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 0 s; main text after: 259 chars
+500 /attendance: 12 API requests in 30 s while failing (/api/website-work×8, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: ["Could not load this view.An unexpected error occurred.Retry"]; page errors: 0; auto recovery: 5 s; main text after: 236 chars
+500 /audit-logs: 13 API requests in 30 s while failing (/api/website-work×7, /api/website-work/follow-ups/mine×3, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: ["Could not load security observability.An unexpected error occurred.","Could not load audit logs.An unexpected error occurred.Retry"]; page errors: 0; auto recovery: 0 s; main text after: 522 chars
+-- after --
+429 /dashboard: 10 API requests in 30 s while failing (/api/website-work×2, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: ["Could not load this view.Too many requests.Retry"]; page errors: 0; auto recovery: 0 s; main text after: 169 chars
+429 /employees: 11 API requests in 30 s while failing (/api/website-work×2, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 0 s; main text after: 248 chars
+429 /attendance: 8 API requests in 30 s while failing (/api/attendance×2, /api/website-work×2, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×2); signed in: true; message: ["Could not load this view.Too many requests.Retry"]; page errors: 0; auto recovery: 0 s; main text after: 203 chars
+429 /audit-logs: 9 API requests in 30 s while failing (/api/website-work×2, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: ["Could not load security observability.Too many requests.","Could not load audit logs.Too many requests.Retry"]; page errors: 0; auto recovery: 0 s; main text after: 500 chars
+500 /dashboard: 10 API requests in 30 s while failing (/api/website-work×2, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: ["Could not load this view.An unexpected error occurred.Retry"]; page errors: 0; auto recovery: 0 s; main text after: 180 chars
+500 /employees: 11 API requests in 30 s while failing (/api/website-work×2, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: []; page errors: 0; auto recovery: 0 s; main text after: 259 chars
+500 /attendance: 8 API requests in 30 s while failing (/api/website-work×2, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: ["Could not load this view.An unexpected error occurred.Retry"]; page errors: 0; auto recovery: 0 s; main text after: 236 chars
+500 /audit-logs: 9 API requests in 30 s while failing (/api/website-work×2, /api/website-work/follow-ups/mine×2, /api/admin-notifications/summary×2, /api/security-alerts/summary×2); signed in: true; message: ["Could not load security observability.An unexpected error occurred.","Could not load audit logs.An unexpected error occurred.Retry"]; page errors: 0; auto recovery: 0 s; main text after: 522 chars
+
+== Route smoke with every /api call returning 503 (scripts/audit/admin-route-smoke.mjs), merged build ==
+g46 /login JS bytes (uncompressed) = 305513
+g46 /dashboard -> url=/dashboard h1="Dashboard" pageErrors=0
+g46 /productivity -> url=/productivity h1="Employee Productivity" pageErrors=0
+g46 /sla-analytics -> url=/sla-analytics h1="Escalation & SLA Analytics" pageErrors=0
+g46 /operations -> url=/operations h1="Operations & Agent Health" pageErrors=0
+g46 /security-alerts -> url=/security-alerts h1="Security alerts" pageErrors=0
+g46 /employees -> url=/employees h1="Employees & roles" pageErrors=0
+g46 /departments -> url=/departments h1="Departments" pageErrors=0
+g46 /shifts -> url=/shifts h1="Shifts & assignments" pageErrors=0
+g46 /attendance -> url=/attendance h1="Attendance" pageErrors=0
+g46 /projects -> url=/projects h1="Projects & members" pageErrors=0
+g46 /tasks -> url=/tasks h1="Tasks" pageErrors=0
+g46 /website-work -> url=/website-work h1="Website Work" pageErrors=0
+g46 /follow-ups -> url=/follow-ups h1="My Follow-ups" pageErrors=0
+g46 /surveys -> url=/surveys h1="Survey website assignments" pageErrors=0
+g46 /access/rdp -> url=/access/rdp h1="RDP Assignments" pageErrors=0
+g46 /access/ip -> url=/access/ip h1="IP Assignments" pageErrors=0
+g46 /access/websites -> url=/access/websites h1="Website Assignments" pageErrors=0
+g46 /audit-logs -> url=/audit-logs h1="Security observability & audit" pageErrors=0
+g46 /forbidden -> url=/forbidden h1="Permission required" pageErrors=0
+g46 /nope -> url=/nope h1="Page not found" pageErrors=0
+
+== Build ==
+npm run build (dark theme check, tsc, vite): OK
