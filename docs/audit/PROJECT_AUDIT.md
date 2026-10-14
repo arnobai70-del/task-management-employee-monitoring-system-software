@@ -138,7 +138,7 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 | 1 Build/tests | DONE (Linux scope); Windows via CI; lockfile merged (#70) | licence scan |
 | 2 Security & data integrity | IN PROGRESS — G-20…G-23 fixed (#69, #70); HTTP authorization matrix merged (#72), no defect | G-27 owner decision (manager team scoping), F-04/F-05, backup encryption review |
 | 3 Attendance/breaks | TESTED (#73 merged); G-28 auto-close + admin correction merged (#75, owner chose "both"); not deployed; Correct form and live auto-close verified in browser | G-29, G-30 |
-| 4 Tasks/Website Work | TESTED (#74 merged) — HTTP lifecycle, generic-route guard, durable notifications; no defect (G-32) | G-31 + G-36 merged (#81); survey flows reviewed, no defect; access validation bug G-38 (#84 merged); G-39 needs owner rule |
+| 4 Tasks/Website Work | TESTED (#74 merged) — HTTP lifecycle, generic-route guard, durable notifications; no defect (G-32) | G-31 + G-36 merged (#81); survey flows reviewed, no defect; access validation bug G-38 (#84 merged); G-39 website assignment audit stores host only (owner left the rule to Claude) |
 | 5 UI redesign | IN PROGRESS — status-pill overlap fixed (G-33, #78 merged); route code splitting 145.6 → 93.8 kB gzip (G-35 #79, G-34 #80 merged); G-08 labels (#82 merged); dark theme + WCAG AA contrast fixes, 0 issues on 38/38 page checks (G-37, #83 merged); [DESIGN_SYSTEM.md](../ui/DESIGN_SYSTEM.md) draft | brand accent (owner decision), components |
 | 6 Tab screenshot | RFC DRAFT ONLY — **implementation needs owner's written policy approval** | [SCREENSHOT_CAPTURE_RFC.md](SCREENSHOT_CAPTURE_RFC.md) |
 | 7 RDP support | BLOCKED — no Windows Server RDP test host | owner to provide a test VPS |
