@@ -13,7 +13,7 @@ G-11,UNKNOWN,P1,"CI covers unsigned lifecycle; real signing not exercised",Windo
 G-12,UNKNOWN,P1,"8 migrations, drift clean; no EXPLAIN/perf baseline",Database,"Index/EXPLAIN review, retention and restore rehearsal",Phase 8,OPEN,
 G-13,OPPORTUNITY,P2,"No visual inspection yet",Admin Web,"Empty/error/loading states, keyboard, responsive",Phase 5,OPEN,
 G-14,NEW REQUIREMENT,P1,"No screenshot API/storage exists",API/DB/storage,"Separate opt-in module per RFC",RFC test list,"WAITING FOR POLICY APPROVAL",
-G-15,UNKNOWN,P1,"PR #17 open, not deployed; conflicted with main in 5 files (evidence/2026-10-14/P8-observability-merge.txt)",Observability,"Merged #17 into current main keeping both sides; loopback-only ports, telemetry off unless OtlpEndpoint set",Observability acceptance in CI; full suite 207/207,"UPDATED (PR open); production run BLOCKED (no production access)",
+G-15,UNKNOWN,P1,"PR #17 open, not deployed; conflicted with main in 5 files (evidence/2026-10-14/P8-observability-merge.txt)",Observability,"Merged #17 into current main keeping both sides; loopback-only ports, telemetry off unless OtlpEndpoint set",Observability acceptance in CI; full suite 207/207,"UPDATED (PR open); production run BLOCKED (no production access)",#85
 G-16,UNKNOWN,P1,"No GitHub releases published; production signing/update host unverified",Release/Production,"Verify with owner-provided access",Release report,BLOCKED (no production/signing access),
 G-17,UNKNOWN,P1,"CI has backend/web/Windows lifecycle; no browser E2E/RBAC/visual tests",QA,"Add Playwright E2E and RBAC suites",Phase 5/10,OPEN,
 G-18,OPPORTUNITY,P2,"Single JS chunk 567363 B raw / 144003 B gzip (evidence/2026-10-13/frontend-baseline.txt)",Admin Web,"Route-level code splitting",Bundle size check,OPEN,
