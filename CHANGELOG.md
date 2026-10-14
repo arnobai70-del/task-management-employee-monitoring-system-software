@@ -15,6 +15,7 @@ All notable changes to this project are recorded here. Dates are UTC.
 - Attendance edge-case tests for 20:30→09:00/09:30/10:00 night shifts, breaks, early leave and DST transitions (G-06).
 
 ### Changed
+- Microsoft ASP.NET Core, EF Core and Extensions packages updated from 10.0.12 to 10.0.13. This clears advisory GHSA-334f-vvp4-7g6p in SignalR.Common, which was failing the Windows client build (G-42).
 - The production Content-Security-Policy allows browser connections only to the site's own origin (`connect-src 'self'`). The realtime hub keeps working because it is served from the same origin (G-25).
 - Admin Web presence shows "On shift", "On break", "Connected, not on shift" and "Offline" instead of "Working"/"Idle", and started website work shows "In progress". The labels now say what is measured, not effort (G-08).
 - Removed the unused `WebsiteWorkService.CompleteAsync`, which could mark work done without review; completion always goes through submit and approve (G-31).

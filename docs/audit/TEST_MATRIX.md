@@ -53,6 +53,7 @@ All timestamps UTC.
 | P8-02 (G-40/G-41) | `scripts/audit/api-latency.mjs` 20 endpoints, 60 req, 4 clients; EXPLAIN ANALYZE of slow queries | `scripts/audit/perf-seed.sql` 1000 employees / 60 days (fictional) | L | Baseline + after published; dashboard 168h p95 1755 -> 952 ms; full suite 208/208 | 2026-10-14 15:05 | [P8 latency log](evidence/2026-10-14/P8-api-latency-baseline.txt) |
 | G24-01 | `HttpRateLimitAuditTests` (2) + `RateLimitAuditSamplerTests` (2) | 25 / 12 bad sign-ins from one client, 1000-char User-Agent | L | Control without fix: 15 rows and 0 rows; with fix 1 and 1; full suite 212/212 | 2026-10-14 15:30 | [G-24 log](evidence/2026-10-14/G24-rate-limit-audit-sampling.txt) |
 | G25-01 | `scripts/audit/csp-connect-src.mjs` before / after / `connect-src 'none'` control, Chromium 141 | local API on fictional `tm_perf` data, Admin Web dist from main | L | Before and after: signed in, 1 realtime WebSocket with frames, 0 violations; control caught 1 violation | 2026-10-14 14:50 | [G-25 log](evidence/2026-10-14/G25-csp-connect-src.txt) |
+| G42-01 | `dotnet restore` of Desktop/Service/Updater/Setup (EnableWindowsTargeting), `dotnet list package --vulnerable`, full backend suite | Directory.Packages.props 10.0.13 | L | Before: NU1903 on SignalR.Common 10.0.12; after: all restore, no vulnerable packages, 212/212 | 2026-10-14 15:00 | [G-42 log](evidence/2026-10-14/G42-signalr-advisory-restore.txt) |
 
 ## Not yet run (planned)
 | Area | Reason | Phase |
