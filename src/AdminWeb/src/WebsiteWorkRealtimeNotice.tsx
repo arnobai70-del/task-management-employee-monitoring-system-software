@@ -4,6 +4,7 @@ import { apiFetch } from './api';
 import { useAuth } from './auth';
 import { subscribeRealtime } from './realtime';
 import { StatusRailItem } from './StatusRail';
+import { startPolling } from './polling';
 
 export interface WebsiteWorkCompletion {
   taskId: string;
@@ -210,25 +211,25 @@ export default function WebsiteWorkRealtimeNotice() {
   useEffect(() => {
     if (!mayManage) return;
     void loadPending();
-    const timer = window.setInterval(() => void loadPending(), 5_000);
-    return () => window.clearInterval(timer);
+    const stopPolling = startPolling(() => void loadPending(), 5_000);
+    return () => stopPolling();
   }, [loadPending, mayManage]);
 
   useEffect(() => {
     if (!mayManage) return;
     void loadFollowUps(false);
-    const timer = window.setInterval(() => void loadFollowUps(true), 15_000);
-    return () => window.clearInterval(timer);
+    const stopPolling = startPolling(() => void loadFollowUps(true), 15_000);
+    return () => stopPolling();
   }, [loadFollowUps, mayManage]);
 
   useEffect(() => {
     if (!mayManage) return;
     void loadAdminSummary();
-    const timer = window.setInterval(() => void loadAdminSummary(), 30_000);
+    const stopPolling = startPolling(() => void loadAdminSummary(), 30_000);
     const refresh = () => void loadAdminSummary();
     window.addEventListener(adminNotificationChangedEvent, refresh);
     return () => {
-      window.clearInterval(timer);
+      stopPolling();
       window.removeEventListener(adminNotificationChangedEvent, refresh);
     };
   }, [loadAdminSummary, mayManage]);

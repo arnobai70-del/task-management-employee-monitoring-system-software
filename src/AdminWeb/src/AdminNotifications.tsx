@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { apiFetch } from './api';
 import { adminNotificationChangedEvent } from './WebsiteWorkRealtimeNotice';
+import { startPolling } from './polling';
 
 type AdminNotificationKind =
   | 'FollowUpAssigned'
@@ -87,11 +88,11 @@ export default function AdminNotificationsPage({ embedded = false }: { embedded?
 
   useEffect(() => {
     void load(true);
-    const timer = window.setInterval(() => void load(false), 30_000);
+    const stopPolling = startPolling(() => void load(false), 30_000);
     const refresh = () => void load(false);
     window.addEventListener(adminNotificationChangedEvent, refresh);
     return () => {
-      window.clearInterval(timer);
+      stopPolling();
       window.removeEventListener(adminNotificationChangedEvent, refresh);
     };
   }, [load]);

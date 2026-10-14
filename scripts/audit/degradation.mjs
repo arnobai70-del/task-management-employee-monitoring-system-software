@@ -1,4 +1,5 @@
-// Usage: PW=$(npm root -g)/playwright node scripts/audit/degradation.mjs [shotDir]   (ONLY=baseline,errors,offline,slow to pick)
+// Usage: PW=$(npm root -g)/playwright node scripts/audit/degradation.mjs [shotDir]   (ONLY=baseline,errors,offline,slow,hidden to pick;
+//        DIST=<built Admin Web dir> to test another build, for example an older commit as a control)
 // Serves src/AdminWeb/dist on 127.0.0.1:5182 and proxies /api and /hubs (WebSocket upgrades too) to a local API on
 // 127.0.0.1:5080, like Caddy. Signs in with RT_ADMIN_EMAIL/RT_ADMIN_PASSWORD (local scratch admin, fictional data) and
 // checks how the Admin Web behaves under HTTP 429, HTTP 500, a lost connection and a slow link: what the page shows,
@@ -12,7 +13,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PW);
 const [,, shotDir] = process.argv;
 const ROOT = resolve(new URL('../..', import.meta.url).pathname);
-const DIST = join(ROOT, 'src/AdminWeb/dist');
+const DIST = resolve(process.env.DIST ?? join(ROOT, 'src/AdminWeb/dist'));
 const API = { host: '127.0.0.1', port: 5080 };
 const PORT = 5182;
 const WEB = `http://127.0.0.1:${PORT}`;
@@ -140,6 +141,29 @@ if (only.includes('offline')) {
   }
   const okAfter = await page.waitForResponse(r => isApi(r.url()) && r.status() < 400, { timeout: 60000 }).then(() => true).catch(() => false);
   log(`online again: realtime reconnected ${reconnected === null ? 'not within 90 s' : `after ${Math.round(reconnected / 1000)} s`}; API data request succeeded: ${okAfter}; still signed in: ${!new URL(page.url()).pathname.startsWith('/login')}; page errors: ${state.pageErrors.length}; header now: "${await headerStatus(page)}"`);
+  await context.close();
+}
+
+// 6. Hidden tab: the page is signed in and visible, then hidden for 60 s (as if the admin switched tabs), then shown.
+if (only.includes('hidden')) {
+  const context = await browser.newContext({ viewport: { width: 1366, height: 860 } });
+  const { page, state } = await signedInPage(context);
+  const setHidden = hidden => page.evaluate(h => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (h ? 'hidden' : 'visible') });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+  for (const route of ['/dashboard', '/website-work', '/operations']) {
+    await page.goto(WEB + route); await page.waitForTimeout(3000);
+    const v = Date.now(); await page.waitForTimeout(WINDOW_MS);
+    const visible = countSince(state, v);
+    await setHidden(true);
+    const h = Date.now(); await page.waitForTimeout(2 * WINDOW_MS);
+    const hidden = countSince(state, h);
+    await setHidden(false);
+    const s0 = Date.now(); await page.waitForTimeout(3000);
+    log(`hidden ${route}: visible 30 s ${visible} API requests (${topPaths(state, v) || 'none'}); hidden 60 s ${hidden} (${topPaths(state, h) || 'none'}); first 3 s after shown ${countSince(state, s0)} (${topPaths(state, s0) || 'none'}); page errors ${state.pageErrors.length}`);
+  }
   await context.close();
 }
 

@@ -3,6 +3,7 @@ import { apiFetch } from './api';
 import { useAuth } from './auth';
 import type { PagedResponse } from './types';
 import './management.css';
+import { startPolling } from './polling';
 
 type RolloutStage = 'Pilot' | 'General';
 type RolloutStatus = 'Active' | 'Paused' | 'Completed' | 'Cancelled';
@@ -84,8 +85,8 @@ export default function AgentUpdateManagementPage() {
 
   useEffect(() => {
     void load(true);
-    const timer = window.setInterval(() => void load(false), 15_000);
-    return () => window.clearInterval(timer);
+    const stopPolling = startPolling(() => void load(false), 15_000);
+    return () => stopPolling();
   }, [load]);
 
   useEffect(() => {
