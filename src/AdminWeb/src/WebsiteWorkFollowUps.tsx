@@ -65,7 +65,7 @@ function formatDate(value: string | null): string {
 
 function workStatusLabel(value: string): string {
   if (value === 'ToDo') return 'Ready';
-  if (value === 'InProgress') return 'Working';
+  if (value === 'InProgress') return 'In progress';
   if (value === 'Blocked') return 'Pending Review';
   if (value === 'Done') return 'Approved';
   if (value === 'Cancelled') return 'Cancelled';
