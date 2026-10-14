@@ -111,7 +111,7 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 - `Program.cs:207-236`: every 429 performed a synchronous DB insert (control: 15 rows for 15 rejections), and a User-Agent over 512 characters made the insert fail. **Status: FIXED — `RateLimitAuditSampler` writes one row per source per 10 s (with `suppressedBefore`) and at most 50 rows per 10 s overall; fields truncated. Merged in #88. Not deployed.**
 
 ### F-05 CSP `connect-src` allows any WebSocket host — RISK, P2 (G-25)
-- `deploy/production/Caddyfile:187`: `connect-src 'self' ws: wss:`. `'self'` already covers same-origin `wss:` in current browsers; the bare schemes allow exfiltration to any host if XSS ever lands. **Status: FIXED (PR open)** — now line 27, changed to `connect-src 'self'`. Chromium 141 check through a single-origin proxy like Caddy (`scripts/audit/csp-connect-src.mjs`): sign-in works, the realtime hub connects over a WebSocket and receives frames, 0 CSP violations; a `connect-src 'none'` control is caught. `'self'` matching same-origin `wss:` follows CSP Level 3 and is supported in current Chrome, Edge, Firefox and Safari (inferred from the spec and browser release notes, not tested here on Firefox/Safari).
+- `deploy/production/Caddyfile:187`: `connect-src 'self' ws: wss:`. `'self'` already covers same-origin `wss:` in current browsers; the bare schemes allow exfiltration to any host if XSS ever lands. **Status: FIXED — merged in #89. Not deployed.** Now line 27, changed to `connect-src 'self'`. Chromium 141 check through a single-origin proxy like Caddy (`scripts/audit/csp-connect-src.mjs`): sign-in works, the realtime hub connects over a WebSocket and receives frames, 0 CSP violations; a `connect-src 'none'` control is caught. `'self'` matching same-origin `wss:` follows CSP Level 3 and is supported in current Chrome, Edge, Firefox and Safari (inferred from the spec and browser release notes, not tested here on Firefox/Safari).
 
 ### F-06 Stale admin auth documentation — VERIFIED (doc defect), P2 (G-05)
 - `docs/admin-web.md:33-49` described JSON refresh tokens in `sessionStorage`. Corrected in this PR. Remaining exposure: the 15-minute **access** token is still in `sessionStorage` (XSS-readable); mitigated by CSP `script-src 'self'`. Kept as RISK.
@@ -122,9 +122,12 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 ### F-08 Migration test is not re-runnable on a used database — VERIFIED, P2 (G-26)
 - `tests/Backend.Tests/DatabaseMigrationTests.cs` inserts fixed rows (`migration-test@example.com`, `MIG-001`); a second run on the same database fails. CI is unaffected (fresh service container). Suggest a unique database per run.
 
+### F-09 New SignalR advisory turns main CI red — VERIFIED BUG, P1 (G-42)
+- Since the NuGet catalog update of 2026-10-13 19:41 UTC, `Microsoft.AspNetCore.SignalR.Common` 10.0.12 (pulled in by `Microsoft.AspNetCore.SignalR.Client`, `Directory.Packages.props:9`) carries high-severity advisory GHSA-334f-vvp4-7g6p. With warnings as errors, `dotnet restore` of the Employee Desktop client fails with NU1903, so the Windows CI job failed on main after #88 and #89 (and on a rerun). **Fix:** all Microsoft.* packages 10.0.12 → 10.0.13; restore of all four Windows projects passes, no vulnerable packages, backend 212/212. The API and web Docker images use floating `10.0` tags and pick up the patched runtime on rebuild. **Status: FIXED (branch pushed).**
+
 ### Other observations (not defects)
 - Production config is sound on inspected points: `AutoMigrate=false` + explicit migrate container, forwarded headers restricted to the backend CIDR with `ForwardLimit=1`, HSTS, `frame-ancestors 'none'`, JWT HS256 only, 30 s skew, 15 min access / 7 day refresh, lockout 5 attempts / 15 min, auth rate limit 10/min/IP.
-- NuGet packages are one patch behind (10.0.12 → 10.0.13); no known vulnerabilities reported. OPPORTUNITY.
+- NuGet packages were one patch behind (10.0.12 → 10.0.13). This became G-42 when an advisory was published on 2026-10-13.
 - Presence UI maps `InProgress` → "Working" (`PresencePanel.tsx:125`); the label reflects heartbeat + open session, not verified productivity (G-08, design item for Phase 5).
 
 ## 7. Phase status overview
@@ -139,6 +142,6 @@ Severity: P0 = security/data loss/production breaker, P1 = correctness/deploymen
 | 5 UI redesign | IN PROGRESS — status-pill overlap fixed (G-33, #78 merged); route code splitting 145.6 → 93.8 kB gzip (G-35 #79, G-34 #80 merged); G-08 labels (#82 merged); dark theme + WCAG AA contrast fixes, 0 issues on 38/38 page checks (G-37, #83 merged); [DESIGN_SYSTEM.md](../ui/DESIGN_SYSTEM.md) draft | brand accent (owner decision), components |
 | 6 Tab screenshot | RFC DRAFT ONLY — **implementation needs owner's written policy approval** | [SCREENSHOT_CAPTURE_RFC.md](SCREENSHOT_CAPTURE_RFC.md) |
 | 7 RDP support | BLOCKED — no Windows Server RDP test host | owner to provide a test VPS |
-| 8 Performance/observability | IN PROGRESS — #85 merged (G-15, CI green incl. observability acceptance); API latency baseline on 1000 employees / 60 days published, 17/20 endpoints p95 < 300 ms; security dashboard row bound (G-40, #87 merged); 429 audit sampling (G-24, #88 merged); CSP connect-src tightened (G-25, PR open); production run BLOCKED | audit search index decision (G-41), load/degradation tests |
+| 8 Performance/observability | IN PROGRESS — #85 merged (G-15, CI green incl. observability acceptance); API latency baseline on 1000 employees / 60 days published, 17/20 endpoints p95 < 300 ms; security dashboard row bound (G-40, #87 merged); 429 audit sampling (G-24, #88 merged); CSP connect-src tightened (G-25, #89 merged); main CI Windows restore fixed (G-42); production run BLOCKED | audit search index decision (G-41), load/degradation tests |
 | 9 Production pipeline | BLOCKED — no production host/secret/deploy access | [DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md) |
 | 10 Final E2E | NOT STARTED | |

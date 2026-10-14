@@ -1,0 +1,35 @@
+G-42 main CI red: Windows job 'Restore desktop client' fails, 2026-10-14T14:59:38Z
+main runs: 2b6eb45, b3394c1 (#88), 84fcdaf (#89) failed at 'Restore desktop client'; 84fcdaf rerun (attempt 2) failed again. Backend, Admin Web and production acceptance jobs green.
+Job logs are not reachable from this environment; reproduced locally with the .NET 10.0.401 SDK container.
+
+== Before (Directory.Packages.props 10.0.12) ==
+dotnet restore src/EmployeeDesktop/.../TaskMonitoring.EmployeeDesktop.csproj -p:EnableWindowsTargeting=true --force-evaluate
+error NU1903: Warning As Error: Package 'Microsoft.AspNetCore.SignalR.Common' 10.0.12 has a known high severity vulnerability, https://github.com/advisories/GHSA-334f-vvp4-7g6p
+NuGet catalog entry 2026-10-13T19:41:57Z added the advisory to SignalR.Common 10.0.12; 10.0.13 is the next 10.0 servicing release.
+
+== After (all Microsoft.* 10.0.12 -> 10.0.13) ==
+== restore src/EmployeeDesktop/TaskMonitoring.EmployeeDesktop/TaskMonitoring.EmployeeDesktop.csproj
+  Determining projects to restore...
+  Restored /src/src/EmployeeDesktop/TaskMonitoring.EmployeeDesktop/TaskMonitoring.EmployeeDesktop.csproj (in 3.32 sec).
+== restore src/EmployeeService/TaskMonitoring.EmployeeService/TaskMonitoring.EmployeeService.csproj
+  Determining projects to restore...
+  Restored /src/src/EmployeeService/TaskMonitoring.EmployeeService/TaskMonitoring.EmployeeService.csproj (in 5.3 sec).
+== vulnerable packages (backend solution)
+  Restored /src/tests/Backend.Tests/Backend.Tests.csproj (in 4.14 sec).
+  Restored /src/src/Backend/TaskMonitoring.Api/TaskMonitoring.Api.csproj (in 4.14 sec).
+The given project `TaskMonitoring.Api` has no vulnerable packages given the current sources.
+The given project `Backend.Tests` has no vulnerable packages given the current sources.
+== build + tests
+Build succeeded.
+  total: 212
+  failed: 0
+  succeeded: 212
+== restore src/EmployeeUpdater/TaskMonitoring.EmployeeUpdater/TaskMonitoring.EmployeeUpdater.csproj
+  Determining projects to restore...
+  Restored /src/src/EmployeeUpdater/TaskMonitoring.EmployeeUpdater/TaskMonitoring.EmployeeUpdater.csproj (in 1.23 sec).
+== restore src/EmployeeSetup/TaskMonitoring.EmployeeSetup/TaskMonitoring.EmployeeSetup.csproj
+  Determining projects to restore...
+  Restored /src/src/EmployeeSetup/TaskMonitoring.EmployeeSetup/TaskMonitoring.EmployeeSetup.csproj (in 241 ms).
+== vulnerable src/EmployeeDesktop/TaskMonitoring.EmployeeDesktop/TaskMonitoring.EmployeeDesktop.csproj
+== vulnerable src/EmployeeService/TaskMonitoring.EmployeeService/TaskMonitoring.EmployeeService.csproj
+The given project `TaskMonitoring.EmployeeService` has no vulnerable packages given the current sources.
